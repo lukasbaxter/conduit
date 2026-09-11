@@ -1,0 +1,39 @@
+{
+  "name": "conduit",
+  "version": "0.1.0",
+  "description": "Jellyfin music client with whole-house device routing (Chromecast + BluOS)",
+  "main": "electron/main.js",
+  "author": "Lukas Baxter",
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "build:web": "vite build",
+    "dist": "npm run build:web && electron-builder -mwl",
+    "dist:mac": "npm run build:web && electron-builder -m",
+    "dist:win": "npm run build:web && electron-builder -w",
+    "dist:linux": "npm run build:web && electron-builder -l"
+  },
+  "dependencies": {
+    "bonjour-service": "^1.2.1",
+    "castv2-client": "^1.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^9.0.1",
+    "electron": "^32.1.2",
+    "electron-builder": "^25.0.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^5.4.8",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "io.baxtergroup.conduit",
+    "productName": "Conduit",
+    "files": ["electron/**/*", "dist/**/*", "package.json"],
+    "directories": { "output": "release", "buildResources": "build" },
+    "mac": { "target": ["dmg", "zip"], "category": "public.app-category.music", "identity": null },
+    "win": { "target": ["nsis", "portable"] },
+    "linux": { "target": ["AppImage", "deb"], "category": "Audio" }
+  }
+}
