@@ -224,17 +224,21 @@ export default function App() {
 
   const openPlaylist = async (pl) => {
     setView('home');
-    setDetail({ item: pl, tracks: [], kind: 'Playlist', loading: true });
+    // Paint instantly from the last session's copy if we have one.
+    const cached = jf.persisted(`pl.${pl.Id}`);
+    setDetail({ item: pl, tracks: cached || [], kind: 'Playlist', loading: !cached });
     try {
-      // First page renders in ~0.5s; the rest streams in behind it. With the
-      // list virtualized, the visible rows are ready immediately.
+      // First page renders fast; the rest streams in behind. Virtualized, so the
+      // visible rows are ready at once. Every result is persisted for next time.
       const first = await jf.playlistTracks(pl.Id, { startIndex: 0, limit: 100 });
       setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, tracks: first.items, loading: false } : d));
+      jf._persist(`pl.${pl.Id}`, first.items);
       if (first.total > first.items.length) {
-        const rest = await jf.playlistTracks(pl.Id); // full, cached
+        const rest = await jf.playlistTracks(pl.Id);
         setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, tracks: rest.items } : d));
+        jf._persist(`pl.${pl.Id}`, rest.items);
       }
-    } catch { /* surfaced in the library view */ }
+    } catch { /* keep the cached copy on screen */ }
   };
 
   const openLiked = async () => {
