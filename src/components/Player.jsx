@@ -27,7 +27,9 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
   const { current, nowPlaying, playing, position, duration, volume, device, error } = player;
   // nowPlaying covers both our own queue and a session adopted from a speaker
   // that was already playing when the app opened.
-  const art = nowPlaying?.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: 128 }) : null;
+  // artId is our own library item; artUrl is a ready URL from a mirrored relay
+  // target. Either yields the cover.
+  const art = nowPlaying?.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: 128 }) : (nowPlaying?.artUrl || null);
   // While dragging, the bar follows the thumb locally and commits ONE seek on
   // release. Committing on every change event fired a seek per pixel of drag,
   // which thrashed the speaker and made scrubbing unusable.

@@ -602,8 +602,16 @@ export function usePlayer(jf) {
     return () => clearInterval(timer);
   }, [jf, current, playing]);
 
+  // When we are controlling another client, mirror ITS reported state -- song
+  // and playhead always describe the same real playback.
+  const relayTarget = device.kind === 'relay'
+    ? (roster.players || []).find((p) => `relay:${p.id}` === device.id)?.nowPlaying
+    : null;
+
   // Either the queue item we started, or whatever an adopted speaker reports.
-  const nowPlaying = current
+  const nowPlaying = relayTarget
+    ? { title: relayTarget.title, artist: relayTarget.artist, artUrl: relayTarget.artUrl, artId: null }
+    : current
     ? {
         title: current.Name,
         artist: current.Artists?.join(', ') || current.AlbumArtist || '',
@@ -649,25 +657,51 @@ export function usePlayer(jf) {
   useEffect(() => { toggleRef.current = toggle; }, [toggle]);
   useEffect(() => { seekRef.current = seek; }, [seek]);
 
-  // Broadcast what we're playing so the roster shows it on other clients.
+  // Broadcast what we're playing so the roster shows it on other clients. The
+  // song AND the playhead go together, so a controller never shows a different
+  // track from the position it displays.
+  const npBaseUrl = jf?.baseUrl || '';
   useEffect(() => {
     const r = relayRef.current;
     if (!r) return;
-    r.reportNowPlaying(nowPlaying ? { title: nowPlaying.title, artist: nowPlaying.artist, artId: nowPlaying.artId, playing } : null);
-  }, [nowPlaying, playing]);
+    // Only the ACTIVE (locally-playing or device-driving) client reports; a
+    // client that is itself controlling a relay target must not echo.
+    if (deviceRef.current.kind === 'relay') return;
+    r.reportNowPlaying(nowPlaying ? {
+      title: nowPlaying.title, artist: nowPlaying.artist,
+      artUrl: nowPlaying.artId ? `${npBaseUrl}/Items/${nowPlaying.artId}/Images/Primary?maxHeight=128` : null,
+      playing, position, duration, at: Date.now(),
+    } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nowPlaying, playing, Math.floor(position), duration]);
+
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    if (device.kind !== 'relay' || !relayTarget?.playing) return undefined;
+    const t = setInterval(() => forceTick((n) => n + 1), 500);
+    return () => clearInterval(t);
+  }, [device.kind, relayTarget?.playing]);
+
+  // Interpolate the target's playhead so the controller's bar moves smoothly.
+  const shownPosition = relayTarget
+    ? (relayTarget.playing ? (relayTarget.position || 0) + (Date.now() - (relayTarget.at || Date.now())) / 1000 : (relayTarget.position || 0))
+    : position;
+  const shownDuration = relayTarget ? (relayTarget.duration || 0) : duration;
+  const shownPlaying = relayTarget ? Boolean(relayTarget.playing) : playing;
 
   return useMemo(
     () => ({
       device, setDevice, adoptActive, nowPlaying, external, patchQueue, contextId,
       relayDevices, attachRelay, applyRoster, executeCommand, roster, relay: relayInstance,
       queue, index, current,
-      playing, position, duration, volume, error,
+      playing: shownPlaying, position: shownPosition, duration: shownDuration, volume, error,
       playQueue, toggle, next, previous, seek, setVolume, skipTo,
       clearError: () => setError(null),
     }),
+    // eslint-disable-next-line
     [device, setDevice, adoptActive, nowPlaying, external, patchQueue, contextId,
      relayDevices, attachRelay, applyRoster, executeCommand, roster, relayInstance, queue, index, current,
-     playing, position, duration, volume, error, playQueue, toggle, next,
+     shownPlaying, shownPosition, shownDuration, volume, error, playQueue, toggle, next,
      previous, seek, setVolume, skipTo]
   );
 }
