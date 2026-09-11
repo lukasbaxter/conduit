@@ -87,7 +87,8 @@ async function main() {
     const title = document.querySelector('.player-title')?.textContent || '';
     const t = [...document.querySelectorAll('.player-seek .t')].map((e) => e.textContent);
     const vol = document.querySelector('.player-volume input')?.value;
-    return { dbg, title, timeLabels: t, vol };
+    const greenBar = document.querySelector('.playing-elsewhere')?.textContent || '';
+    return { dbg, title, timeLabels: t, vol, greenBar };
   });
 
   const s1 = await read();
@@ -97,6 +98,8 @@ async function main() {
   assert(s1.dbg.includes(`active=${A.id.slice(-4)}`), 'B sees A as the active player');
   assert(/MIRROR TEST SONG/.test(s1.title) || /MIRROR TEST SONG/.test(s1.dbg), 'B footer shows A\'s song');
   assert(String(s1.vol) === '42', 'B volume mirrors A (42)');
+  log('green bar:', JSON.stringify(s1.greenBar));
+  assert(/Playing on PLAYER A/.test(s1.greenBar), 'B shows green "Playing on PLAYER A" bar');
 
   // Playhead should advance between two reads.
   await new Promise((r) => setTimeout(r, 3000));

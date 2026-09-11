@@ -10,12 +10,18 @@ function fmt(seconds) {
 }
 
 export function PlayingElsewhereBar({ player }) {
-  const { playing, device, roster } = player;
-  const elsewhere = (roster?.players || []).find((p) => p.nowPlaying?.playing);
-  if (!elsewhere || playing || device.kind === 'relay') return null;
+  const { roster, relay } = player;
+  // The shared session lives on another of my clients: name it. Shown whenever
+  // the active player is not this client, regardless of what this client shows.
+  const myId = relay?.id;
+  const activeId = roster?.activeClientId;
+  const active = activeId && activeId !== myId
+    ? (roster.players || []).find((p) => p.id === activeId)
+    : null;
+  if (!active) return null;
   return (
     <div className="playing-elsewhere">
-      <span>Playing on {elsewhere.name}</span>
+      <span>Playing on {active.name}</span>
       <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
         <path d="M6 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM1 13.5a1 1 0 1 0 2 0 1 1 0 0 0-2 0zM1 9v2a2.5 2.5 0 0 1 2.5 2.5h2A4.5 4.5 0 0 0 1 9zM1 5v2a6.5 6.5 0 0 1 6.5 6.5h2A8.5 8.5 0 0 0 1 5z" />
       </svg>
