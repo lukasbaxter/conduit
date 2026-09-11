@@ -42,8 +42,8 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
               className={`player-art ${nowPlaying?.albumId ? 'clickable' : ''}`}
               src={art}
               alt=""
-              title="Now playing view"
-              onClick={() => onPanel(panel === 'npv' ? null : 'npv')}
+              title="Go to album"
+              onClick={() => nowPlaying?.albumId && onOpenAlbum?.(nowPlaying.albumId)}
             />
           ) : (
             <div className="player-art placeholder" />
