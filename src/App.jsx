@@ -4,7 +4,7 @@ import { usePlayer } from './player/usePlayer.js';
 import { Relay } from './relay.js';
 import Sidebar from './components/Sidebar.jsx';
 import Library, { LIKED_ID } from './components/Library.jsx';
-import Player from './components/Player.jsx';
+import Player, { PlayingElsewhereBar } from './components/Player.jsx';
 import RightPanel from './components/RightPanel.jsx';
 
 // In Electron (desktop) we talk to Jellyfin on the LAN directly. In a browser
@@ -457,6 +457,7 @@ export default function App() {
         onPanel={setPanel}
         onLike={onLike}
       />
+      <PlayingElsewhereBar player={player} />
     </div>
   );
 }
