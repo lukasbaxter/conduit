@@ -208,7 +208,10 @@ export default function Library({
             <section>
               <div className="shelf-head"><h2>Popular</h2></div>
               <div className="tracklist" style={{ padding: 0 }}>
-                {tracks.slice(0, popularExpanded ? 10 : 5).map((t, i) => <TrackRow key={t.Id} {...rowProps(tracks, i, {}, item.Id)} />)}
+                {/* Spotify's Popular rows: 40px cover next to the number
+                    (chunk_xpui-routes-artist: flex:0 0 40px, radius 4px),
+                    title only, no artist line. */}
+                {tracks.slice(0, popularExpanded ? 10 : 5).map((t, i) => <TrackRow key={t.Id} {...rowProps(tracks, i, { showArt: true, hideArtists: true }, item.Id)} />)}
               </div>
               {tracks.length > 5 && (
                 <button className="seemore" onClick={() => setPopularExpanded((v) => !v)}>

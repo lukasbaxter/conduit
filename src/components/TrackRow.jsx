@@ -49,7 +49,7 @@ function fmtDur(ticks) {
 export default function TrackRow({
   track, n, active, isPlaying = false, onPlay, onToggle, onLike, playlists = [], onAddTo, onNewPlaylist,
   onRemove, draggable = false, onDragStart, onDragOver, onDrop, showArt = false, jf,
-  onOpenArtist, onOpenAlbum,
+  onOpenArtist, onOpenAlbum, hideArtists = false,
 }) {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef(null);
@@ -86,7 +86,9 @@ export default function TrackRow({
 
       <span className="trackrow-name">
         <span>{track.Name}</span>
-        <small>
+        {/* On an artist's own page the artist line is redundant; Spotify's
+            Popular rows show the title alone. */}
+        {!hideArtists && <small>
           {(track.ArtistItems?.length ? track.ArtistItems : (track.Artists || []).map((n2) => ({ Name: n2 }))).map((a, i, arr) => (
             <React.Fragment key={a.Id || a.Name}>
               {a.Id && onOpenArtist ? (
@@ -96,7 +98,7 @@ export default function TrackRow({
             </React.Fragment>
           ))}
           {!track.ArtistItems?.length && !track.Artists?.length ? (track.AlbumArtist || '') : ''}
-        </small>
+        </small>}
       </span>
 
       {track.AlbumId && onOpenAlbum ? (

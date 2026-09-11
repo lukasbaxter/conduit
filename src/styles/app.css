@@ -274,7 +274,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .trackrow:hover .trackrow-playglyph { opacity: 1; }
 .trackrow.active .trackrow-idx { color: var(--accent); }
 
-.trackrow-art { width: 40px; height: 40px; border-radius: 2px; object-fit: cover; background: var(--card-hover); }
+.trackrow-art { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; background: var(--card-hover); flex: 0 0 40px; }
 .trackrow:not(:has(.trackrow-art)) { grid-template-columns: 36px minmax(0, 4fr) minmax(0, 3fr) 32px 5ch 32px; }
 
 .trackrow-name { display: flex; flex-direction: column; min-width: 0; }
@@ -369,7 +369,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 }
 .panel-body section { display: flex; flex-direction: column; gap: 2px; }
 .qrow:hover { background: var(--tint-hi); }
-.qrow img, .qrow .ph { width: 40px; height: 40px; border-radius: 2px; object-fit: cover; background: var(--card-hover); flex: none; }
+.qrow img, .qrow .ph { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; background: var(--card-hover); flex: none; }
 .qrow-text { min-width: 0; display: flex; flex-direction: column; }
 .qrow-title { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .qrow.active .qrow-title { color: var(--accent); }
