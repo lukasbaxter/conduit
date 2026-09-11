@@ -1,0 +1,14 @@
+services:
+  conduit-lan:
+    image: nginx:alpine
+    container_name: conduit-lan
+    restart: unless-stopped
+    ports:
+      - "8748:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /home/admin/services/nginx/html/conduit:/usr/share/nginx/html:ro
+    networks: [docker_internal]
+networks:
+  docker_internal:
+    external: true

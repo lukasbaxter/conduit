@@ -58,7 +58,7 @@ export class Relay {
     };
     ws.onmessage = (e) => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
-      if (m.type === 'roster') this.onRoster({ players: m.players || [], lanDevices: m.lanDevices || [] });
+      if (m.type === 'roster') this.onRoster({ players: m.players || [], lanDevices: m.lanDevices || [], activeClientId: m.activeClientId || null });
       else if (m.type === 'command') this.onCommand(m.command, m.from);
     };
     ws.onclose = () => { clearInterval(this._ping); this._retry(); };

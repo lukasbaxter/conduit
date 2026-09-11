@@ -445,6 +445,15 @@ export default function App() {
         )}
       </div>
 
+      {typeof window !== 'undefined' && window.location.search.includes('debug') && (
+        <div style={{position:'fixed',top:60,right:8,zIndex:200,background:'#000',color:'#0f0',font:'11px monospace',padding:8,borderRadius:6,maxWidth:280,lineHeight:1.4,whiteSpace:'pre-wrap'}}>
+          {`myId=${player.relay?.id?.slice(-4) || '?'}
+active=${player.roster?.activeClientId?.slice(-4) || 'none'}
+players=${(player.roster?.players||[]).map(p=>p.name.slice(0,10)+':'+p.id.slice(-4)).join(', ')}
+SHOWING: ${player.nowPlaying?.title?.slice(0,24) || 'nothing'}
+pos=${Math.round(player.position)} playing=${player.playing} vol=${player.volume}`}
+        </div>
+      )}
       {toast && <div className="toast">{toast}</div>}
 
       <Player
