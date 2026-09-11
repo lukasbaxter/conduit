@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import TrackRow, { PlayGlyph, PauseGlyph, Heart } from './TrackRow.jsx';
 import Home from './Home.jsx';
+import FittedTitle from './FittedTitle.jsx';
 
 export const LIKED_ID = '__liked__';
 
@@ -170,7 +171,7 @@ export default function Library({
             ) : (
               <div className="kind">{isLiked ? 'Playlist' : kind}</div>
             )}
-            <h1>{item.Name}</h1>
+            <FittedTitle text={item.Name} maxLines={2} />
             <p>
               {!isArtist && !isPlaylist && item.AlbumArtist && <b>{item.AlbumArtist}</b>}
               {!isArtist && !isPlaylist && item.ProductionYear ? ` · ${item.ProductionYear}` : ''}

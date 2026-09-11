@@ -222,7 +222,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .hero.artist img { border-radius: 50%; width: 192px; height: 192px; }
 .hero .kind { font-size: 14px; font-weight: 700; }
 /* Spotify's classic ladder: 96 -> 72 -> 48 -> 32, weight 800 */
-.hero h1 { margin: 8px 0 16px; font-size: clamp(32px, 7vw, 96px); font-weight: 800; line-height: 1.05; letter-spacing: -2px; }
+.hero h1 { margin: 8px 0 16px; font-weight: 800; line-height: 1.05; letter-spacing: -2px; overflow-wrap: anywhere; }
 .hero p { margin: 0; color: #ffffffb3; font-size: 14px; }
 .hero p b { color: var(--fg); }
 .verified { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
