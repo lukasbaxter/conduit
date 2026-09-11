@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import TrackRow, { PlayGlyph, PauseGlyph, Heart } from './TrackRow.jsx';
 import Home from './Home.jsx';
 import FittedTitle from './FittedTitle.jsx';
+import VirtualList from './VirtualList.jsx';
 
 export const LIKED_ID = '__liked__';
 
@@ -242,17 +243,24 @@ export default function Library({
                 {isLiked ? 'Songs you like will appear here. Save songs by tapping the heart icon.' : 'This playlist is empty.'}
               </p>
             )}
-            {tracks.map((t, i) => (
-              <div key={t.PlaylistItemId || `${t.Id}-${i}`} className={overIdx === i && dragIdx != null ? 'dropbefore' : ''}>
-                <TrackRow
-                  {...rowProps(tracks, i, {
-                    showArt: isPlaylist,
-                    onRemove: isPlaylist && !isLiked ? () => onRemoveFromPlaylist(item, t) : undefined,
-                    ...dnd(i),
-                  }, item.Id)}
-                />
-              </div>
-            ))}
+            {tracks.length > 0 && (
+              <VirtualList
+                items={tracks}
+                rowHeight={56}
+                getKey={(t, i) => t.PlaylistItemId || `${t.Id}-${i}`}
+                renderRow={(t, i) => (
+                  <div className={overIdx === i && dragIdx != null ? 'dropbefore' : ''}>
+                    <TrackRow
+                      {...rowProps(tracks, i, {
+                        showArt: isPlaylist,
+                        onRemove: isPlaylist && !isLiked ? () => onRemoveFromPlaylist(item, t) : undefined,
+                        ...dnd(i),
+                      }, item.Id)}
+                    />
+                  </div>
+                )}
+              />
+            )}
           </div>
         )}
       </div>
