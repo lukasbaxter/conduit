@@ -113,6 +113,7 @@ export default function Library({
     active: player.current?.Id === tracks[i].Id,
     isPlaying: player.playing,
     onPlay: () => player.playQueue(tracks, i, ctx),
+    onToggle: () => player.toggle(),
     onLike, playlists, onAddTo, onNewPlaylist,
     onOpenArtist: onOpenArtistById, onOpenAlbum: onOpenAlbumById,
     ...extra,

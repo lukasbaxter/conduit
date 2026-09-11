@@ -47,7 +47,7 @@ function fmtDur(ticks) {
  * inside a user playlist. `onRemove` shows "Remove from this playlist".
  */
 export default function TrackRow({
-  track, n, active, isPlaying = false, onPlay, onLike, playlists = [], onAddTo, onNewPlaylist,
+  track, n, active, isPlaying = false, onPlay, onToggle, onLike, playlists = [], onAddTo, onNewPlaylist,
   onRemove, draggable = false, onDragStart, onDragOver, onDrop, showArt = false, jf,
   onOpenArtist, onOpenAlbum,
 }) {
@@ -71,7 +71,11 @@ export default function TrackRow({
       onDrop={onDrop}
       onDoubleClick={onPlay}
     >
-      <button className="trackrow-n" onClick={onPlay} title="Play">
+      <button
+        className="trackrow-n"
+        onClick={active && onToggle ? onToggle : onPlay}
+        title={active && isPlaying ? 'Pause' : 'Play'}
+      >
         <span className="trackrow-idx">{active && isPlaying ? <NowPlayingBars /> : n}</span>
         <span className="trackrow-playglyph"><PlayGlyph size={14} /></span>
       </button>

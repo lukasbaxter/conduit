@@ -268,8 +268,10 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 
 .trackrow-n { color: var(--fg-dim); font-size: 16px; font-variant-numeric: tabular-nums; width: 36px; height: 36px; display: grid; place-items: center; }
 .trackrow-playglyph { display: none; color: var(--fg); }
-.trackrow:hover .trackrow-idx { display: none; }
-.trackrow:hover .trackrow-playglyph { display: block; }
+.trackrow:hover .trackrow-idx,
+.trackrow.active:hover .trackrow-idx,
+.trackrow:hover .trackrow-playglyph,
+.trackrow.active:hover .trackrow-playglyph { display: block; }
 .trackrow.active .trackrow-idx { color: var(--accent); }
 
 .trackrow-art { width: 40px; height: 40px; border-radius: 2px; object-fit: cover; background: var(--card-hover); }
@@ -561,7 +563,6 @@ input[type="range"]:disabled { opacity: .4; }
 .npbars i:nth-child(3) { animation-delay: .5s; height: 60%; }
 @keyframes npbar { 0%, 100% { transform: scaleY(.4); } 50% { transform: scaleY(1); } }
 .npbars i { transform-origin: bottom; }
-.trackrow:hover .npbars { display: none; }
 
 /* inline links inside rows (artist names, album) */
 .rowlink { padding: 0; font: inherit; color: inherit; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
