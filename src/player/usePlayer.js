@@ -83,6 +83,9 @@ export function usePlayer(jf) {
   // moved at all. BluOS lands in exactly this state if a stream is disturbed
   // mid-setup: playing=true, position frozen, silence.
   const stalledRef = useRef(0);
+  // Set while the user is dragging the volume slider, so the device poll does
+  // not yank the handle back to the last value it reported.
+  const volumeHeldRef = useRef(0);
 
   useEffect(() => { deviceRef.current = device; }, [device]);
   useEffect(() => { positionRef.current = position; }, [position]);
@@ -304,6 +307,8 @@ export function usePlayer(jf) {
 
   const setVolume = useCallback(
     async (level) => {
+      // Hold off the poll briefly so it cannot fight the drag.
+      volumeHeldRef.current = Date.now() + 2000;
       setVolumeState(level);
       const dev = deviceRef.current;
       try {
@@ -350,7 +355,7 @@ export function usePlayer(jf) {
       setPlaying(true);
       return hit.d;
     },
-    [anchorAt, remote]
+    [anchorAt, jf, remote]
   );
 
   /** Move playback to another device, preserving track and position. */
@@ -385,6 +390,15 @@ export function usePlayer(jf) {
         setError(`Could not move playback to ${nextDevice.name}: ${e.message}`);
         setPlaying(false);
       } finally {
+        // Show the incoming device's real volume rather than carrying the old
+        // one across; they are independent hardware levels.
+        if (nextDevice.kind !== 'local') {
+          remote.status(nextDevice)
+            .then((s) => { if (typeof s?.volume === 'number') setVolumeState(s.volume); })
+            .catch(() => {});
+        } else {
+          setVolumeState(Math.round((audioRef.current?.volume ?? 0.8) * 100));
+        }
         // Let the receiver actually begin before trusting its status again.
         setTimeout(() => { transitionRef.current = false; }, 2500);
       }
@@ -475,9 +489,17 @@ export function usePlayer(jf) {
           stalledRef.current = 0;
         }
 
-        anchorRef.current = { pos: reported, at: Date.now(), playing: !!s.playing };
+        // De-bias a whole-second clock: the reported value is the floor of the
+        // true position, so the expected true value is half a second later.
+        const debiased = s.coarsePosition && s.playing ? reported + 0.5 : reported;
+        anchorRef.current = { pos: debiased, at: Date.now(), playing: !!s.playing };
         if (s.duration) setDuration(s.duration);
         setPlaying(Boolean(s.playing));
+        // Mirror the speaker's own volume, including changes made from the
+        // BluOS app or a physical dial -- but never while the user is dragging.
+        if (typeof s.volume === 'number' && Date.now() > volumeHeldRef.current) {
+          setVolumeState((v) => (Math.abs(v - s.volume) > 1 ? s.volume : v));
+        }
       } catch {
         // Transient network blips are expected; keep polling.
       }

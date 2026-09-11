@@ -101,6 +101,22 @@ export class Jellyfin {
     return { items: data.Items || [], total: data.TotalRecordCount ?? 0 };
   }
 
+  // Albums credited to an artist, newest first (Spotify's discography order).
+  async artistAlbums(artistId, { limit = 60 } = {}) {
+    const q = new URLSearchParams({
+      IncludeItemTypes: 'MusicAlbum',
+      Recursive: 'true',
+      AlbumArtistIds: artistId,
+      SortBy: 'ProductionYear,SortName',
+      SortOrder: 'Descending',
+      Fields: 'ProductionYear,ChildCount',
+      Limit: String(limit),
+      userId: this.userId,
+    });
+    const data = await this._fetch(`/Items?${q}`);
+    return { items: data.Items || [], total: data.TotalRecordCount ?? 0 };
+  }
+
   async tracks({ albumId = null, artistId = null, limit = 500, search = null } = {}) {
     const q = new URLSearchParams({
       IncludeItemTypes: 'Audio',
@@ -147,6 +163,25 @@ export class Jellyfin {
     });
     const data = await this._fetch(`/Playlists/${playlistId}/Items?${q}`);
     return { items: data.Items || [], total: data.TotalRecordCount ?? 0 };
+  }
+
+  /**
+   * Lyrics for a track. Jellyfin 10.9+ serves .lrc sidecars and embedded tags
+   * here; this library has ~19,000 .lrc files, which is why filetote carries
+   * them alongside the audio during the beets reorganise.
+   * Returns [{start: seconds|null, text}] -- start is null for unsynced lyrics.
+   */
+  async lyrics(itemId) {
+    const q = new URLSearchParams({ api_key: this.token });
+    const res = await fetch(`${this.baseUrl}/Audio/${itemId}/Lyrics?${q}`, {
+      headers: { Authorization: authHeader(this.token) },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data?.Lyrics || []).map((l) => ({
+      start: l.Start != null ? l.Start / 10_000_000 : null,
+      text: l.Text || '',
+    }));
   }
 
   // Fetch a single item (album, artist, track) by id.

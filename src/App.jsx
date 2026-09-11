@@ -4,6 +4,7 @@ import { usePlayer } from './player/usePlayer.js';
 import Sidebar from './components/Sidebar.jsx';
 import Library from './components/Library.jsx';
 import Player from './components/Player.jsx';
+import RightPanel from './components/RightPanel.jsx';
 
 const DEFAULT_SERVER = 'http://192.168.1.85:2101';
 
@@ -70,6 +71,8 @@ export default function App() {
   const [artists, setArtists] = useState([]);
   const [detail, setDetail] = useState(null);
   const [query, setQuery] = useState('');
+  // null | 'npv' | 'queue' | 'lyrics'
+  const [panel, setPanel] = useState(null);
   const player = usePlayer(jf);
 
   // Restore a saved session, but only if the token still works.
@@ -159,7 +162,7 @@ export default function App() {
         </div>
       </header>
 
-      <div className="shell">
+      <div className={`shell ${panel ? 'with-panel' : ''}`}>
         <Sidebar
           view={view}
           onView={goView}
@@ -180,6 +183,17 @@ export default function App() {
           query={query}
           setQuery={setQuery}
         />
+        {panel && (
+          <RightPanel
+            mode={panel}
+            onMode={setPanel}
+            onClose={() => setPanel(null)}
+            player={player}
+            jf={jf}
+            onOpenArtist={openArtistById}
+            onOpenAlbum={openAlbumById}
+          />
+        )}
       </div>
 
       <Player
@@ -188,6 +202,8 @@ export default function App() {
         devices={devices}
         onOpenAlbum={openAlbumById}
         onOpenArtist={openArtistById}
+        panel={panel}
+        onPanel={setPanel}
       />
     </div>
   );

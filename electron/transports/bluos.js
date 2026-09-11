@@ -236,6 +236,15 @@ class BluOSTransport {
       position: Number(tag(xml, 'secs') ?? 0),
       duration: Number(tag(xml, 'totlen') ?? 0),
       canSeek: tag(xml, 'canSeek') === '1',
+      // BluOS reports <secs> as a whole number, so a reading of 90 means the
+      // true position is somewhere in [90, 91). Taking it at face value leaves
+      // us ~0.5s behind on average -- invisible on a progress bar, obvious when
+      // it drives synced lyrics. Flagged so the player can de-bias it.
+      coarsePosition: true,
+      // The URL the device is pulling. It carries the Jellyfin item id, which
+      // is how we recover full metadata for a session we did not start -- and
+      // the only way on firmware where we must send a bare URL to keep seeking.
+      streamUrl: tag(xml, 'streamUrl'),
     };
   }
 }

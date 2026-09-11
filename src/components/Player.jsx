@@ -8,7 +8,7 @@ function fmt(seconds) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist }) {
+export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist, panel, onPanel }) {
   const { current, nowPlaying, playing, position, duration, volume, device, error } = player;
   // nowPlaying covers both our own queue and a session adopted from a speaker
   // that was already playing when the app opened.
@@ -41,8 +41,8 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist 
               className={`player-art ${nowPlaying?.albumId ? 'clickable' : ''}`}
               src={art}
               alt=""
-              title={nowPlaying?.albumId ? 'Go to album' : undefined}
-              onClick={() => nowPlaying?.albumId && onOpenAlbum?.(nowPlaying.albumId)}
+              title="Now playing view"
+              onClick={() => onPanel(panel === 'npv' ? null : 'npv')}
             />
           ) : (
             <div className="player-art placeholder" />
@@ -106,6 +106,25 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist 
         </div>
 
         <div className="player-right">
+          <button
+            className={`icon-btn ${panel === 'lyrics' ? 'on' : ''}`}
+            onClick={() => onPanel(panel === 'lyrics' ? null : 'lyrics')}
+            title="Lyrics"
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+              <path d="M13.426 2.574a2.831 2.831 0 0 0-4.797 1.55l3.247 3.247a2.831 2.831 0 0 0 1.55-4.797zM10.5 8.118l-2.619-2.62A63303.13 63303.13 0 0 0 4.74 9.075L1 15l5.925-3.74 3.575-3.142z" />
+              <path d="M0 16h16v-1H0z" />
+            </svg>
+          </button>
+          <button
+            className={`icon-btn ${panel === 'queue' ? 'on' : ''}`}
+            onClick={() => onPanel(panel === 'queue' ? null : 'queue')}
+            title="Queue"
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+              <path d="M15 15H1v-1.5h14V15zm0-4.5H1V9h14v1.5zm-14-7A2.5 2.5 0 0 1 3.5 1h9a2.5 2.5 0 0 1 0 5h-9A2.5 2.5 0 0 1 1 3.5zm2.5-1a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2h-9z" />
+            </svg>
+          </button>
           <div className="player-volume" title={`Volume ${volume}%`}>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
               strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">

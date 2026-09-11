@@ -91,8 +91,11 @@ export default function Library({
 
   const openArtist = async (artist) => {
     try {
-      const { items } = await jf.tracks({ artistId: artist.Id, limit: 200 });
-      setDetail({ item: artist, tracks: items, kind: 'Artist' });
+      const [t, a] = await Promise.all([
+        jf.tracks({ artistId: artist.Id, limit: 200 }),
+        jf.artistAlbums(artist.Id).catch(() => ({ items: [] })),
+      ]);
+      setDetail({ item: artist, tracks: t.items, albums: a.items, kind: 'Artist' });
     } catch (e) { setErr(e.message); }
   };
 
@@ -129,38 +132,96 @@ export default function Library({
   // --- detail view --------------------------------------------------------
   if (detail) {
     const { item, tracks, kind } = detail;
+    const isArtist = kind === 'Artist';
     const totalMin = Math.round(
-      tracks.reduce((s, t) => s + (t.RunTimeTicks || 0) / 10_000_000, 0) / 60
+      tracks.reduce((s2, t) => s2 + (t.RunTimeTicks || 0) / 10_000_000, 0) / 60
     );
+
     return (
       <div className="content">
         <button className="back" onClick={() => setDetail(null)}>&larr; Back</button>
-        <header className="detail-hero">
-          <img src={jf.imageUrl(item.Id, { maxHeight: 424 })} alt="" />
-          <div>
-            <div className="kind">{kind}</div>
+
+        <header className={`hero ${isArtist ? 'artist' : ''}`}>
+          <img src={jf.imageUrl(item.Id, { maxHeight: 464 })} alt="" />
+          <div style={{ minWidth: 0 }}>
+            {isArtist ? (
+              <span className="verified">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                  <path d="M12 2 9.6 4.6 6.1 4l-.6 3.5L2 9.6 4.6 12 2 14.4l3.5 2.1.6 3.5 3.5-.6L12 22l2.4-2.6 3.5.6.6-3.5 3.5-2.1L19.4 12 22 9.6l-3.5-2.1-.6-3.5-3.5.6L12 2zm-1.2 13.6L7 11.8l1.4-1.4 2.4 2.4 4.8-4.8L17 9.4l-6.2 6.2z" />
+                </svg>
+                Verified Artist
+              </span>
+            ) : (
+              <div className="kind">{kind}</div>
+            )}
             <h1>{item.Name}</h1>
             <p>
-              {item.AlbumArtist && <b>{item.AlbumArtist}</b>}
-              {item.ProductionYear ? ` · ${item.ProductionYear}` : ''}
-              {` · ${tracks.length} tracks`}
+              {!isArtist && item.AlbumArtist && <b>{item.AlbumArtist}</b>}
+              {!isArtist && item.ProductionYear ? ` · ${item.ProductionYear}` : ''}
+              {`${isArtist ? '' : ' · '}${tracks.length} tracks`}
               {totalMin ? `, about ${totalMin} min` : ''}
             </p>
           </div>
         </header>
-        <div className="detail-actions">
+
+        <div className="actions">
           <button className="bigplay" onClick={() => player.playQueue(tracks, 0)} title="Play">
             <PlayGlyph size={24} />
           </button>
-          <button className="ghost" onClick={() => startMix(item)}>Instant mix</button>
+          <button className="btn-secondary" onClick={() => startMix(item)}>Instant mix</button>
+          {isArtist && <button className="btn-secondary" disabled title="Not wired up yet">Follow</button>}
         </div>
-        <div className="tracklist">
-          {tracks.map((t, i) => (
-            <TrackRow key={t.Id} track={t} n={i + 1}
-              active={player.current?.Id === t.Id}
-              onPlay={() => player.playQueue(tracks, i)} />
-          ))}
-        </div>
+
+        {isArtist ? (
+          <div className="pad">
+            <section>
+              <div className="shelf-head"><h2>Popular</h2></div>
+              <div className="tracklist" style={{ padding: 0 }}>
+                {tracks.slice(0, 10).map((t, i) => (
+                  <TrackRow key={t.Id} track={t} n={i + 1}
+                    active={player.current?.Id === t.Id}
+                    onPlay={() => player.playQueue(tracks, i)} />
+                ))}
+              </div>
+            </section>
+
+            {detail.albums?.length > 0 && (
+              <section>
+                <div className="shelf-head"><h2>Discography</h2></div>
+                <div className="grid">
+                  {detail.albums.map((a) => (
+                    <Card key={a.Id} title={a.Name}
+                      subtitle={a.ProductionYear ? `${a.ProductionYear} · Album` : 'Album'}
+                      image={jf.imageUrl(a.Id, { maxHeight: 320 })}
+                      onOpen={() => openAlbum(a)} onPlay={() => playItem(a)} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section>
+              <div className="shelf-head"><h2>Fans also like</h2></div>
+              <p className="placeholder-note">
+                Similar artists need a metadata provider. Not wired up yet.
+              </p>
+            </section>
+
+            <section>
+              <div className="shelf-head"><h2>About</h2></div>
+              <p className="placeholder-note">
+                {item.Overview || 'No biography yet. These arrive with artist metadata.'}
+              </p>
+            </section>
+          </div>
+        ) : (
+          <div className="tracklist">
+            {tracks.map((t, i) => (
+              <TrackRow key={t.Id} track={t} n={i + 1}
+                active={player.current?.Id === t.Id}
+                onPlay={() => player.playQueue(tracks, i)} />
+            ))}
+          </div>
+        )}
       </div>
     );
   }

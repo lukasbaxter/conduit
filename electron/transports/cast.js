@@ -110,6 +110,7 @@ class CastTransport {
       position: s.currentTime || 0,
       duration: s.media?.duration || 0,
       volume: Math.round((s.volume?.level ?? 0) * 100),
+      streamUrl: s.media?.contentId || null,
     };
   }
 
