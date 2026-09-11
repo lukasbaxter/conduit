@@ -130,15 +130,23 @@ wss.on('connection', (ws, req) => {
   let self = null;
 
   const timeout = setTimeout(() => { if (!self) ws.close(4001, 'auth timeout'); }, 10000);
+  // Messages that land while the hello's token is still being verified (the
+  // client flushes devices/claim/nowplaying right behind its hello). Dropping
+  // them lost the desktop's speaker list until the next mDNS change.
+  let verifying = false;
+  const backlog = [];
 
-  ws.on('message', async (raw) => {
+  const onMessage = async (raw) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch { return; }
 
     // First message must be hello with a token.
     if (!self) {
+      if (verifying) { backlog.push(raw); return; }
       if (msg.type !== 'hello' || !msg.token) return;
+      verifying = true;
       const who = await verify(msg.token);
+      verifying = false;
       if (!who) { ws.close(4003, 'bad token'); return; }
       clearTimeout(timeout);
       const kind = msg.kind || 'web';
@@ -170,6 +178,8 @@ wss.on('connection', (ws, req) => {
       userMap(who.id).set(self.id, self);
       send(ws, { type: 'hello-ok', clientId: self.id, userId: who.id });
       broadcastRoster(self.uid);
+      // Now replay what arrived during verification, in order.
+      for (const b of backlog.splice(0)) await onMessage(b);
       return;
     }
 
@@ -221,7 +231,8 @@ wss.on('connection', (ws, req) => {
       default:
         break;
     }
-  });
+  };
+  ws.on('message', onMessage);
 
   ws.on('close', () => {
     clearTimeout(timeout);

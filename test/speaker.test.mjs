@@ -33,13 +33,17 @@ function desktop(tok) {
   return new Promise((resolve) => {
     const ws = new WebSocket('ws://192.168.1.85:8788/relay');
     const got = [];
-    ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', token: tok, clientId: 'c_fakedesk', kind: 'desktop', name: 'FAKE DESKTOP' })));
+    ws.on('open', () => {
+      ws.send(JSON.stringify({ type: 'hello', token: tok, clientId: 'c_fakedesk', kind: 'desktop', name: 'FAKE DESKTOP' }));
+      // Straight behind the hello, BEFORE hello-ok -- exactly what the real
+      // client does on reconnect. The relay used to drop this while it was
+      // still verifying the token, and the web player never saw the Node.
+      ws.send(JSON.stringify({ type: 'devices', devices: [{ id: 'bluos:node', name: 'Node', kind: 'bluos' }] }));
+    });
     ws.on('message', (raw) => {
       const m = JSON.parse(raw);
-      if (m.type === 'hello-ok') {
-        ws.send(JSON.stringify({ type: 'devices', devices: [{ id: 'bluos:node', name: 'Node', kind: 'bluos' }] }));
-        resolve({ ws, got });
-      } else if (m.type === 'command') got.push(m.command);
+      if (m.type === 'hello-ok') resolve({ ws, got });
+      else if (m.type === 'command') got.push(m.command);
     });
   });
 }
