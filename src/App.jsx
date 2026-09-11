@@ -176,6 +176,7 @@ export default function App() {
     const patch = (t) => t.Id === trackId ? { ...t, UserData: { ...(t.UserData || {}), IsFavorite: liked } } : t;
     setDetail((d) => d ? { ...d, tracks: d.tracks.map(patch) } : d);
     player.patchQueue?.(patch);
+    player.syncLiked?.(trackId, liked);
   };
 
   // Device list is pushed from the main process as mDNS finds things.
@@ -285,6 +286,11 @@ export default function App() {
     patchLiked(track.Id, liked);
     try {
       await jf.setFavorite(track.Id, liked);
+      // The footer heart on a mirroring client only knows the session track's
+      // id; fetch the real item so the Liked Songs row it prepends is complete.
+      if (track._partial) {
+        try { const full = await jf.itemById(track.Id); if (full) track = { ...full, ...track, _partial: false }; } catch { /* keep partial */ }
+      }
       notify(liked ? 'Added to Liked Songs' : 'Removed from Liked Songs');
       setLikedCount((c) => (c == null ? c : Math.max(0, c + (liked ? 1 : -1))));
       // Liked Songs view stays live: unliking drops the row, liking (e.g. the

@@ -100,6 +100,10 @@ mapping the code when we stopped.
 ---
 
 ## Shipped 2026-09-11 (done, deployed to :8748, tested)
+- Footer heart follows the SESSION track (nowPlaying.itemId/liked): works on
+  a mirroring client; a like there sends `patchLiked` to the active player so
+  its queue (source of the mirrored state) updates. `test/liked.test.mjs`.
+  Handoff item #2.1 done; #2.2-2.5 of the Liked audit still unverified.
 - Playback memory: last track/queue/playhead/modes restored PAUSED on open;
   play resumes at the saved spot; queue end parks on the last track (no more
   "Nothing playing"). `test/restore.test.mjs`.

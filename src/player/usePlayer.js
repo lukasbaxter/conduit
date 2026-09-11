@@ -950,12 +950,16 @@ export function usePlayer(jf) {
         artUrl: relayTarget.artUrl || null,
         albumId: relayTarget.albumId || null,
         artistId: relayTarget.artistId || null,
+        itemId: relayTarget.itemId || null,
+        liked: Boolean(relayTarget.liked),
       } : null)
     : current
     ? {
         title: current.Name,
         artist: current.Artists?.join(', ') || current.AlbumArtist || '',
         artId: current.AlbumId || current.Id,
+        itemId: current.Id,
+        liked: Boolean(current.UserData?.IsFavorite),
         albumId: current.AlbumId || null,
         // ArtistItems carries the real artist entity; AlbumArtists is the
         // fallback for tracks credited only at album level.
@@ -1033,10 +1037,26 @@ export function usePlayer(jf) {
     else if (cmd.action === 'setRepeat') { setRepeatModeRef.current(cmd.mode || 'off'); }
     else if (cmd.action === 'setShuffle') { setShuffleModeRef.current(cmd.mode || 'off'); }
     else if (cmd.action === 'yield') { yieldRef.current(); }
+    else if (cmd.action === 'patchLiked' && cmd.itemId) {
+      // A controller liked/unliked the session track: update our queue so the
+      // next now-playing broadcast carries the new heart to every mirror.
+      const liked = Boolean(cmd.liked);
+      setQueue((q) => {
+        const n = q.map((t) => (t.Id === cmd.itemId ? { ...t, UserData: { ...(t.UserData || {}), IsFavorite: liked } } : t));
+        queueRef.current = n; return n;
+      });
+    }
   }, [jf]);
 
   const patchQueue = useCallback((fn) => {
     setQueue((q) => { const n = q.map(fn); queueRef.current = n; return n; });
+  }, []);
+
+  // Liked state changed here: if another client owns the session, tell it, so
+  // its queue (the source of the mirrored heart) agrees with what we just did.
+  const syncLiked = useCallback((itemId, liked) => {
+    const act = activePlayerRef.current;
+    if (act && relayRef.current) relayRef.current.command(act, { action: 'patchLiked', itemId, liked });
   }, []);
 
   // Stop local audio and remote-device playback because another client took over.
@@ -1073,6 +1093,7 @@ export function usePlayer(jf) {
       artUrl: `${npBaseUrl}/Items/${current.AlbumId || current.Id}/Images/Primary?maxHeight=128`,
       albumId: current.AlbumId || null,
       artistId: current.ArtistItems?.[0]?.Id || current.AlbumArtists?.[0]?.Id || null,
+      liked: Boolean(current.UserData?.IsFavorite),
       playing, position, duration, volume, repeat, shuffle, at: Date.now(),
     } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1097,7 +1118,7 @@ export function usePlayer(jf) {
 
   return useMemo(
     () => ({
-      device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, contextId,
+      device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId,
       relayDevices, attachRelay, applyRoster, executeCommand, roster, relay: relayInstance,
       queue, index, current,
       playing: shownPlaying, position: shownPosition, duration: shownDuration, volume: shownVolume, error,
@@ -1106,7 +1127,7 @@ export function usePlayer(jf) {
       clearError: () => setError(null),
     }),
     // eslint-disable-next-line
-    [device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, contextId,
+    [device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId,
      relayDevices, attachRelay, applyRoster, executeCommand, roster, relayInstance, queue, index, current,
      shownPlaying, shownPosition, shownDuration, shownVolume, error, shownRepeat, shownShuffle,
      cycleRepeat, cycleShuffle, playQueue, toggle, next,

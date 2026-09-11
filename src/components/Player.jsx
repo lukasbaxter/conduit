@@ -95,14 +95,16 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
               )}
             </div>
           </div>
-          {current && (
+          {nowPlaying?.itemId && (
+            // Follows the SESSION track (mirrored liked state included), so the
+            // heart works on a client that is only controlling another one.
             <button
-              className={`trackrow-like ${current.UserData?.IsFavorite ? 'on' : ''}`}
+              className={`trackrow-like ${nowPlaying.liked ? 'on' : ''}`}
               style={{ opacity: 1 }}
-              onClick={() => onLike?.(current, !current.UserData?.IsFavorite)}
-              title={current.UserData?.IsFavorite ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
+              onClick={() => onLike?.(current || { Id: nowPlaying.itemId, Name: nowPlaying.title, _partial: true }, !nowPlaying.liked)}
+              title={nowPlaying.liked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
             >
-              <Heart on={Boolean(current.UserData?.IsFavorite)} />
+              <Heart on={Boolean(nowPlaying.liked)} />
             </button>
           )}
         </div>
