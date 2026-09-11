@@ -6,7 +6,13 @@ import Library, { LIKED_ID } from './components/Library.jsx';
 import Player from './components/Player.jsx';
 import RightPanel from './components/RightPanel.jsx';
 
-const DEFAULT_SERVER = 'http://192.168.1.85:2101';
+// In Electron (desktop) we talk to Jellyfin on the LAN directly. In a browser
+// (the PWA at music.baxtergroup.io) we go same-origin through the nginx proxy,
+// so it works over HTTPS and off-network without CORS or mixed content.
+const IS_DESKTOP = typeof window !== 'undefined' && !!window.conduit;
+const DEFAULT_SERVER = IS_DESKTOP
+  ? 'http://192.168.1.85:2101'
+  : `${window.location.origin}/jf`;
 
 function Login({ onConnected }) {
   const [baseUrl, setBaseUrl] = useState(DEFAULT_SERVER);
@@ -35,10 +41,12 @@ function Login({ onConnected }) {
       <form onSubmit={submit}>
         <h1>Conduit</h1>
         <p className="login-sub">Your library, on any speaker in the house.</p>
-        <label>
-          Server
-          <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} spellCheck="false" />
-        </label>
+        {IS_DESKTOP && (
+          <label>
+            Server
+            <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} spellCheck="false" />
+          </label>
+        )}
         <label>
           Username
           <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus spellCheck="false" />
@@ -51,10 +59,12 @@ function Login({ onConnected }) {
         <button className="primary" disabled={busy || !username}>
           {busy ? 'Connecting...' : 'Connect'}
         </button>
-        <p className="login-hint">
-          Use a LAN address, not localhost. Speakers fetch audio themselves, so the
-          address has to be reachable from them too.
-        </p>
+        {IS_DESKTOP && (
+          <p className="login-hint">
+            Use a LAN address, not localhost. Speakers fetch audio themselves, so the
+            address has to be reachable from them too.
+          </p>
+        )}
       </form>
     </div>
   );
