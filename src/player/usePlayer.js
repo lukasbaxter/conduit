@@ -480,10 +480,16 @@ export function usePlayer(jf) {
         //   Cast:  playing=false with position sitting at the end.
         //   BluOS: playing=false with position reset to 0 -- indistinguishable
         //          from a stop unless we remember we were near the end.
+        // Only look for end-of-track while we actually believe we're playing.
+        // Crucially, clear the anchor's playing flag BEFORE advancing: skipping
+        // that let a.playing stay true after the queue ended, so every later
+        // poll re-fired "past the end" and stopped the device in a 2s loop.
         const dur = s.duration || durationRef.current;
-        const atEnd = dur > 0 && (reported >= dur - 1.5 || (a.playing && reported === 0 && expected >= dur - 3));
+        const atEnd = a.playing && dur > 0
+          && (reported >= dur - 1.5 || (reported === 0 && expected >= dur - 3));
         if (!s.playing && atEnd) {
           disagreeRef.current = 0;
+          anchorRef.current = { pos: reported, at: Date.now(), playing: false };
           next();
           return;
         }
