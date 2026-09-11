@@ -216,8 +216,14 @@ export default function App() {
     setView('home');
     setDetail({ item: pl, tracks: [], kind: 'Playlist', loading: true });
     try {
-      const { items } = await jf.playlistTracks(pl.Id);
-      setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, tracks: items, loading: false } : d));
+      // First page renders in ~0.5s; the rest streams in behind it. With the
+      // list virtualized, the visible rows are ready immediately.
+      const first = await jf.playlistTracks(pl.Id, { startIndex: 0, limit: 100 });
+      setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, tracks: first.items, loading: false } : d));
+      if (first.total > first.items.length) {
+        const rest = await jf.playlistTracks(pl.Id); // full, cached
+        setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, tracks: rest.items } : d));
+      }
     } catch { /* surfaced in the library view */ }
   };
 

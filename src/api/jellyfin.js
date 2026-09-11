@@ -245,13 +245,17 @@ export class Jellyfin {
   }
 
   playlistTracks(playlistId, opts = {}) {
+    if (opts.startIndex != null) return this._playlistTracks(playlistId, opts); // paged, uncached
     return this._cached(`playlist:${playlistId}`, () => this._playlistTracks(playlistId, opts));
   }
 
-  async _playlistTracks(playlistId, { limit = 500 } = {}) {
+  async _playlistTracks(playlistId, { limit = 500, startIndex = 0 } = {}) {
+    // Jellyfin resolves playlist entries one by one, so latency scales with the
+    // count: ~0.6s for 60, ~3.7s for 500. Callers page it to stay responsive.
     const q = new URLSearchParams({
       userId: this.userId,
       Limit: String(limit),
+      StartIndex: String(startIndex),
       Fields: 'ParentId,ArtistItems,AlbumArtists,UserData',
     });
     const data = await this._fetch(`/Playlists/${playlistId}/Items?${q}`);
