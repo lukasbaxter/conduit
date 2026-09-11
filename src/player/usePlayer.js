@@ -52,6 +52,8 @@ export function usePlayer(jf) {
   // the house's current playback instead of claiming nothing is on.
   const [external, setExternal] = useState(null);
   const [contextId, setContextId] = useState(null);
+  const [roster, setRoster] = useState({ players: [], lanDevices: [] });
+  const relayRef = useRef(null);
   const adoptedRef = useRef(false);
 
   const audioRef = useRef(null);
@@ -87,6 +89,9 @@ export function usePlayer(jf) {
   // Set while the user is dragging the volume slider, so the device poll does
   // not yank the handle back to the last value it reported.
   const volumeHeldRef = useRef(0);
+  const playQueueRef = useRef(() => {});
+  const toggleRef = useRef(() => {});
+  const seekRef = useRef(() => {});
 
   useEffect(() => { deviceRef.current = device; }, [device]);
   useEffect(() => { positionRef.current = position; }, [position]);
@@ -103,6 +108,15 @@ export function usePlayer(jf) {
 
   const current = index >= 0 ? queue[index] || null : null;
   const remote = typeof window !== 'undefined' ? window.conduit?.remote : null;
+
+  const [relayInstance, setRelayInstance] = useState(null);
+  const attachRelay = useCallback((relay) => { relayRef.current = relay; setRelayInstance(relay); }, []);
+  const applyRoster = useCallback((r) => setRoster(r), []);
+
+  // Remote players from the relay, presented as selectable devices.
+  const relayDevices = roster.players
+    .filter((p) => p.canPlay)
+    .map((p) => ({ id: `relay:${p.id}`, kind: 'relay', name: p.name, model: p.kind === 'desktop' ? 'Desktop' : 'Conduit', relayClientId: p.id }));
 
   const metaFor = useCallback(
     (track) => {
@@ -208,6 +222,17 @@ export function usePlayer(jf) {
 
   const playQueue = useCallback(
     async (tracks, startIndex = 0, ctx = null) => {
+      const dev = deviceRef.current;
+      // Targeting another of my clients: send it the track ids to play, don't
+      // play here.
+      if (dev.kind === 'relay' && relayRef.current) {
+        relayRef.current.command(dev.relayClientId, {
+          action: 'play', trackIds: tracks.map((t) => t.Id), index: startIndex, ctx,
+        });
+        setQueue(tracks); setIndex(startIndex); queueRef.current = tracks; indexRef.current = startIndex;
+        setContextId(ctx); setPlaying(true);
+        return;
+      }
       setError(null);
       setExternal(null);
       setContextId(ctx);
@@ -262,6 +287,11 @@ export function usePlayer(jf) {
 
   const toggle = useCallback(async () => {
     const dev = deviceRef.current;
+    if (dev.kind === 'relay' && relayRef.current) {
+      relayRef.current.command(dev.relayClientId, { action: 'toggle' });
+      setPlaying((v) => !v);
+      return;
+    }
     if (!current && !external) return;
     try {
       if (dev.kind === 'local') {
@@ -283,6 +313,11 @@ export function usePlayer(jf) {
   const seek = useCallback(
     async (seconds) => {
       const dev = deviceRef.current;
+      if (dev.kind === 'relay' && relayRef.current) {
+        relayRef.current.command(dev.relayClientId, { action: 'seek', pos: seconds });
+        anchorAt(seconds, true);
+        return;
+      }
       const track = queueRef.current[indexRef.current];
       // Scrubbing with nothing loaded used to fire /Play?seek= at a speaker that
       // had no stream, which is how a device ended up in a stalled state before
@@ -579,19 +614,47 @@ export function usePlayer(jf) {
     ? { title: external.title, artist: external.artist || '', artId: null }
     : null;
 
+  // Run a command another client routed to us.
+  const executeCommand = useCallback(async (cmd) => {
+    if (!cmd) return;
+    if (cmd.action === 'play' && jf && Array.isArray(cmd.trackIds) && cmd.trackIds.length) {
+      try {
+        const q = new URLSearchParams({ Ids: cmd.trackIds.join(','), userId: jf.userId, Fields: 'ArtistItems,AlbumArtists,UserData' });
+        const data = await jf._fetch(`/Items?${q}`);
+        const byId = new Map((data.Items || []).map((t) => [t.Id, t]));
+        const tracks = cmd.trackIds.map((id) => byId.get(id)).filter(Boolean);
+        if (tracks.length) playQueueRef.current(tracks, cmd.index || 0, cmd.ctx || null);
+      } catch { /* ignore */ }
+    } else if (cmd.action === 'toggle') { toggleRef.current(); }
+    else if (cmd.action === 'seek') { seekRef.current(cmd.pos || 0); }
+  }, [jf]);
+
   const patchQueue = useCallback((fn) => {
     setQueue((q) => { const n = q.map(fn); queueRef.current = n; return n; });
   }, []);
 
+  useEffect(() => { playQueueRef.current = playQueue; }, [playQueue]);
+  useEffect(() => { toggleRef.current = toggle; }, [toggle]);
+  useEffect(() => { seekRef.current = seek; }, [seek]);
+
+  // Broadcast what we're playing so the roster shows it on other clients.
+  useEffect(() => {
+    const r = relayRef.current;
+    if (!r) return;
+    r.reportNowPlaying(nowPlaying ? { title: nowPlaying.title, artist: nowPlaying.artist, artId: nowPlaying.artId, playing } : null);
+  }, [nowPlaying, playing]);
+
   return useMemo(
     () => ({
       device, setDevice, adoptActive, nowPlaying, external, patchQueue, contextId,
+      relayDevices, attachRelay, applyRoster, executeCommand, roster, relay: relayInstance,
       queue, index, current,
       playing, position, duration, volume, error,
       playQueue, toggle, next, previous, seek, setVolume, skipTo,
       clearError: () => setError(null),
     }),
-    [device, setDevice, adoptActive, nowPlaying, external, patchQueue, contextId, queue, index, current,
+    [device, setDevice, adoptActive, nowPlaying, external, patchQueue, contextId,
+     relayDevices, attachRelay, applyRoster, executeCommand, roster, relayInstance, queue, index, current,
      playing, position, duration, volume, error, playQueue, toggle, next,
      previous, seek, setVolume, skipTo]
   );

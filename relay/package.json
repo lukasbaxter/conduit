@@ -1,0 +1,13 @@
+{
+  "name": "conduit-relay",
+  "version": "0.1.0",
+  "description": "Spotify-Connect-style control relay for Conduit: presence + command routing between a user's clients. Audio never passes through here.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}

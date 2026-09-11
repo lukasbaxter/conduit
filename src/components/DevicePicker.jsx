@@ -11,6 +11,7 @@ const ICONS = {
     'M1 14v2a5 5 0 0 1 5 5h2a7 7 0 0 0-7-7z' +
     'M1 10v2a9 9 0 0 1 9 9h2A11 11 0 0 0 1 10z',
   bluos: 'M17 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-5 3.5a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5zm0 13a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm0-6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z',
+  relay: 'M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm6 15a1 1 0 1 0 0 2 1 1 0 0 0 0-2z',
 };
 
 function DeviceIcon({ kind }) {
@@ -65,6 +66,7 @@ export default function DevicePicker({ devices, active, onSelect }) {
   const all = [LOCAL_DEVICE, ...visible];
   const groups = [
     { label: 'This device', items: all.filter((d) => d.kind === 'local') },
+    { label: 'Your devices', items: all.filter((d) => d.kind === 'relay') },
     { label: 'Speakers & TVs', items: all.filter((d) => d.kind === 'cast') },
     { label: 'Bluesound', items: all.filter((d) => d.kind === 'bluos') },
   ].filter((g) => g.items.length);

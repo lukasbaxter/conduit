@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Jellyfin, loadSession, persistSession, clearSession } from './api/jellyfin.js';
 import { usePlayer } from './player/usePlayer.js';
+import { Relay } from './relay.js';
 import Sidebar from './components/Sidebar.jsx';
 import Library, { LIKED_ID } from './components/Library.jsx';
 import Player from './components/Player.jsx';
@@ -184,6 +185,31 @@ export default function App() {
     api.list().then(setDevices).catch(() => {});
     return api.onChanged(setDevices);
   }, []);
+
+  // Relay: register this client, surface the user's other clients as players,
+  // and execute commands routed to us. Audio never touches the relay.
+  useEffect(() => {
+    if (!jf) return undefined;
+    const relay = new Relay({
+      token: jf.token,
+      name: (typeof window !== 'undefined' && window.conduit?.deviceName) || (window.conduit ? 'Conduit Desktop' : 'This Browser'),
+      kind: window.conduit ? 'desktop' : 'web',
+      canPlay: true,
+      onRoster: (r) => player.applyRoster(r),
+      onCommand: (cmd) => player.executeCommand(cmd),
+    });
+    player.attachRelay(relay);
+    return () => { relay.close(); player.attachRelay(null); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jf]);
+
+  // The desktop app tells the relay which LAN speakers it can see, so the
+  // user's other clients on the same network can target them.
+  useEffect(() => {
+    const relay = player.relay;
+    if (!window.conduit || !relay) return;
+    relay.reportDevices(devices.map((d) => ({ id: d.id, name: d.name, kind: d.kind })));
+  }, [devices, player.relay]);
 
   // Once speakers are known, show whatever the house is already playing rather
   // than reporting nothing. Runs once and never steals a session started here.
@@ -424,7 +450,7 @@ export default function App() {
       <Player
         player={player}
         jf={jf}
-        devices={devices}
+        devices={[...devices, ...player.relayDevices]}
         onOpenAlbum={openAlbumById}
         onOpenArtist={openArtistById}
         panel={panel}
