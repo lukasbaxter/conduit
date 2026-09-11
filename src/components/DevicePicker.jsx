@@ -1,16 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { LOCAL_DEVICE } from '../player/usePlayer.js';
 
+// Filled paths (Material-style) rather than strokes: the Cast glyph in
+// particular is unreadable as an outline at 18px.
 const ICONS = {
-  local: 'M4 4h16v11H4zM8 19h8M12 15v4',
-  cast: 'M2 16v3h3M2 12v7h7M2 8v11h11M15 5h7v14h-7',
-  bluos: 'M7 3h10v18H7zM12 7v.01M12 12a2.5 2.5 0 100 5 2.5 2.5 0 000-5z',
+  local: 'M21 3H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6v2h6v-2h6a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 14H3V5h18v12z',
+  cast:
+    'M21 3H3a2 2 0 0 0-2 2v3h2V5h18v14h-7v2h7a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z' +
+    'M1 18v3h3c0-1.66-1.34-3-3-3z' +
+    'M1 14v2a5 5 0 0 1 5 5h2a7 7 0 0 0-7-7z' +
+    'M1 10v2a9 9 0 0 1 9 9h2A11 11 0 0 0 1 10z',
+  bluos: 'M17 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-5 3.5a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5zm0 13a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm0-6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z',
 };
 
 function DeviceIcon({ kind }) {
   return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none"
-      stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
       <path d={ICONS[kind] || ICONS.cast} />
     </svg>
   );
@@ -38,14 +43,33 @@ export default function DevicePicker({ devices, active, onSelect }) {
     };
   }, [open]);
 
-  const all = [LOCAL_DEVICE, ...devices];
+  // A BluOS sync group plays as one speaker: commands to any member drive every
+  // member. Listing members separately implies you can pick one, which is false
+  // -- choosing either starts both. Collapse each group onto its master and
+  // label it with everyone in it.
+  const slaveHosts = new Set(
+    devices.flatMap((d) => (d.slaves || []).map((s) => s.host))
+  );
+  const visible = devices.filter((d) => !(d.kind === 'bluos' && (d.isSlave || slaveHosts.has(d.host))));
+  const labelFor = (d) => {
+    if (d.kind !== 'bluos' || !d.slaves?.length) return d.name;
+    return [d.name, ...d.slaves.map((s) => s.name)].join(' + ');
+  };
+  const subtitleFor = (d) => {
+    if (d.kind === 'bluos' && d.slaves?.length) {
+      return `Grouped · ${d.slaves.length + 1} speakers`;
+    }
+    return d.model;
+  };
+
+  const all = [LOCAL_DEVICE, ...visible];
   const groups = [
     { label: 'This device', items: all.filter((d) => d.kind === 'local') },
     { label: 'Speakers & TVs', items: all.filter((d) => d.kind === 'cast') },
     { label: 'Bluesound', items: all.filter((d) => d.kind === 'bluos') },
   ].filter((g) => g.items.length);
 
-  const remoteCount = devices.length;
+  const remoteCount = visible.length;
 
   return (
     <div className="devicepicker" ref={ref}>
@@ -55,7 +79,7 @@ export default function DevicePicker({ devices, active, onSelect }) {
         title={`Playing on ${active.name}`}
       >
         <DeviceIcon kind={active.kind} />
-        <span className="devicebtn-name">{active.name}</span>
+        <span className="devicebtn-name">{labelFor(active)}</span>
       </button>
 
       {open && (
@@ -77,8 +101,8 @@ export default function DevicePicker({ devices, active, onSelect }) {
                 >
                   <DeviceIcon kind={d.kind} />
                   <span className="deviceitem-text">
-                    <span className="deviceitem-name">{d.name}</span>
-                    <span className="deviceitem-model">{d.model}</span>
+                    <span className="deviceitem-name">{labelFor(d)}</span>
+                    <span className="deviceitem-model">{subtitleFor(d)}</span>
                   </span>
                   {d.id === active.id && <span className="deviceitem-dot" />}
                 </button>

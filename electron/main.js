@@ -2,11 +2,18 @@
 
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { Discovery } = require('./discovery');
 const { CastTransport } = require('./transports/cast');
 const { BluOSTransport } = require('./transports/bluos');
 
 const isDev = !app.isPackaged;
+
+// "Lukass-MBP-2.localdomain" -> "Lukass MBP 2"
+function friendlyHostname() {
+  const raw = require('os').hostname() || 'Desktop';
+  return raw.split('.')[0].replace(/-/g, ' ').trim() || 'Desktop';
+}
 
 let win = null;
 let discovery = null;
@@ -35,6 +42,11 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // The preload cannot require('os') under the default sandbox, so the
+      // machine name is handed across as a launch argument instead.
+      additionalArguments: [
+        `--conduit-device-name=${encodeURIComponent(friendlyHostname())}`,
+      ],
     },
   });
 
@@ -53,11 +65,37 @@ function createWindow() {
   win.on('closed', () => { win = null; });
 }
 
+/**
+ * Annotate BluOS players with their sync-group membership so the UI can present
+ * a group as one speaker instead of listing every member separately.
+ */
+async function withSyncInfo(devices) {
+  const out = await Promise.all(
+    devices.map(async (d) => {
+      if (d.kind !== 'bluos') return d;
+      try {
+        const info = await new BluOSTransport(d).syncInfo();
+        return { ...d, ...info };
+      } catch {
+        return d;
+      }
+    })
+  );
+  return out;
+}
+
 function startDiscovery() {
-  discovery = new Discovery((devices) => {
-    if (win && !win.isDestroyed()) win.webContents.send('devices:changed', devices);
+  discovery = new Discovery(async (devices) => {
+    trace(`discovery -> ${devices.length} device(s): ${devices.map((d) => d.name).join(', ')}`);
+    const annotated = await withSyncInfo(devices);
+    const grouped = annotated.filter((d) => d.isSlave || d.groupName);
+    if (grouped.length) {
+      trace(`sync groups: ${grouped.map((d) => `${d.name}${d.isSlave ? ' (slave of ' + d.masterHost + ')' : ' (master)'}`).join('; ')}`);
+    }
+    if (win && !win.isDestroyed()) win.webContents.send('devices:changed', annotated);
   });
   discovery.start();
+  trace('discovery started');
 }
 
 app.whenReady().then(() => {
@@ -84,18 +122,44 @@ app.on('before-quit', () => {
 // Every handler returns {ok, ...} rather than throwing across the bridge, so the
 // renderer can surface a device error without an unhandled rejection.
 
+// Set CONDUIT_TRACE=1 to log every device call with timings. Invaluable for
+// telling "the speaker is misbehaving" apart from "the UI is calling us wrong",
+// which look identical from the renderer.
+// Written to a file rather than stdout: Electron's stdout does not survive the
+// concurrently wrapper in dev, so console logging here silently goes nowhere.
+const TRACE = process.env.CONDUIT_TRACE !== '0';
+const TRACE_FILE = path.join(require('os').tmpdir(), 'conduit-trace.log');
+const t0 = Date.now();
+try { if (TRACE) fs.writeFileSync(TRACE_FILE, `--- conduit trace ${new Date().toISOString()} ---\n`); } catch (e) { /* non-fatal */ }
+const trace = (...a) => {
+  if (!TRACE) return;
+  const line = `[+${((Date.now() - t0) / 1000).toFixed(1)}s] ${a.join(' ')}\n`;
+  try { fs.appendFileSync(TRACE_FILE, line); } catch (e) { /* non-fatal */ }
+};
+
 const handle = (channel, fn) => {
   ipcMain.handle(channel, async (_evt, ...args) => {
     try {
       const value = await fn(...args);
+      if (TRACE) {
+        const dev = args[0]?.name || '';
+        if (channel === 'devices:list') {
+          trace(`list    -> ${(value || []).length} device(s)`);
+        } else if (channel === 'device:status') {
+          trace(`status  ${dev} -> playing=${value?.playing} pos=${value?.position}`);
+        } else {
+          trace(`${channel.replace('device:', '').padEnd(7)} ${dev}`, channel === 'device:play' ? String(args[1]).slice(-40) : (args[1] ?? ''));
+        }
+      }
       return { ok: true, value };
     } catch (err) {
+      trace(`${channel} FAILED: ${err?.message}`);
       return { ok: false, error: err?.message || String(err) };
     }
   });
 };
 
-handle('devices:list', () => (discovery ? discovery.list() : []));
+handle('devices:list', () => (discovery ? withSyncInfo(discovery.list()) : []));
 
 handle('device:play', (device, url, meta) => transportFor(device).play(url, meta));
 handle('device:resume', (device) => transportFor(device).resume());

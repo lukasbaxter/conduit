@@ -71,9 +71,22 @@ class CastTransport {
   pause() { return this._withPlayer('pause'); }
   seek(seconds) { return this._withPlayer('seek', Math.max(0, Math.round(seconds))); }
 
+  // Returning early when there is no cached player leaves a receiver playing
+  // forever if the connection was dropped and re-established, so reconnect and
+  // stop the running receiver rather than assuming it is already silent.
   async stop() {
-    if (!this.player) return null;
-    return this._withPlayer('stop');
+    try {
+      if (this.player) return await this._withPlayer('stop');
+      await this._connect();
+      return await this._withPlayer('stop');
+    } catch (e) {
+      // Last resort: tearing down the receiver session always silences it.
+      try {
+        if (this.client) await promisify(this.client.stop, this.client)(this.player);
+      } catch (e2) { /* fall through to close */ }
+      this.close();
+      return null;
+    }
   }
 
   // Volume lives on the receiver connection, not the media player.

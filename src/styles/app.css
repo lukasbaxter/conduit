@@ -298,3 +298,12 @@ input[type="range"]:disabled { opacity: .4; }
   .player-row { grid-template-columns: 1fr auto; row-gap: 10px; }
   .player-controls { grid-column: 1 / -1; order: 3; }
 }
+
+/* Clickable now-playing metadata in the footer. */
+.player-art.clickable { cursor: pointer; transition: opacity .15s; }
+.player-art.clickable:hover { opacity: .82; }
+.linkish {
+  padding: 0; color: var(--fg-dim); font-size: 11px; text-align: left;
+  background: none; border: 0;
+}
+.linkish:hover { color: var(--fg); text-decoration: underline; }

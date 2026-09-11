@@ -21,7 +21,9 @@ function deviceId() {
 function authHeader(token) {
   const parts = [
     `Client="${CLIENT}"`,
-    `Device="${navigator.platform || 'Desktop'}"`,
+    // Real machine name from the main process; navigator.platform is just
+    // "MacIntel" and makes every Mac look identical in Jellyfin's session list.
+    `Device="${(typeof window !== 'undefined' && window.conduit?.deviceName) || navigator.platform || 'Desktop'}"`,
     `DeviceId="${deviceId()}"`,
     `Version="${VERSION}"`,
   ];
@@ -103,7 +105,7 @@ export class Jellyfin {
     const q = new URLSearchParams({
       IncludeItemTypes: 'Audio',
       Recursive: 'true',
-      Fields: 'MediaSources,ParentId',
+      Fields: 'MediaSources,ParentId,ArtistItems,AlbumArtists',
       SortBy: albumId ? 'ParentIndexNumber,IndexNumber,SortName' : 'SortName',
       Limit: String(limit),
       userId: this.userId,
@@ -113,6 +115,49 @@ export class Jellyfin {
     if (search) q.set('searchTerm', search);
     const data = await this._fetch(`/Items?${q}`);
     return { items: data.Items || [], total: data.TotalRecordCount ?? 0 };
+  }
+
+  // Playlists the user actually made. "Your Library" shows only these.
+  async playlists({ limit = 200 } = {}) {
+    const q = new URLSearchParams({
+      IncludeItemTypes: 'Playlist',
+      Recursive: 'true',
+      SortBy: 'SortName',
+      Fields: 'ChildCount',
+      Limit: String(limit),
+      userId: this.userId,
+    });
+    const data = await this._fetch(`/Items?${q}`);
+    // Jellyfin imports stray .m3u/.info/.sfv files left behind by Soulseek rips
+    // as empty playlists -- 86 of them in this library, things like "00.info".
+    // Real playlists have contents, so ChildCount is the honest filter.
+    const items = (data.Items || []).filter(
+      (p) =>
+        (p.ChildCount ?? 0) > 0 &&
+        (!p.MediaType || p.MediaType === 'Audio' || p.MediaType === 'Unknown')
+    );
+    return { items, total: items.length };
+  }
+
+  async playlistTracks(playlistId, { limit = 500 } = {}) {
+    const q = new URLSearchParams({
+      userId: this.userId,
+      Limit: String(limit),
+      Fields: 'MediaSources,ParentId,ArtistItems,AlbumArtists',
+    });
+    const data = await this._fetch(`/Playlists/${playlistId}/Items?${q}`);
+    return { items: data.Items || [], total: data.TotalRecordCount ?? 0 };
+  }
+
+  // Fetch a single item (album, artist, track) by id.
+  async itemById(id) {
+    const q = new URLSearchParams({
+      Ids: id,
+      userId: this.userId,
+      Fields: 'PrimaryImageAspectRatio,ProductionYear,ChildCount,Overview',
+    });
+    const data = await this._fetch(`/Items?${q}`);
+    return (data.Items || [])[0] || null;
   }
 
   async search(term, limit = 40) {
@@ -133,13 +178,20 @@ export class Jellyfin {
 
   // --- urls handed to remote devices --------------------------------------
 
-  // `startSeconds` lets us fake seeking on receivers that refuse to seek a URL
-  // stream (BluOS reports canSeek=0 for these): re-issue the stream from an
-  // offset instead of asking the device to move within it.
-  streamUrl(itemId, { container = null, startSeconds = 0 } = {}) {
+  /**
+   * Always the static original file. Verified against Jellyfin 10.11 and a
+   * Bluesound N125:
+   *   - static=true returns Content-Length + Accept-Ranges, and BluOS then
+   *     reports canSeek=1 and seeks natively via /Play?seek=N.
+   *   - the transcoded offset stream is chunked with no Content-Length and
+   *     Accept-Ranges: none, and BluOS SILENTLY REJECTS it -- the play command
+   *     returns empty and the player never switches streams.
+   * So offsets are applied as a seek after playback starts, never baked into
+   * the URL. This also keeps playback bit-perfect instead of re-encoding.
+   */
+  streamUrl(itemId, { container = null } = {}) {
     const q = new URLSearchParams({ static: 'true', api_key: this.token });
     if (container) q.set('container', container);
-    if (startSeconds > 0) q.set('startTimeTicks', String(Math.round(startSeconds * 10_000_000)));
     return `${this.baseUrl}/Audio/${itemId}/stream?${q}`;
   }
 

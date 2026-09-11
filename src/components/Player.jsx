@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import DevicePicker from './DevicePicker.jsx';
 
 function fmt(seconds) {
@@ -8,10 +8,23 @@ function fmt(seconds) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-export default function Player({ player, jf, devices }) {
-  const { current, playing, position, duration, volume, device, error } = player;
-  const art = current ? jf.imageUrl(current.AlbumId || current.Id, { maxHeight: 128 }) : null;
-  const pct = duration > 0 ? (position / duration) * 100 : 0;
+export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist }) {
+  const { current, nowPlaying, playing, position, duration, volume, device, error } = player;
+  // nowPlaying covers both our own queue and a session adopted from a speaker
+  // that was already playing when the app opened.
+  const art = nowPlaying?.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: 128 }) : null;
+  // While dragging, the bar follows the thumb locally and commits ONE seek on
+  // release. Committing on every change event fired a seek per pixel of drag,
+  // which thrashed the speaker and made scrubbing unusable.
+  const [scrub, setScrub] = useState(null);
+  const shown = scrub != null ? scrub : position;
+  const pct = duration > 0 ? (shown / duration) * 100 : 0;
+
+  const commitScrub = () => {
+    if (scrub == null) return;
+    player.seek(scrub);
+    setScrub(null);
+  };
 
   return (
     <footer className="player">
@@ -24,14 +37,26 @@ export default function Player({ player, jf, devices }) {
       <div className="player-row">
         <div className="player-now">
           {art ? (
-            <img className="player-art" src={art} alt="" />
+            <img
+              className={`player-art ${nowPlaying?.albumId ? 'clickable' : ''}`}
+              src={art}
+              alt=""
+              title={nowPlaying?.albumId ? 'Go to album' : undefined}
+              onClick={() => nowPlaying?.albumId && onOpenAlbum?.(nowPlaying.albumId)}
+            />
           ) : (
             <div className="player-art placeholder" />
           )}
           <div className="player-meta">
-            <div className="player-title">{current?.Name || 'Nothing playing'}</div>
+            <div className="player-title">{nowPlaying?.title || 'Nothing playing'}</div>
             <div className="player-artist">
-              {current?.Artists?.join(', ') || current?.AlbumArtist || ''}
+              {nowPlaying?.artistId ? (
+                <button className="linkish" onClick={() => onOpenArtist(nowPlaying.artistId)}>
+                  {nowPlaying.artist}
+                </button>
+              ) : (
+                nowPlaying?.artist || (nowPlaying && !current ? `on ${device.name}` : '')
+              )}
             </div>
           </div>
         </div>
@@ -43,7 +68,7 @@ export default function Player({ player, jf, devices }) {
                 <path d="M6 5h2v14H6zM20 5v14l-11-7z" />
               </svg>
             </button>
-            <button className="play" onClick={player.toggle} disabled={!current}
+            <button className="play" onClick={player.toggle} disabled={!nowPlaying}
               title={playing ? 'Pause' : 'Play'}>
               {playing ? (
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
@@ -63,14 +88,17 @@ export default function Player({ player, jf, devices }) {
           </div>
 
           <div className="player-seek">
-            <span className="t">{fmt(position)}</span>
+            <span className="t">{fmt(shown)}</span>
             <input
               type="range"
               min="0"
               max={Math.max(1, Math.floor(duration))}
-              value={Math.floor(position)}
-              onChange={(e) => player.seek(Number(e.target.value))}
-              disabled={!current || !duration}
+              value={Math.floor(shown)}
+              onChange={(e) => setScrub(Number(e.target.value))}
+              onPointerUp={commitScrub}
+              onKeyUp={commitScrub}
+              onBlur={commitScrub}
+              disabled={!nowPlaying || !duration}
               style={{ '--pct': `${pct}%` }}
             />
             <span className="t">{fmt(duration)}</span>

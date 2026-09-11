@@ -2,6 +2,20 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Jellyfin shows whatever we send as Device= in its session list, and the
+// renderer only has navigator.platform ("MacIntel"), which is identical on
+// every Mac. The real hostname therefore comes from the main process.
+//
+// It is passed via additionalArguments rather than require('os'): Electron
+// sandboxes renderers by default, and a sandboxed preload may only require a
+// short allowlist (electron, events, timers, url). Requiring 'os' here throws,
+// which kills the WHOLE preload -- window.conduit ends up undefined and every
+// device call silently does nothing.
+function friendlyDeviceName() {
+  const arg = process.argv.find((a) => a.startsWith('--conduit-device-name='));
+  return arg ? decodeURIComponent(arg.split('=').slice(1).join('=')) : 'Desktop';
+}
+
 // Unwrap the {ok, value|error} envelope from main so callers can just await a
 // value, while a device failure still raises a real Error they can catch.
 async function call(channel, ...args) {
@@ -12,6 +26,7 @@ async function call(channel, ...args) {
 
 contextBridge.exposeInMainWorld('conduit', {
   platform: process.platform,
+  deviceName: friendlyDeviceName(),
 
   devices: {
     list: () => call('devices:list'),

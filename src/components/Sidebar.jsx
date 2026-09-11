@@ -16,11 +16,11 @@ function Icon({ name }) {
 }
 
 /**
- * Left rail: primary navigation plus a live list of what is in the library.
- * The list doubles as a jump-to, so albums are reachable without going through
- * the grid first.
+ * Left rail. "Your Library" is deliberately playlists only -- the things the
+ * user actually made. Albums and artists live under Home and Search so the
+ * library does not become a dump of all 3,291 albums.
  */
-export default function Sidebar({ view, onView, items, filter, onFilter, onOpen, jf }) {
+export default function Sidebar({ view, onView, playlists, onOpen, jf, loading }) {
   return (
     <aside className="sidebar">
       <nav className="nav">
@@ -37,32 +37,29 @@ export default function Sidebar({ view, onView, items, filter, onFilter, onOpen,
           <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <Icon name="library" /> Your Library
           </span>
-          <button onClick={() => onFilter(filter === 'albums' ? 'artists' : 'albums')}>
-            {filter === 'albums' ? 'Albums' : 'Artists'}
-          </button>
         </div>
 
         <div className="liblist">
-          {items.slice(0, 300).map((it) => {
-            const art = jf.imageUrl(it.Id, { maxHeight: 84 });
+          {playlists.map((pl) => {
+            const art = jf.imageUrl(pl.Id, { maxHeight: 84 });
             return (
-              <button
-                key={it.Id}
-                className={`libitem ${filter === 'artists' ? 'round' : ''}`}
-                onClick={() => onOpen(it)}
-                title={it.Name}
-              >
+              <button key={pl.Id} className="libitem" onClick={() => onOpen(pl)} title={pl.Name}>
                 {art ? <img src={art} alt="" loading="lazy" /> : <div className="ph" />}
                 <span className="libitem-text">
-                  <span className="libitem-name">{it.Name}</span>
+                  <span className="libitem-name">{pl.Name}</span>
                   <span className="libitem-sub">
-                    {filter === 'albums' ? it.AlbumArtist || 'Album' : 'Artist'}
+                    Playlist{pl.ChildCount ? ` · ${pl.ChildCount} songs` : ''}
                   </span>
                 </span>
               </button>
             );
           })}
-          {!items.length && <p className="devicemenu-empty">Nothing here yet.</p>}
+
+          {!playlists.length && !loading && (
+            <p className="devicemenu-empty">
+              No playlists yet. Ones you create in Jellyfin show up here.
+            </p>
+          )}
         </div>
       </div>
     </aside>

@@ -64,7 +64,8 @@ export default function App() {
   const [devices, setDevices] = useState([]);
   const [booting, setBooting] = useState(true);
   const [view, setView] = useState('home');
-  const [filter, setFilter] = useState('albums');
+  const [playlists, setPlaylists] = useState([]);
+  const [libLoading, setLibLoading] = useState(true);
   const [albums, setAlbums] = useState([]);
   const [artists, setArtists] = useState([]);
   const [detail, setDetail] = useState(null);
@@ -82,12 +83,15 @@ export default function App() {
       .finally(() => setBooting(false));
   }, []);
 
-  // Load the library once connected; the sidebar and home page share it.
+  // Load the library once connected. Albums/artists feed Home and Search;
+  // playlists are what "Your Library" shows.
   useEffect(() => {
     if (!jf) return;
-    Promise.all([jf.albums({ limit: 500 }), jf.artists({ limit: 500 })])
-      .then(([a, r]) => { setAlbums(a.items); setArtists(r.items); })
-      .catch(() => {});
+    setLibLoading(true);
+    Promise.all([jf.albums({ limit: 500 }), jf.artists({ limit: 500 }), jf.playlists()])
+      .then(([a, r, p]) => { setAlbums(a.items); setArtists(r.items); setPlaylists(p.items); })
+      .catch(() => {})
+      .finally(() => setLibLoading(false));
   }, [jf]);
 
   // Device list is pushed from the main process as mDNS finds things.
@@ -98,16 +102,48 @@ export default function App() {
     return api.onChanged(setDevices);
   }, []);
 
+  // Once speakers are known, show whatever the house is already playing rather
+  // than reporting nothing. Runs once and never steals a session started here.
+  //
+  // Depend on the stable callback, NOT on `player`: usePlayer returns a memo
+  // keyed partly on `position`, so `player` gets a fresh identity on every
+  // 200ms tick. Depending on it re-ran this five times a second and buried
+  // every speaker in status requests.
+  const { adoptActive } = player;
+  useEffect(() => {
+    if (!devices.length) return;
+    adoptActive(devices).catch(() => {});
+  }, [devices, adoptActive]);
+
   const signOut = () => { clearSession(); setJf(null); };
 
   const goView = (v) => { setDetail(null); setView(v); };
 
-  const openFromSidebar = async (item) => {
+  // Footer links: art -> album, artist name -> artist page.
+  const openAlbumById = async (albumId) => {
     try {
-      const { items } = filter === 'artists'
-        ? await jf.tracks({ artistId: item.Id, limit: 200 })
-        : await jf.tracks({ albumId: item.Id });
-      setDetail({ item, tracks: items, kind: filter === 'artists' ? 'Artist' : 'Album' });
+      const [meta, trackList] = await Promise.all([
+        jf.itemById(albumId),
+        jf.tracks({ albumId }),
+      ]);
+      if (meta) { setView('home'); setDetail({ item: meta, tracks: trackList.items, kind: 'Album' }); }
+    } catch { /* ignore */ }
+  };
+
+  const openArtistById = async (artistId) => {
+    try {
+      const [meta, trackList] = await Promise.all([
+        jf.itemById(artistId),
+        jf.tracks({ artistId, limit: 200 }),
+      ]);
+      if (meta) { setView('home'); setDetail({ item: meta, tracks: trackList.items, kind: 'Artist' }); }
+    } catch { /* ignore */ }
+  };
+
+  const openPlaylist = async (pl) => {
+    try {
+      const { items } = await jf.playlistTracks(pl.Id);
+      setDetail({ item: pl, tracks: items, kind: 'Playlist' });
     } catch { /* surfaced in the library view */ }
   };
 
@@ -127,10 +163,9 @@ export default function App() {
         <Sidebar
           view={view}
           onView={goView}
-          items={filter === 'artists' ? artists : albums}
-          filter={filter}
-          onFilter={setFilter}
-          onOpen={openFromSidebar}
+          playlists={playlists}
+          loading={libLoading}
+          onOpen={openPlaylist}
           jf={jf}
         />
         <Library
@@ -147,7 +182,13 @@ export default function App() {
         />
       </div>
 
-      <Player player={player} jf={jf} devices={devices} />
+      <Player
+        player={player}
+        jf={jf}
+        devices={devices}
+        onOpenAlbum={openAlbumById}
+        onOpenArtist={openArtistById}
+      />
     </div>
   );
 }

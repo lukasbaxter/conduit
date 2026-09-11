@@ -47,6 +47,11 @@ export function usePlayer(jf) {
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(80);
   const [error, setError] = useState(null);
+  // What a speaker reports playing when we did not start it ourselves (another
+  // client, or this app on another machine). Lets a freshly opened window show
+  // the house's current playback instead of claiming nothing is on.
+  const [external, setExternal] = useState(null);
+  const adoptedRef = useRef(false);
 
   const audioRef = useRef(null);
   if (!audioRef.current && typeof Audio !== 'undefined') {
@@ -57,13 +62,40 @@ export function usePlayer(jf) {
   // being re-created on every tick.
   const deviceRef = useRef(device);
   const positionRef = useRef(0);
+  const durationRef = useRef(0);
   const queueRef = useRef([]);
   const indexRef = useRef(-1);
+  // Last known remote position plus when we learned it, so the ticker can
+  // interpolate instead of stepping once per poll.
+  const anchorRef = useRef({ pos: 0, at: Date.now(), playing: false });
+  // True while a handoff is in flight. The status poll re-subscribes to the new
+  // device the instant `device` changes, which is BEFORE that device has been
+  // told to play -- it then reports "not playing, position 0" and clobbers the
+  // position we are trying to carry across. Ignore poll results while this is
+  // set, and the handoff keeps its timestamp.
+  const transitionRef = useRef(false);
+  // Counts consecutive polls that disagree with our interpolated clock. One
+  // bad reading is a hiccup (a receiver reopening a stream reports secs=0 for a
+  // beat); several in a row means the device really did move and we should
+  // believe it.
+  const disagreeRef = useRef(0);
+  // Consecutive polls where the device claims to play but the playhead has not
+  // moved at all. BluOS lands in exactly this state if a stream is disturbed
+  // mid-setup: playing=true, position frozen, silence.
+  const stalledRef = useRef(0);
 
   useEffect(() => { deviceRef.current = device; }, [device]);
   useEffect(() => { positionRef.current = position; }, [position]);
+  useEffect(() => { durationRef.current = duration; }, [duration]);
   useEffect(() => { queueRef.current = queue; }, [queue]);
   useEffect(() => { indexRef.current = index; }, [index]);
+
+  // Re-anchor whenever we knowingly move the playhead, so the interpolated
+  // clock does not drift back to a stale value before the next poll.
+  const anchorAt = useCallback((seconds, isPlaying = true) => {
+    anchorRef.current = { pos: seconds, at: Date.now(), playing: isPlaying };
+    setPosition(seconds);
+  }, []);
 
   const current = index >= 0 ? queue[index] || null : null;
   const remote = typeof window !== 'undefined' ? window.conduit?.remote : null;
@@ -89,15 +121,37 @@ export function usePlayer(jf) {
         el.src = jf.streamUrl(track.Id);
         el.volume = volume / 100;
         if (seekSeconds > 0) {
-          // currentTime only sticks once the browser knows the duration.
-          el.addEventListener('loadedmetadata', () => { el.currentTime = seekSeconds; }, { once: true });
+          // The seek has to land BEFORE play(), otherwise playback audibly
+          // starts at zero and only then jumps, which reads as a reset. Jellyfin
+          // serves the static stream with Accept-Ranges, so the element really
+          // can seek; it just needs metadata first.
+          await new Promise((resolve) => {
+            let done = false;
+            const settle = () => {
+              if (done) return;
+              done = true;
+              try { el.currentTime = seekSeconds; } catch { /* not seekable yet */ }
+              resolve();
+            };
+            if (el.readyState >= 1) settle();
+            else el.addEventListener('loadedmetadata', settle, { once: true });
+            // Never hang the handoff on a stream that will not report metadata.
+            setTimeout(settle, 3000);
+          });
         }
         await el.play();
       } else {
-        // Remote receivers pull the stream themselves, so an offset is baked
-        // into the URL rather than issued as a seek after the fact.
-        const url = jf.streamUrl(track.Id, { startSeconds: seekSeconds });
+        // Play the static file, then seek. The offset cannot go in the URL:
+        // Jellyfin's transcoded offset stream is chunked with no Content-Length
+        // and BluOS silently refuses to load it.
+        const url = jf.streamUrl(track.Id);
         await remote.play(dev, url, metaFor(track));
+        if (seekSeconds > 0) {
+          // No fixed delay here: the transport waits for the device to report
+          // the stream open and seekable. Seeking too early tears the stream
+          // down and leaves the player frozen at 0 with no audio.
+          await remote.seek(dev, seekSeconds).catch(() => {});
+        }
       }
       jf.reportStart(track.Id);
     },
@@ -112,9 +166,23 @@ export function usePlayer(jf) {
         el.pause();
         el.removeAttribute('src');
         el.load();
-      } else {
-        await remote.stop(dev).catch(() => {});
+        return;
       }
+      // Acknowledging a stop is not the same as having stopped, so we verify.
+      // But that verification must NEVER be awaited by the handoff: a device
+      // that is slow or asleep can take seconds per status call, and blocking
+      // on it froze the whole window. Issue the stop, then confirm in the
+      // background under a hard deadline.
+      await remote.stop(dev).catch(() => {});
+      (async () => {
+        const deadline = Date.now() + 4000;
+        while (Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 400));
+          const s = await remote.status(dev).catch(() => null);
+          if (!s || !s.playing) return;
+          await remote.stop(dev).catch(() => {});
+        }
+      })();
     },
     [remote]
   );
@@ -124,13 +192,14 @@ export function usePlayer(jf) {
   const playQueue = useCallback(
     async (tracks, startIndex = 0) => {
       setError(null);
+      setExternal(null);
       setQueue(tracks);
       setIndex(startIndex);
       queueRef.current = tracks;
       indexRef.current = startIndex;
       const track = tracks[startIndex];
       setDuration(ticksToSeconds(track?.RunTimeTicks));
-      setPosition(0);
+      anchorAt(0, true);
       try {
         await startOn(deviceRef.current, track, 0);
         setPlaying(true);
@@ -139,7 +208,7 @@ export function usePlayer(jf) {
         setPlaying(false);
       }
     },
-    [startOn]
+    [anchorAt, startOn]
   );
 
   const skipTo = useCallback(
@@ -155,7 +224,7 @@ export function usePlayer(jf) {
       indexRef.current = nextIndex;
       const track = q[nextIndex];
       setDuration(ticksToSeconds(track?.RunTimeTicks));
-      setPosition(0);
+      anchorAt(0, true);
       try {
         await startOn(deviceRef.current, track, 0);
         setPlaying(true);
@@ -163,7 +232,7 @@ export function usePlayer(jf) {
         setError(e.message);
       }
     },
-    [startOn, stopOn]
+    [anchorAt, startOn, stopOn]
   );
 
   const next = useCallback(() => skipTo(indexRef.current + 1), [skipTo]);
@@ -175,7 +244,7 @@ export function usePlayer(jf) {
 
   const toggle = useCallback(async () => {
     const dev = deviceRef.current;
-    if (!current) return;
+    if (!current && !external) return;
     try {
       if (dev.kind === 'local') {
         const el = audioRef.current;
@@ -186,41 +255,51 @@ export function usePlayer(jf) {
       } else {
         await remote.resume(dev);
       }
+      anchorAt(positionRef.current, !playing);
       setPlaying(!playing);
     } catch (e) {
       setError(e.message);
     }
-  }, [current, playing, remote]);
+  }, [anchorAt, current, external, playing, remote]);
 
   const seek = useCallback(
     async (seconds) => {
       const dev = deviceRef.current;
-      setPosition(seconds);
+      const track = queueRef.current[indexRef.current];
+      // Scrubbing with nothing loaded used to fire /Play?seek= at a speaker that
+      // had no stream, which is how a device ended up in a stalled state before
+      // anything was even playing.
+      if (!track) return;
+
+      disagreeRef.current = 0;
+      stalledRef.current = 0;
+      anchorAt(seconds, true);
+
       if (dev.kind === 'local') {
         audioRef.current.currentTime = seconds;
         return;
       }
+
       try {
         await remote.seek(dev, seconds);
       } catch (e) {
-        // BluOS refuses to seek a URL stream and tearing one down mid-seek
-        // leaves the player stopped. Restarting the stream from the offset is
-        // the only way to move within a track there.
-        const track = queueRef.current[indexRef.current];
-        if (track) {
+        // Only rebuild the stream when the device genuinely cannot seek the one
+        // it has. Re-playing on every hiccup restarted the track under the user
+        // and could kill the stream outright.
+        if (e.message?.includes('not seekable') || e.message?.includes('ENOSEEK')) {
           try {
             await startOn(dev, track, seconds);
+            anchorAt(seconds, true);
             setPlaying(true);
-            return;
           } catch (e2) {
             setError(e2.message);
-            return;
           }
+          return;
         }
         setError(e.message);
       }
     },
-    [remote, startOn]
+    [anchorAt, remote, startOn]
   );
 
   const setVolume = useCallback(
@@ -237,31 +316,80 @@ export function usePlayer(jf) {
     [remote]
   );
 
+  /**
+   * On first load, find any speaker that is already playing and adopt it as the
+   * active device, so opening the app anywhere shows where music is running.
+   * Runs once, and never overrides a device the user has already chosen.
+   */
+  const adoptActive = useCallback(
+    async (deviceList) => {
+      if (adoptedRef.current || !remote || !deviceList.length) return null;
+      // Do NOT latch here. mDNS discovers speakers progressively, so the first
+      // list is usually one device; latching on it meant we gave up before the
+      // playing speaker had even been found. Only latch once we actually adopt,
+      // or once this window starts its own playback.
+      if (queueRef.current.length) {
+        adoptedRef.current = true;
+        return null;
+      }
+      const checks = deviceList.map(async (d) => {
+        const s = await remote.status(d).catch(() => null);
+        return s && s.playing ? { d, s } : null;
+      });
+      const hit = (await Promise.all(checks)).find(Boolean);
+      // No one is playing yet; stay unlatched so a later scan can still adopt.
+      if (!hit) return null;
+      // Re-check: the user may have hit play while we were polling the network.
+      if (queueRef.current.length) return null;
+      adoptedRef.current = true;
+      setDeviceState(hit.d);
+      deviceRef.current = hit.d;
+      setExternal({ title: hit.s.title, artist: hit.s.artist, album: hit.s.album });
+      setDuration(hit.s.duration || 0);
+      anchorAt(hit.s.position || 0, true);
+      setPlaying(true);
+      return hit.d;
+    },
+    [anchorAt, remote]
+  );
+
   /** Move playback to another device, preserving track and position. */
   const setDevice = useCallback(
     async (nextDevice) => {
       const prev = deviceRef.current;
       if (prev.id === nextDevice.id) return;
       const track = queueRef.current[indexRef.current] || null;
-      const at = positionRef.current;
       const wasPlaying = playing;
 
+      // Read the position off the interpolated clock rather than React state,
+      // which can be a render behind at the instant of the click.
+      const a = anchorRef.current;
+      const at = a.playing ? a.pos + (Date.now() - a.at) / 1000 : positionRef.current;
+
+      transitionRef.current = true;
       setDeviceState(nextDevice);
       deviceRef.current = nextDevice;
       setError(null);
+      // Hold the carried timestamp on screen rather than snapping to zero while
+      // the incoming device spins up.
+      anchorAt(at, wasPlaying);
 
       try {
         await stopOn(prev);
         if (track && wasPlaying) {
           await startOn(nextDevice, track, at);
+          anchorAt(at, true);
           setPlaying(true);
         }
       } catch (e) {
         setError(`Could not move playback to ${nextDevice.name}: ${e.message}`);
         setPlaying(false);
+      } finally {
+        // Let the receiver actually begin before trusting its status again.
+        setTimeout(() => { transitionRef.current = false; }, 2500);
       }
     },
-    [playing, startOn, stopOn]
+    [anchorAt, playing, startOn, stopOn]
   );
 
   // --- progress tracking --------------------------------------------------
@@ -271,7 +399,12 @@ export function usePlayer(jf) {
     const el = audioRef.current;
     if (!el) return undefined;
     const onTime = () => {
-      if (deviceRef.current.kind === 'local') setPosition(el.currentTime);
+      if (deviceRef.current.kind !== 'local') return;
+      // During a handoff the element briefly reports 0 before the seek lands.
+      // Writing that through would wipe the position we are carrying over.
+      if (transitionRef.current) return;
+      setPosition(el.currentTime);
+      anchorRef.current = { pos: el.currentTime, at: Date.now(), playing: !el.paused };
     };
     const onEnded = () => {
       if (deviceRef.current.kind === 'local') next();
@@ -291,25 +424,78 @@ export function usePlayer(jf) {
     };
   }, [next]);
 
-  // Remote devices have to be polled; they do not push state to us.
+  // Remote devices have to be polled; they do not push state to us. Polling
+  // alone makes the clock jump in 2s steps, so the poll only moves an anchor
+  // and a local ticker interpolates between anchors for a smooth readout.
   useEffect(() => {
     if (device.kind === 'local' || !remote) return undefined;
     let cancelled = false;
     const timer = setInterval(async () => {
       try {
+        if (transitionRef.current) return;
         const s = await remote.status(device);
-        if (cancelled || !s) return;
-        setPosition(s.position || 0);
+        if (cancelled || !s || transitionRef.current) return;
+
+        const a = anchorRef.current;
+        const expected = a.playing ? a.pos + (Date.now() - a.at) / 1000 : a.pos;
+        const reported = s.position || 0;
+
+        // Track finished: advance the queue.
+        if (!s.playing && s.duration > 0 && reported >= s.duration - 1.5) {
+          disagreeRef.current = 0;
+          next();
+          return;
+        }
+
+        // A receiver reopening a stream briefly reports 0 (or a big rewind)
+        // while still claiming to play. Accepting that is what made the clock
+        // flicker 0,1,0. Hold our own estimate until the device says the same
+        // thing several polls running.
+        const rewound = a.playing && reported < expected - 5;
+        if (rewound && disagreeRef.current < 2) {
+          disagreeRef.current += 1;
+          if (s.duration) setDuration(s.duration);
+          return;
+        }
+        disagreeRef.current = 0;
+
+        // A playing device whose position never advances is a dead stream, not
+        // playback. Re-establish it once rather than showing a frozen 0.
+        if (s.playing && reported === a.pos && reported === 0) {
+          stalledRef.current += 1;
+          if (stalledRef.current === 3) {
+            const track = queueRef.current[indexRef.current];
+            if (track) {
+              setError('Stream stalled on the speaker, restarting it');
+              startOn(device, track, 0).catch(() => {});
+            }
+          }
+          if (stalledRef.current < 6) return;
+        } else {
+          stalledRef.current = 0;
+        }
+
+        anchorRef.current = { pos: reported, at: Date.now(), playing: !!s.playing };
         if (s.duration) setDuration(s.duration);
         setPlaying(Boolean(s.playing));
-        // A remote track that ran to completion should advance the queue.
-        if (!s.playing && s.duration > 0 && s.position >= s.duration - 1.5) next();
       } catch {
         // Transient network blips are expected; keep polling.
       }
     }, 2000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [device, next, remote]);
+  }, [device, next, remote, startOn]);
+
+  // Interpolate the remote clock between polls so the seek bar moves smoothly.
+  useEffect(() => {
+    if (device.kind === 'local' || !playing) return undefined;
+    const tick = setInterval(() => {
+      const a = anchorRef.current;
+      if (!a.playing) return;
+      const next = a.pos + (Date.now() - a.at) / 1000;
+      setPosition(durationRef.current ? Math.min(next, durationRef.current) : next);
+    }, 200);
+    return () => clearInterval(tick);
+  }, [device, playing]);
 
   // Report progress back to Jellyfin so play counts and resume work.
   useEffect(() => {
@@ -320,15 +506,31 @@ export function usePlayer(jf) {
     return () => clearInterval(timer);
   }, [jf, current, playing]);
 
+  // Either the queue item we started, or whatever an adopted speaker reports.
+  const nowPlaying = current
+    ? {
+        title: current.Name,
+        artist: current.Artists?.join(', ') || current.AlbumArtist || '',
+        artId: current.AlbumId || current.Id,
+        albumId: current.AlbumId || null,
+        // ArtistItems carries the real artist entity; AlbumArtists is the
+        // fallback for tracks credited only at album level.
+        artistId: current.ArtistItems?.[0]?.Id || current.AlbumArtists?.[0]?.Id || null,
+      }
+    : external
+    ? { title: external.title, artist: external.artist || '', artId: null }
+    : null;
+
   return useMemo(
     () => ({
-      device, setDevice,
+      device, setDevice, adoptActive, nowPlaying, external,
       queue, index, current,
       playing, position, duration, volume, error,
       playQueue, toggle, next, previous, seek, setVolume, skipTo,
       clearError: () => setError(null),
     }),
-    [device, setDevice, queue, index, current, playing, position, duration, volume,
-     error, playQueue, toggle, next, previous, seek, setVolume, skipTo]
+    [device, setDevice, adoptActive, nowPlaying, external, queue, index, current,
+     playing, position, duration, volume, error, playQueue, toggle, next,
+     previous, seek, setVolume, skipTo]
   );
 }
