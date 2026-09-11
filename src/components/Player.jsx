@@ -75,25 +75,25 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
         <div className="player-controls">
           <div className="player-buttons">
             <button onClick={player.previous} disabled={!current} title="Previous">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M6 5h2v14H6zM20 5v14l-11-7z" />
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+                <path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z" />
               </svg>
             </button>
             <button className="play" onClick={player.toggle} disabled={!nowPlaying}
               title={playing ? 'Pause' : 'Play'}>
               {playing ? (
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                  <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
+                <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+                  <path d="M2.7 1a.7.7 0 0 0-.7.7v12.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7H2.7zm8 0a.7.7 0 0 0-.7.7v12.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-2.6z" />
                 </svg>
               ) : (
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                  <path d="M8 5v14l11-7z" />
+                <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+                  <path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z" />
                 </svg>
               )}
             </button>
             <button onClick={player.next} disabled={!current} title="Next">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M16 5h2v14h-2zM4 5l11 7-11 7z" />
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+                <path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z" />
               </svg>
             </button>
           </div>
@@ -124,7 +124,6 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
           >
             <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
               <path d="M13.426 2.574a2.831 2.831 0 0 0-4.797 1.55l3.247 3.247a2.831 2.831 0 0 0 1.55-4.797zM10.5 8.118l-2.619-2.62A63303.13 63303.13 0 0 0 4.74 9.075L1 15l5.925-3.74 3.575-3.142z" />
-              <path d="M0 16h16v-1H0z" />
             </svg>
           </button>
           <button

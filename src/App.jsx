@@ -68,6 +68,9 @@ export default function App() {
   const [playlists, setPlaylists] = useState([]);
   const [likedCount, setLikedCount] = useState(null);
   const [toast, setToast] = useState(null);
+  const [me, setMe] = useState(null);
+  const [avatarOk, setAvatarOk] = useState(true);
+  const [userMenu, setUserMenu] = useState(false);
   const [libLoading, setLibLoading] = useState(true);
   const [albums, setAlbums] = useState([]);
   const [artists, setArtists] = useState([]);
@@ -87,6 +90,12 @@ export default function App() {
       .catch(() => clearSession())
       .finally(() => setBooting(false));
   }, []);
+
+  useEffect(() => {
+    if (!jf) return;
+    jf.me().then(setMe).catch(() => {});
+    setAvatarOk(true);
+  }, [jf]);
 
   // Load the library once connected. Albums/artists feed Home and Search;
   // playlists are what "Your Library" shows.
@@ -185,8 +194,16 @@ export default function App() {
       await jf.setFavorite(track.Id, liked);
       notify(liked ? 'Added to Liked Songs' : 'Removed from Liked Songs');
       setLikedCount((c) => (c == null ? c : Math.max(0, c + (liked ? 1 : -1))));
-      // Liked Songs view: drop the row immediately on unlike.
-      if (!liked) setDetail((d) => d && d.item?.Id === LIKED_ID ? { ...d, tracks: d.tracks.filter((t) => t.Id !== track.Id) } : d);
+      // Liked Songs view stays live: unliking drops the row, liking (e.g. the
+      // now-playing track from the footer) prepends it, newest first like
+      // Spotify. No re-opening the page.
+      setDetail((d) => {
+        if (!d || d.item?.Id !== LIKED_ID) return d;
+        const without = d.tracks.filter((t) => t.Id !== track.Id);
+        if (!liked) return { ...d, tracks: without };
+        const row = { ...track, UserData: { ...(track.UserData || {}), IsFavorite: true } };
+        return { ...d, tracks: [row, ...without] };
+      });
     } catch (e) {
       patchLiked(track.Id, !liked);
       notify(`Could not update: ${e.message}`);
@@ -255,7 +272,22 @@ export default function App() {
       <header className="navbar">
         <div className="brand">Conduit</div>
         <div className="navbar-right">
-          <button className="linkbtn" onClick={signOut}>Sign out</button>
+          <div className="avatarwrap">
+            <button className="avatar" onClick={() => setUserMenu((v) => !v)} title={me?.Name || 'Account'}>
+              {avatarOk ? (
+                <img src={jf.userImageUrl()} alt="" onError={() => setAvatarOk(false)} />
+              ) : (
+                (me?.Name || '?').slice(0, 1).toUpperCase()
+              )}
+            </button>
+            {userMenu && (
+              <div className="avatarmenu" onMouseLeave={() => setUserMenu(false)}>
+                <div className="who">{me?.Name || 'Signed in'}</div>
+                <div className="sub">{jf.baseUrl.replace(/^https?:\/\//, '')}</div>
+                <button onClick={signOut}>Log out</button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 

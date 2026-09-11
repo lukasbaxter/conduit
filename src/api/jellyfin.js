@@ -66,6 +66,16 @@ export class Jellyfin {
     return client;
   }
 
+  // The signed-in user's profile picture, if they set one in Jellyfin.
+  userImageUrl() {
+    const q = new URLSearchParams({ maxHeight: '96', api_key: this.token });
+    return `${this.baseUrl}/Users/${this.userId}/Images/Primary?${q}`;
+  }
+
+  async me() {
+    return this._fetch(`/Users/${this.userId}`);
+  }
+
   async publicInfo() {
     return this._fetch('/System/Info/Public');
   }

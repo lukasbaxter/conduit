@@ -113,8 +113,8 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
   padding: 8px; border-radius: var(--r-row); text-align: left;
 }
 .libitem:hover { background: var(--tint-hi); }
-.libitem img, .libitem .ph {
-  width: 48px; height: 48px; border-radius: var(--r-art); object-fit: cover;
+.libitem img, .libitem .ph, .libitem .liked-art {
+  width: 48px; height: 48px; aspect-ratio: 1; border-radius: var(--r-art); object-fit: cover;
   background: var(--card-hover); flex: none;
 }
 .libitem.round img, .libitem.round .ph { border-radius: 50%; }
@@ -191,7 +191,10 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
   background: linear-gradient(180deg, #3d3c3c 0%, var(--bg-base) 100%);
 }
 .hero.artist { align-items: flex-end; min-height: 340px; background-position: 50% 15%; background-size: cover; }
-.hero img { width: 232px; height: 232px; border-radius: var(--r-art); object-fit: cover; box-shadow: 0 16px 40px rgba(0,0,0,.6); }
+.hero img, .hero .liked-art {
+  width: 232px; height: 232px; aspect-ratio: 1; flex: none;
+  border-radius: var(--r-art); object-fit: cover; box-shadow: 0 16px 40px rgba(0,0,0,.6);
+}
 .hero.artist img { border-radius: 50%; width: 192px; height: 192px; }
 .hero .kind { font-size: 14px; font-weight: 700; }
 /* Spotify's classic ladder: 96 -> 72 -> 48 -> 32, weight 800 */
@@ -214,9 +217,13 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
   transition: transform .15s var(--ease);
 }
 .btn-secondary:hover { transform: scale(1.04); border-color: var(--fg); }
-.icon-btn { color: var(--fg-dim); display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; }
+.icon-btn { color: var(--fg-dim); display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; position: relative; }
 .icon-btn:hover { color: var(--fg); }
 .icon-btn.on { color: var(--accent); }
+.player-right .icon-btn.on::after {
+  content: ""; position: absolute; left: 50%; bottom: 1px; width: 4px; height: 4px;
+  border-radius: 50%; background: var(--accent); transform: translateX(-50%);
+}
 
 /* ---------- track rows ---------- */
 /* Spotify's row: [index|play] [art?] [title/artist] [album] [heart] [duration] [...]
@@ -379,7 +386,8 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .player-buttons button { color: #ffffffb3; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; }
 .player-buttons button:hover:not(:disabled) { color: var(--fg); }
 .player-buttons button:disabled { opacity: .3; cursor: default; }
-.player-buttons .play { background: var(--fg); color: #000; width: 32px; height: 32px; transition: transform .15s var(--ease); }
+.player-buttons .play { background: var(--fg); color: #000; width: 32px; height: 32px; transition: transform .15s var(--ease); padding: 0; }
+.player-buttons .play svg { display: block; }
 .player-buttons .play:hover:not(:disabled) { transform: scale(1.06); color: #000; }
 
 .player-seek { display: flex; align-items: center; gap: 8px; width: 100%; }
@@ -400,7 +408,8 @@ input[type="range"]:disabled { opacity: .4; }
 
 /* Spotify order: lyrics, queue, devices, volume, miniplayer, fullscreen */
 .player-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 180px; padding-right: 8px; }
-.player-volume { display: flex; align-items: center; gap: 4px; color: #ffffffb3; width: 125px; }
+.player-volume { display: flex; align-items: center; gap: 6px; color: #ffffffb3; width: 118px; }
+.player-volume input { width: 93px; }
 .player-volume:hover { color: var(--fg); }
 
 /* ---------- device picker ---------- */
@@ -433,8 +442,34 @@ input[type="range"]:disabled { opacity: .4; }
 
 .linkbtn { color: var(--fg-dim); padding: 8px 16px; border-radius: 9999px; font-size: 14px; font-weight: 700; }
 .linkbtn:hover { color: var(--fg); background: var(--tint); }
-.back { color: var(--fg-dim); padding: 16px 24px 0; font-size: 14px; font-weight: 700; }
-.back:hover { color: var(--fg); }
+
+.avatar {
+  width: 32px; height: 32px; border-radius: 50%; overflow: hidden; display: grid; place-items: center;
+  background: #509bf5; color: #000; font-size: 14px; font-weight: 700; padding: 0; position: relative;
+  box-shadow: 0 0 0 4px #1f1f1f;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.avatar:hover { transform: scale(1.04); }
+.avatarwrap { position: relative; }
+.avatarmenu {
+  position: absolute; right: 0; top: calc(100% + 8px); min-width: 196px; z-index: 60;
+  background: var(--bg-elevated-hi); border-radius: var(--r-art); padding: 4px;
+  box-shadow: 0 16px 24px rgba(0,0,0,.3), 0 6px 8px rgba(0,0,0,.2);
+}
+.avatarmenu .who { padding: 10px 12px 6px; font-size: 14px; font-weight: 700; }
+.avatarmenu .sub { padding: 0 12px 8px; font-size: 12px; color: var(--fg-dim); }
+.avatarmenu button { display: block; width: 100%; text-align: left; padding: 10px 12px; border-radius: 2px; font-size: 14px; color: var(--fg); }
+.avatarmenu button:hover { background: var(--tint-hi); }
+.detailbar {
+  position: sticky; top: 0; z-index: 8; display: flex; align-items: center; gap: 8px;
+  height: 64px; padding: 0 16px; background: linear-gradient(var(--bg-base), rgba(18,18,18,.86));
+  backdrop-filter: blur(12px);
+}
+.back {
+  color: var(--fg); width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(0,0,0,.7);
+}
+.back:hover { background: rgba(0,0,0,.9); }
 
 /* ---------- login ---------- */
 

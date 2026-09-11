@@ -136,11 +136,17 @@ export default function Library({
 
     return (
       <div className="content">
-        <button className="back" onClick={() => setDetail(null)}>&larr; Back</button>
+        <div className="detailbar">
+          <button className="back" onClick={() => setDetail(null)} title="Back">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+              <path d="M11.03.47a.75.75 0 0 1 0 1.06L4.56 8l6.47 6.47a.75.75 0 1 1-1.06 1.06L2.44 8 9.97.47a.75.75 0 0 1 1.06 0z" />
+            </svg>
+          </button>
+        </div>
 
         <header className={`hero ${isArtist ? 'artist' : ''}`}>
           {isLiked ? (
-            <div className="liked-art" style={{ width: 232, height: 232, borderRadius: 4, boxShadow: '0 16px 40px rgba(0,0,0,.6)' }}>
+            <div className="liked-art">
               <Heart on={false} size={100} />
             </div>
           ) : (
@@ -232,8 +238,12 @@ export default function Library({
     const items = seeAll === 'artists' ? artists : albums;
     return (
       <div className="content">
-        <div className="contentbar">
-          <button className="back" style={{ padding: 0 }} onClick={() => setSeeAll(null)}>&larr; Back</button>
+        <div className="detailbar">
+          <button className="back" onClick={() => setSeeAll(null)} title="Back">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+              <path d="M11.03.47a.75.75 0 0 1 0 1.06L4.56 8l6.47 6.47a.75.75 0 1 1-1.06 1.06L2.44 8 9.97.47a.75.75 0 0 1 1.06 0z" />
+            </svg>
+          </button>
           <h2 style={{ margin: 0, fontSize: 24 }}>{seeAll === 'artists' ? 'Artists' : 'Albums'}</h2>
         </div>
         <div className="pad">
