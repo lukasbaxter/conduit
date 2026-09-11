@@ -571,3 +571,10 @@ input[type="range"]:disabled { opacity: .4; }
 /* Spotify's "See more" under Popular: small, bold, subdued, left-aligned with the rows. */
 .seemore { color: var(--fg-dim); font-size: 14px; font-weight: 700; padding: 14px 16px; }
 .seemore:hover { color: var(--fg); }
+
+/* Spotify's green "Playing on <device>" bar, pinned under the player. */
+.playing-elsewhere {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--accent-press); color: #fff; font-size: 12px; font-weight: 700;
+  padding: 6px 16px; border-radius: 6px; margin-bottom: 6px;
+}

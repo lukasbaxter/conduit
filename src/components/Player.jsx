@@ -10,7 +10,11 @@ function fmt(seconds) {
 }
 
 export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist, panel, onPanel, onLike }) {
-  const { current, nowPlaying, playing, position, duration, volume, device, error } = player;
+  const { current, nowPlaying, playing, position, duration, volume, device, error, roster } = player;
+  // Spotify's green 'Playing on <device>' bar: shown when another of the user's
+  // clients is the one actually playing and we are not.
+  const elsewhere = (roster?.players || []).find((p) => p.nowPlaying?.playing);
+  const showGreenBar = elsewhere && !playing && device.kind !== 'relay';
   // nowPlaying covers both our own queue and a session adopted from a speaker
   // that was already playing when the app opened.
   const art = nowPlaying?.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: 128 }) : null;
@@ -29,6 +33,14 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
 
   return (
     <footer className="player">
+      {showGreenBar && (
+        <div className="playing-elsewhere">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+            <path d="M6 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM1 13.5a1 1 0 1 0 2 0 1 1 0 0 0-2 0zM1 9v2a2.5 2.5 0 0 1 2.5 2.5h2A4.5 4.5 0 0 0 1 9zM1 5v2a6.5 6.5 0 0 1 6.5 6.5h2A8.5 8.5 0 0 0 1 5z" />
+          </svg>
+          Playing on {elsewhere.name}
+        </div>
+      )}
       {error && (
         <div className="player-error" onClick={player.clearError} title="Dismiss">
           {error}
