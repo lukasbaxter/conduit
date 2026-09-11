@@ -78,12 +78,36 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .brand { font-size: 15px; font-weight: 700; letter-spacing: -.2px; }
 .navbar-right { display: flex; align-items: center; gap: 10px; }
 
+/* The resizer occupies the gap column between rail and content, so the gap
+   itself is the drag target exactly as in Spotify. */
 .shell {
   display: grid;
-  grid-template-columns: 260px minmax(416px, 1fr);
-  gap: var(--gap); min-height: 0;
+  grid-template-columns: var(--rail-w, 280px) var(--gap) minmax(416px, 1fr);
+  gap: 0; min-height: 0;
 }
-.shell.with-panel { grid-template-columns: 260px minmax(416px, 1fr) var(--panel-w, 340px); }
+.shell.with-panel { grid-template-columns: var(--rail-w, 280px) var(--gap) minmax(416px, 1fr) var(--gap) var(--panel-w, 340px); }
+.shell.resizing { user-select: none; cursor: col-resize; }
+.shell.resizing * { pointer-events: none; }
+.shell.resizing .rail-resizer { pointer-events: auto; }
+
+.rail-resizer {
+  width: var(--gap); cursor: col-resize; position: relative; touch-action: none;
+}
+.panel-spacer { width: var(--gap); }
+.rail-resizer::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px;
+  background: var(--fg); opacity: 0; transition: opacity .15s ease-out; transform: translateX(-50%);
+}
+.rail-resizer:hover::after, .shell.resizing .rail-resizer::after { opacity: 1; }
+
+/* Collapsed rail: icons only, centred; text and the library header hide. */
+.shell.rail-collapsed .navitem span,
+.shell.rail-collapsed .libhead,
+.shell.rail-collapsed .libitem-text,
+.shell.rail-collapsed .newplaylist-input { display: none; }
+.shell.rail-collapsed .navitem { justify-content: center; padding: 11px 0; }
+.shell.rail-collapsed .libitem { justify-content: center; padding: 8px 0; }
+.shell.rail-collapsed .liblist { padding: 8px 4px; }
 
 .sidebar, .content, .rightpanel {
   background: var(--bg-base); border-radius: var(--r-panel); min-height: 0;
@@ -488,11 +512,7 @@ input[type="range"]:disabled { opacity: .4; }
 .primary:hover:not(:disabled) { background: var(--accent-hover); transform: scale(1.02); }
 .primary:disabled { opacity: .3; cursor: not-allowed; }
 
-@media (max-width: 1100px) {
-  .shell.with-panel { grid-template-columns: 72px minmax(0,1fr) var(--panel-w, 320px); }
-  .libhead, .libitem-text, .navitem span { display: none; }
-  .navitem { justify-content: center; }
-}
+
 
 /* Spotify-style bottom toast ("Added to Liked Songs") */
 .toast {

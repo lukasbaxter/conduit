@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Jellyfin, loadSession, persistSession, clearSession } from './api/jellyfin.js';
 import { usePlayer } from './player/usePlayer.js';
 import Sidebar from './components/Sidebar.jsx';
@@ -71,6 +71,41 @@ export default function App() {
   const [me, setMe] = useState(null);
   const [avatarOk, setAvatarOk] = useState(true);
   const [userMenu, setUserMenu] = useState(false);
+
+  // Left rail width. Spotify: drag the gap; below a threshold it snaps to an
+  // icon-only rail; the chosen width survives restarts.
+  const RAIL_MIN = 280, RAIL_MAX = 420, RAIL_COLLAPSED = 72, RAIL_SNAP = 200;
+  const [railW, setRailW] = useState(() => {
+    try { const v = Number(localStorage.getItem('conduit.railW')); return v >= RAIL_COLLAPSED ? v : 280; }
+    catch { return 280; }
+  });
+  const [resizing, setResizing] = useState(false);
+  const dragRef = useRef(null);
+
+  const clampRail = (w) => (w < RAIL_SNAP ? RAIL_COLLAPSED : Math.min(RAIL_MAX, Math.max(RAIL_MIN, w)));
+
+  const onRailDown = useCallback((e) => {
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startW: railW };
+    setResizing(true);
+    const move = (ev) => {
+      const d = dragRef.current; if (!d) return;
+      setRailW(clampRail(d.startW + (ev.clientX - d.startX)));
+    };
+    const up = () => {
+      dragRef.current = null; setResizing(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setRailW((w) => { try { localStorage.setItem('conduit.railW', String(w)); } catch {} return w; });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }, [railW]);
+
+  // Double-click toggles between collapsed and the default width.
+  const onRailDouble = () => {
+    setRailW((w) => { const n = w <= RAIL_COLLAPSED ? 280 : RAIL_COLLAPSED; try { localStorage.setItem('conduit.railW', String(n)); } catch {} return n; });
+  };
   const [libLoading, setLibLoading] = useState(true);
   const [albums, setAlbums] = useState([]);
   const [artists, setArtists] = useState([]);
@@ -291,7 +326,10 @@ export default function App() {
         </div>
       </header>
 
-      <div className={`shell ${panel ? 'with-panel' : ''}`}>
+      <div
+        className={`shell ${panel ? 'with-panel' : ''} ${railW <= RAIL_COLLAPSED ? 'rail-collapsed' : ''} ${resizing ? 'resizing' : ''}`}
+        style={{ '--rail-w': `${railW}px` }}
+      >
         <Sidebar
           view={view}
           onView={goView}
@@ -302,6 +340,14 @@ export default function App() {
           onOpenLiked={openLiked}
           onCreate={(name) => onCreatePlaylist(name)}
           jf={jf}
+        />
+        <div
+          className="rail-resizer"
+          onPointerDown={onRailDown}
+          onDoubleClick={onRailDouble}
+          title="Drag to resize. Double-click to collapse."
+          role="separator"
+          aria-orientation="vertical"
         />
         <Library
           jf={jf}
@@ -323,6 +369,7 @@ export default function App() {
           onOpenPlaylist={openPlaylist}
           onOpenLiked={openLiked}
         />
+        {panel && <div className="panel-spacer" />}
         {panel && (
           <RightPanel
             mode={panel}
