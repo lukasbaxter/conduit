@@ -174,10 +174,16 @@ wss.on('connection', (ws, req) => {
         canPlay: msg.canPlay !== false,
         devices: [],
         nowPlaying: null,
+        queue: null,
       };
       userMap(who.id).set(self.id, self);
       send(ws, { type: 'hello-ok', clientId: self.id, userId: who.id });
       broadcastRoster(self.uid);
+      // The queues the user's other clients have already published, so this
+      // client can show the active player's queue straight away.
+      for (const c of userMap(self.uid).values()) {
+        if (c.id !== self.id && c.queue) send(ws, { type: 'queue', from: c.id, queue: c.queue });
+      }
       // Now replay what arrived during verification, in order.
       for (const b of backlog.splice(0)) await onMessage(b);
       return;
@@ -188,6 +194,16 @@ wss.on('connection', (ws, req) => {
       case 'devices':
         self.devices = Array.isArray(msg.devices) ? msg.devices : [];
         broadcastRoster(self.uid);
+        break;
+
+      // A client publishes its play queue (slim track objects). Kept per
+      // client and fanned out to the user's other clients, so the queue panel
+      // on a mirroring client shows what the active player will play next.
+      case 'queue':
+        self.queue = Array.isArray(msg.queue) ? msg.queue : null;
+        for (const c of userMap(self.uid).values()) {
+          if (c.id !== self.id) send(c.ws, { type: 'queue', from: self.id, queue: self.queue });
+        }
         break;
 
       // A client reports what it is playing, for the shared now-playing view.

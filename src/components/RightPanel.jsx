@@ -88,7 +88,10 @@ function NowPlaying({ player, jf, onOpenArtist, onOpenAlbum, onShowQueue }) {
 
 /** Queue: Now playing / Next in queue, matching Spotify's sectioning. */
 function Queue({ player, jf }) {
-  const { queue, index, current } = player;
+  // `queue`/`index` are the SESSION's (the active player's, mirrored) so the
+  // panel is the same on every client; skipTo routes to whoever is playing.
+  const { queue, index } = player;
+  const current = index >= 0 ? queue[index] || null : null;
   const rest = index >= 0 ? queue.slice(index + 1) : queue;
 
   if (!queue.length) {

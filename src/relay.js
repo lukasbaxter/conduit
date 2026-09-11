@@ -27,18 +27,19 @@ function clientId() {
 }
 
 export class Relay {
-  constructor({ token, name, kind, canPlay = true, onRoster, onCommand }) {
+  constructor({ token, name, kind, canPlay = true, onRoster, onCommand, onQueue }) {
     this.token = token;
     this.name = name;
     this.kind = kind; // 'desktop' | 'web' | 'mobile'
     this.canPlay = canPlay;
     this.onRoster = onRoster || (() => {});
     this.onCommand = onCommand || (() => {});
+    this.onQueue = onQueue || (() => {});
     this.id = clientId();
     this.ws = null;
     this.closed = false;
     this._backoff = 1000;
-    this._pending = { devices: [], nowPlaying: null };
+    this._pending = { devices: [], nowPlaying: null, queue: null };
     // True while THIS client holds the active-player claim. Survives socket
     // drops so a reconnect (e.g. after the relay restarts and forgets who was
     // active) re-asserts it, restoring the green bar on every other client.
@@ -68,7 +69,9 @@ export class Relay {
         if (this._claimed) this._send({ type: 'claim' });
         if (this._pending.devices.length) this.reportDevices(this._pending.devices);
         if (this._pending.nowPlaying) this.reportNowPlaying(this._pending.nowPlaying);
-      } else if (m.type === 'roster') this.onRoster({ players: m.players || [], lanDevices: m.lanDevices || [], activeClientId: m.activeClientId || null });
+        if (this._pending.queue) this.reportQueue(this._pending.queue);
+      } else if (m.type === 'queue') this.onQueue(m.from, m.queue || null);
+      else if (m.type === 'roster') this.onRoster({ players: m.players || [], lanDevices: m.lanDevices || [], activeClientId: m.activeClientId || null });
       else if (m.type === 'command') {
         // A yield means another client took over: we no longer hold the claim,
         // so a later reconnect must NOT re-assert it.
@@ -93,6 +96,12 @@ export class Relay {
   reportDevices(devices) {
     this._pending.devices = devices;
     this._send({ type: 'devices', devices });
+  }
+
+  // Publish this client's queue (slim tracks) for the user's other clients.
+  reportQueue(queue) {
+    this._pending.queue = queue;
+    this._send({ type: 'queue', queue });
   }
 
   reportNowPlaying(np) {

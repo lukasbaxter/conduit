@@ -117,7 +117,7 @@ export default function Library({
 
   const rowProps = (tracks, i, extra = {}, ctx = null) => ({
     track: tracks[i], n: i + 1, jf,
-    active: player.current?.Id === tracks[i].Id,
+    active: player.nowPlayingId === tracks[i].Id,
     isPlaying: player.playing,
     onPlay: () => player.playQueue(tracks, i, ctx),
     onToggle: () => player.toggle(),

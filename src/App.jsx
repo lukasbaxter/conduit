@@ -198,6 +198,7 @@ export default function App() {
       canPlay: true,
       onRoster: (r) => player.applyRoster(r),
       onCommand: (cmd) => player.executeCommand(cmd),
+      onQueue: (from, q) => player.applyRemoteQueue(from, q),
     });
     player.attachRelay(relay);
     return () => { relay.close(); player.attachRelay(null); };
