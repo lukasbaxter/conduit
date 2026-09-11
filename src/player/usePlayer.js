@@ -104,13 +104,21 @@ export function usePlayer(jf) {
   const remote = typeof window !== 'undefined' ? window.conduit?.remote : null;
 
   const metaFor = useCallback(
-    (track) => ({
-      title: track.Name || 'Unknown title',
-      artist: track.Artists?.join(', ') || track.AlbumArtist || '',
-      album: track.Album || '',
-      artwork: jf?.imageUrl(track.AlbumId || track.Id, { maxHeight: 600 }) || undefined,
-      contentType: mimeOf(track),
-    }),
+    (track) => {
+      // Album art first; the artist portrait is a fallback for tracks whose
+      // album has none, which is most of this library until the retag lands.
+      const artistId = track.ArtistItems?.[0]?.Id || track.AlbumArtists?.[0]?.Id || null;
+      const art = jf?.imageUrl(track.AlbumId || track.Id, { maxHeight: 1000 });
+      const artistArt = artistId ? jf?.imageUrl(artistId, { maxHeight: 1000 }) : null;
+      return {
+        title: track.Name || 'Unknown title',
+        artist: track.Artists?.join(', ') || track.AlbumArtist || '',
+        album: track.Album || '',
+        artwork: art || artistArt || undefined,
+        artworkFallback: artistArt || undefined,
+        contentType: mimeOf(track),
+      };
+    },
     [jf]
   );
 
@@ -328,7 +336,13 @@ export function usePlayer(jf) {
    */
   const adoptActive = useCallback(
     async (deviceList) => {
-      if (adoptedRef.current || !remote || !deviceList.length) return null;
+      // Do not latch before we can actually resolve a track. Devices are
+      // discovered ~0.4s after launch, while restoring the Jellyfin session is
+      // an async round trip, so `jf` is usually still null at that point.
+      // Latching here meant adoption ran once, found a playing speaker, and
+      // gave up on the lookup -- position and device were right, title and art
+      // were empty.
+      if (adoptedRef.current || !remote || !deviceList.length || !jf) return null;
       // Do NOT latch here. mDNS discovers speakers progressively, so the first
       // list is usually one device; latching on it meant we gave up before the
       // playing speaker had even been found. Only latch once we actually adopt,

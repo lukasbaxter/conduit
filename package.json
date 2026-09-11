@@ -20,8 +20,8 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^9.0.1",
-    "electron": "^32.1.2",
-    "electron-builder": "^25.0.5",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "vite": "^5.4.8",
@@ -30,10 +30,35 @@
   "build": {
     "appId": "io.baxtergroup.conduit",
     "productName": "Conduit",
-    "files": ["electron/**/*", "dist/**/*", "package.json"],
-    "directories": { "output": "release", "buildResources": "build" },
-    "mac": { "target": ["dmg", "zip"], "category": "public.app-category.music", "identity": null },
-    "win": { "target": ["nsis", "portable"] },
-    "linux": { "target": ["AppImage", "deb"], "category": "Audio" }
+    "files": [
+      "electron/**/*",
+      "dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.music",
+      "identity": null
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Audio"
+    }
   }
 }

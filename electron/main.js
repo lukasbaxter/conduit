@@ -159,6 +159,10 @@ const handle = (channel, fn) => {
   });
 };
 
+// Renderer exceptions never reach stdout in Electron, so a crash there looks
+// identical to "the app just stopped doing things". Funnel them into the trace.
+ipcMain.on('renderer:error', (_e, msg) => trace(`RENDERER ERROR: ${msg}`));
+
 handle('devices:list', () => (discovery ? withSyncInfo(discovery.list()) : []));
 
 handle('device:play', (device, url, meta) => transportFor(device).play(url, meta));

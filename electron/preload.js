@@ -24,6 +24,14 @@ async function call(channel, ...args) {
   return res.value;
 }
 
+// Report renderer crashes to the main process so they land in the trace file.
+window.addEventListener('error', (e) => {
+  ipcRenderer.send('renderer:error', `${e.message} @ ${e.filename}:${e.lineno}`);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  ipcRenderer.send('renderer:error', `unhandled rejection: ${e.reason?.stack || e.reason}`);
+});
+
 contextBridge.exposeInMainWorld('conduit', {
   platform: process.platform,
   deviceName: friendlyDeviceName(),

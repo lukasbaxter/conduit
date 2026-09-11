@@ -114,9 +114,11 @@ export default function App() {
   // every speaker in status requests.
   const { adoptActive } = player;
   useEffect(() => {
-    if (!devices.length) return;
+    // Needs BOTH the speakers and a live Jellyfin session: the speaker says
+    // what is playing, Jellyfin turns its stream URL into a real track.
+    if (!devices.length || !jf) return;
     adoptActive(devices).catch(() => {});
-  }, [devices, adoptActive]);
+  }, [devices, jf, adoptActive]);
 
   const signOut = () => { clearSession(); setJf(null); };
 

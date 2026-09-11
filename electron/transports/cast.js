@@ -56,10 +56,34 @@ class CastTransport {
         title: meta.title || 'Unknown title',
         artist: meta.artist || '',
         albumName: meta.album || '',
-        images: meta.artwork ? [{ url: meta.artwork }] : [],
+        // The Default Media Receiver shows images[0] large on the TV. A second
+        // entry gives it something if the first 404s.
+        images: [meta.artwork, meta.artworkFallback].filter(Boolean).map((url) => ({ url })),
       },
     };
-    return promisify(player.load, player)(media, { autoplay: true });
+    const status = await promisify(player.load, player)(media, { autoplay: true });
+
+    // A receiver that cannot actually play (TV off, Streamer in standby, media
+    // unreachable from the device) still ACKS the load, then flips to
+    // IDLE/ERROR a moment later. Without this check that reads as success and
+    // the user gets silence with no explanation.
+    const settled = await new Promise((resolve) => {
+      const onStatus = (s) => {
+        if (s.playerState === 'PLAYING' || s.playerState === 'BUFFERING') { done(s); }
+        else if (s.playerState === 'IDLE' && s.idleReason === 'ERROR') { done(s); }
+      };
+      const done = (s) => { player.removeListener('status', onStatus); resolve(s); };
+      player.on('status', onStatus);
+      setTimeout(() => done(null), 6000);
+    });
+    if (settled && settled.playerState === 'IDLE' && settled.idleReason === 'ERROR') {
+      const err = new Error(
+        `${this.device.name} could not play this. If it drives a TV, check the TV is on.`
+      );
+      err.code = 'ECASTLOAD';
+      throw err;
+    }
+    return settled || status;
   }
 
   async _withPlayer(method, ...args) {
