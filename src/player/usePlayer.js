@@ -94,6 +94,8 @@ export function usePlayer(jf) {
   const toggleRef = useRef(() => {});
   const seekRef = useRef(() => {});
   const yieldRef = useRef(() => {});
+  const setVolumeRef = useRef(() => {});
+  const activePlayerRef = useRef(null); // clientId of the active player, if not us
 
   useEffect(() => { deviceRef.current = device; }, [device]);
   useEffect(() => { positionRef.current = position; }, [position]);
@@ -113,21 +115,9 @@ export function usePlayer(jf) {
 
   const [relayInstance, setRelayInstance] = useState(null);
   const attachRelay = useCallback((relay) => { relayRef.current = relay; setRelayInstance(relay); }, []);
-  const applyRoster = useCallback((r) => {
-    setRoster(r);
-    const myId = relayRef.current?.id;
-    const act = r.activeClientId;
-    // Follow the shared session unless the user pinned a specific output.
-    if (!pinnedRef.current) {
-      if (act && act !== myId) {
-        const p = (r.players || []).find((x) => x.id === act);
-        if (p) { setDeviceState({ id: `relay:${act}`, kind: 'relay', name: p.name, model: 'Conduit', relayClientId: act }); deviceRef.current = { id: `relay:${act}`, kind: 'relay', name: p.name, relayClientId: act }; }
-      } else if (deviceRef.current.kind === 'relay') {
-        // active session ended or became us -> drop back to local
-        setDeviceState(LOCAL_DEVICE); deviceRef.current = LOCAL_DEVICE;
-      }
-    }
-  }, []);
+  // Display and control-routing follow the shared session (derived at render),
+  // so this just stores the roster.
+  const applyRoster = useCallback((r) => setRoster(r), []);
 
   // Remote players from the relay, presented as selectable devices.
   const relayDevices = roster.players
@@ -238,18 +228,15 @@ export function usePlayer(jf) {
 
   const playQueue = useCallback(
     async (tracks, startIndex = 0, ctx = null) => {
-      const dev = deviceRef.current;
-      // Targeting another of my clients: send it the track ids to play, don't
-      // play here.
-      if (dev.kind === 'relay' && relayRef.current) {
-        relayRef.current.command(dev.relayClientId, {
+      // If another of my clients is the active player, change the song THERE.
+      const act = activePlayerRef.current;
+      if (act && relayRef.current) {
+        relayRef.current.command(act, {
           action: 'play', trackIds: tracks.map((t) => t.Id), index: startIndex, ctx,
         });
-        setQueue(tracks); setIndex(startIndex); queueRef.current = tracks; indexRef.current = startIndex;
-        setContextId(ctx); setPlaying(true);
-        return;
+        return; // display mirrors the active player; nothing to set locally
       }
-      // We are the active device now; ask the others to pause.
+      // No active remote session: play here and become the active player.
       if (relayRef.current) relayRef.current.claim();
       setError(null);
       setExternal(null);
@@ -305,11 +292,8 @@ export function usePlayer(jf) {
 
   const toggle = useCallback(async () => {
     const dev = deviceRef.current;
-    if (dev.kind === 'relay' && relayRef.current) {
-      relayRef.current.command(dev.relayClientId, { action: 'toggle' });
-      setPlaying((v) => !v);
-      return;
-    }
+    const act = activePlayerRef.current;
+    if (act && relayRef.current) { relayRef.current.command(act, { action: 'toggle' }); return; }
     if (!current && !external) return;
     try {
       if (dev.kind === 'local') {
@@ -331,11 +315,8 @@ export function usePlayer(jf) {
   const seek = useCallback(
     async (seconds) => {
       const dev = deviceRef.current;
-      if (dev.kind === 'relay' && relayRef.current) {
-        relayRef.current.command(dev.relayClientId, { action: 'seek', pos: seconds });
-        anchorAt(seconds, true);
-        return;
-      }
+      const act = activePlayerRef.current;
+      if (act && relayRef.current) { relayRef.current.command(act, { action: 'seek', pos: seconds }); return; }
       const track = queueRef.current[indexRef.current];
       // Scrubbing with nothing loaded used to fire /Play?seek= at a speaker that
       // had no stream, which is how a device ended up in a stalled state before
@@ -375,6 +356,8 @@ export function usePlayer(jf) {
 
   const setVolume = useCallback(
     async (level) => {
+      const act = activePlayerRef.current;
+      if (act && relayRef.current) { relayRef.current.command(act, { action: 'setVolume', level }); setVolumeState(level); return; }
       // Hold off the poll briefly so it cannot fight the drag.
       volumeHeldRef.current = Date.now() + 2000;
       setVolumeState(level);
@@ -433,10 +416,41 @@ export function usePlayer(jf) {
   );
 
   /** Move playback to another device, preserving track and position. */
-  const setDevice = useCallback(
+  const setDevice = useCallback( // eslint-disable-next-line react-hooks/exhaustive-deps
     async (nextDevice) => {
       const prev = deviceRef.current;
-      pinnedRef.current = true; // explicit user choice; stop auto-following
+
+      // Picking another of my clients: hand the active session to it.
+      if (nextDevice.kind === 'relay' && relayRef.current) {
+        const cur = queueRef.current[indexRef.current];
+        if (cur) relayRef.current.command(nextDevice.relayClientId, { action: 'play', trackIds: [cur.Id], index: 0 });
+        return;
+      }
+
+      // Transferring away from a remote active session onto THIS device (local
+      // or a speaker): take over playback of that session's current track here.
+      const act = activePlayerRef.current;
+      if (act) {
+        const np = (roster.players || []).find((p) => p.id === act)?.nowPlaying;
+        setDeviceState(nextDevice); deviceRef.current = nextDevice;
+        if (np?.itemId && jf) {
+          try {
+            const q = new URLSearchParams({ Ids: np.itemId, userId: jf.userId, Fields: 'MediaSources,ArtistItems,AlbumArtists,UserData' });
+            const data = await jf._fetch(`/Items?${q}`);
+            const t = (data.Items || [])[0];
+            if (t) {
+              relayRef.current?.claim();
+              setQueue([t]); setIndex(0); queueRef.current = [t]; indexRef.current = 0;
+              setDuration(ticksToSeconds(t.RunTimeTicks));
+              anchorAt(np.position || 0, true);
+              await startOn(nextDevice, t, np.position || 0);
+              setPlaying(true);
+            }
+          } catch (e) { setError(e.message); }
+        }
+        return;
+      }
+
       if (prev.id === nextDevice.id) return;
       const track = queueRef.current[indexRef.current] || null;
       const wasPlaying = playing;
@@ -618,13 +632,18 @@ export function usePlayer(jf) {
     return () => clearInterval(timer);
   }, [jf, current, playing]);
 
-  // When we are controlling another client, mirror ITS reported state -- song
-  // and playhead always describe the same real playback.
-  const relayTarget = device.kind === 'relay'
-    ? (roster.players || []).find((p) => `relay:${p.id}` === device.id)?.nowPlaying
+  // The active session lives on another of my clients: mirror it. This is
+  // independent of my local `device` -- whichever client is playing account-
+  // wide, every other client shows and controls THAT. Song and playhead always
+  // describe the same real playback.
+  const myClientId = relayInstance?.id;
+  const activePlayer = roster.activeClientId && roster.activeClientId !== myClientId
+    ? (roster.players || []).find((p) => p.id === roster.activeClientId)
     : null;
+  const relayTarget = activePlayer?.nowPlaying || null;
+  const relayTargetId = activePlayer?.id || null;
 
-  // Either the queue item we started, or whatever an adopted speaker reports.
+  // Either the mirrored active session, our own queue item, or an adopted speaker.
   const nowPlaying = relayTarget
     ? { title: relayTarget.title, artist: relayTarget.artist, artUrl: relayTarget.artUrl, artId: null }
     : current
@@ -654,6 +673,7 @@ export function usePlayer(jf) {
       } catch { /* ignore */ }
     } else if (cmd.action === 'toggle') { toggleRef.current(); }
     else if (cmd.action === 'seek') { seekRef.current(cmd.pos || 0); }
+    else if (cmd.action === 'setVolume') { setVolumeRef.current(cmd.level ?? 100); }
     else if (cmd.action === 'yield') { yieldRef.current(); }
   }, [jf]);
 
@@ -672,6 +692,8 @@ export function usePlayer(jf) {
   useEffect(() => { playQueueRef.current = playQueue; }, [playQueue]);
   useEffect(() => { toggleRef.current = toggle; }, [toggle]);
   useEffect(() => { seekRef.current = seek; }, [seek]);
+  useEffect(() => { setVolumeRef.current = setVolume; }, [setVolume]);
+  useEffect(() => { activePlayerRef.current = relayTargetId; }, [relayTargetId]);
 
   // Broadcast what we're playing so the roster shows it on other clients. The
   // song AND the playhead go together, so a controller never shows a different
@@ -680,44 +702,47 @@ export function usePlayer(jf) {
   useEffect(() => {
     const r = relayRef.current;
     if (!r) return;
-    // Only the ACTIVE (locally-playing or device-driving) client reports; a
-    // client that is itself controlling a relay target must not echo.
-    if (deviceRef.current.kind === 'relay') return;
-    r.reportNowPlaying(nowPlaying ? {
-      title: nowPlaying.title, artist: nowPlaying.artist,
-      artUrl: nowPlaying.artId ? `${npBaseUrl}/Items/${nowPlaying.artId}/Images/Primary?maxHeight=128` : null,
-      playing, position, duration, at: Date.now(),
+    // Do not report while mirroring someone else's session -- only the active
+    // player reports its state (title, playhead, volume) for everyone to sync to.
+    if (relayTarget) return;
+    r.reportNowPlaying(current ? {
+      itemId: current.Id,
+      title: current.Name,
+      artist: current.Artists?.join(', ') || current.AlbumArtist || '',
+      artUrl: `${npBaseUrl}/Items/${current.AlbumId || current.Id}/Images/Primary?maxHeight=128`,
+      playing, position, duration, volume, at: Date.now(),
     } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nowPlaying, playing, Math.floor(position), duration]);
+  }, [current, playing, Math.floor(position), duration, volume, relayTarget]);
 
   const [, forceTick] = useState(0);
   useEffect(() => {
-    if (device.kind !== 'relay' || !relayTarget?.playing) return undefined;
+    if (!relayTarget?.playing) return undefined;
     const t = setInterval(() => forceTick((n) => n + 1), 500);
     return () => clearInterval(t);
-  }, [device.kind, relayTarget?.playing]);
+  }, [relayTarget?.playing]);
 
-  // Interpolate the target's playhead so the controller's bar moves smoothly.
+  // Interpolate the active player's playhead so the mirrored bar moves smoothly.
   const shownPosition = relayTarget
     ? (relayTarget.playing ? (relayTarget.position || 0) + (Date.now() - (relayTarget.at || Date.now())) / 1000 : (relayTarget.position || 0))
     : position;
   const shownDuration = relayTarget ? (relayTarget.duration || 0) : duration;
   const shownPlaying = relayTarget ? Boolean(relayTarget.playing) : playing;
+  const shownVolume = relayTarget && typeof relayTarget.volume === 'number' ? relayTarget.volume : volume;
 
   return useMemo(
     () => ({
       device, setDevice, adoptActive, nowPlaying, external, patchQueue, contextId,
       relayDevices, attachRelay, applyRoster, executeCommand, roster, relay: relayInstance,
       queue, index, current,
-      playing: shownPlaying, position: shownPosition, duration: shownDuration, volume, error,
+      playing: shownPlaying, position: shownPosition, duration: shownDuration, volume: shownVolume, error,
       playQueue, toggle, next, previous, seek, setVolume, skipTo,
       clearError: () => setError(null),
     }),
     // eslint-disable-next-line
     [device, setDevice, adoptActive, nowPlaying, external, patchQueue, contextId,
      relayDevices, attachRelay, applyRoster, executeCommand, roster, relayInstance, queue, index, current,
-     shownPlaying, shownPosition, shownDuration, volume, error, playQueue, toggle, next,
+     shownPlaying, shownPosition, shownDuration, shownVolume, error, playQueue, toggle, next,
      previous, seek, setVolume, skipTo]
   );
 }
