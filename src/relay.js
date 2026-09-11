@@ -39,6 +39,10 @@ export class Relay {
     this.closed = false;
     this._backoff = 1000;
     this._pending = { devices: [], nowPlaying: null };
+    // True while THIS client holds the active-player claim. Survives socket
+    // drops so a reconnect (e.g. after the relay restarts and forgets who was
+    // active) re-asserts it, restoring the green bar on every other client.
+    this._claimed = false;
     this.connect();
   }
 
@@ -51,7 +55,9 @@ export class Relay {
     ws.onopen = () => {
       this._backoff = 1000;
       this._send({ type: 'hello', token: this.token, clientId: this.id, name: this.name, kind: this.kind, canPlay: this.canPlay });
-      // Flush whatever we last knew.
+      // Re-assert the claim first so the server re-marks us active before any
+      // roster goes out, then flush whatever we last knew.
+      if (this._claimed) this._send({ type: 'claim' });
       if (this._pending.devices.length) this.reportDevices(this._pending.devices);
       if (this._pending.nowPlaying) this.reportNowPlaying(this._pending.nowPlaying);
       this._ping = setInterval(() => this._send({ type: 'ping' }), 25000);
@@ -59,7 +65,12 @@ export class Relay {
     ws.onmessage = (e) => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.type === 'roster') this.onRoster({ players: m.players || [], lanDevices: m.lanDevices || [], activeClientId: m.activeClientId || null });
-      else if (m.type === 'command') this.onCommand(m.command, m.from);
+      else if (m.type === 'command') {
+        // A yield means another client took over: we no longer hold the claim,
+        // so a later reconnect must NOT re-assert it.
+        if (m.command && m.command.action === 'yield') this._claimed = false;
+        this.onCommand(m.command, m.from);
+      }
     };
     ws.onclose = () => { clearInterval(this._ping); this._retry(); };
     ws.onerror = () => { try { ws.close(); } catch {} };
@@ -86,7 +97,7 @@ export class Relay {
   }
 
   // I just started playing here: make the user's other clients yield.
-  claim() { this._send({ type: 'claim' }); }
+  claim() { this._claimed = true; this._send({ type: 'claim' }); }
 
   // Tell another client to do something.
   command(toClientId, command) {

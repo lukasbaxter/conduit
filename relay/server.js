@@ -114,11 +114,27 @@ wss.on('connection', (ws, req) => {
       const who = await verify(msg.token);
       if (!who) { ws.close(4003, 'bad token'); return; }
       clearTimeout(timeout);
+      const kind = msg.kind || 'web';
+      const cid = msg.clientId;
+      let name = msg.name || who.name || 'Conduit';
+      if (kind === 'web' || kind === 'mobile') {
+        // Number browser/phone clients: "Web Player (1)", "(2)", ... Exclude a
+        // reconnecting client's own prior entry (same clientId) so it keeps its
+        // number instead of stepping to the next one on every reconnect.
+        const used = new Set(
+          [...userMap(who.id).values()]
+            .filter((c) => (c.kind === 'web' || c.kind === 'mobile') && c.id !== cid)
+            .map((c) => c.name)
+        );
+        let n = 1;
+        while (used.has(`Web Player (${n})`)) n += 1;
+        name = `Web Player (${n})`;
+      }
       self = {
         id: msg.clientId || `c_${Math.random().toString(36).slice(2)}`,
         ws, uid: who.id, net,
-        name: msg.name || who.name || 'Conduit',
-        kind: msg.kind || 'web', // 'desktop' | 'web' | 'mobile'
+        name,
+        kind,
         token: msg.token,
         canPlay: msg.canPlay !== false,
         devices: [],
@@ -140,6 +156,14 @@ wss.on('connection', (ws, req) => {
       // A client reports what it is playing, for the shared now-playing view.
       case 'nowplaying':
         self.nowPlaying = msg.nowPlaying || null;
+        // Safety net: if nobody currently holds the active claim (e.g. the relay
+        // just restarted and forgot) and this client is actually playing, adopt
+        // it as active. Only a genuinely-playing client reports this -- clients
+        // that are merely mirroring another session report nothing -- so this
+        // never steals playback, it only recovers a dropped claim.
+        if (self.nowPlaying && self.nowPlaying.playing && !active.has(self.uid)) {
+          active.set(self.uid, self.id);
+        }
         broadcastRoster(self.uid);
         break;
 

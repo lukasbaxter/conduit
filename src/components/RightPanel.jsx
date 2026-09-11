@@ -131,16 +131,20 @@ function Queue({ player, jf }) {
  * of what most clones do.
  */
 function Lyrics({ player, jf }) {
-  const { current, position } = player;
+  const { position } = player;
+  // Follow the session-wide track, not just this client's own queue item, so
+  // lyrics load and stay in sync even when we are mirroring another device
+  // (where `current` is null but nowPlayingId still points at the song).
+  const trackId = player.nowPlayingId;
   const [lines, setLines] = useState(null);
   const [state, setState] = useState('idle');
   const activeRef = useRef(null);
 
   useEffect(() => {
-    if (!current) { setLines(null); setState('idle'); return; }
+    if (!trackId) { setLines(null); setState('idle'); return; }
     let cancelled = false;
     setState('loading');
-    jf.lyrics(current.Id)
+    jf.lyrics(trackId)
       .then((l) => {
         if (cancelled) return;
         setLines(l);
@@ -148,7 +152,7 @@ function Lyrics({ player, jf }) {
       })
       .catch(() => { if (!cancelled) setState('none'); });
     return () => { cancelled = true; };
-  }, [current, jf]);
+  }, [trackId, jf]);
 
   // Nudge the playhead forward slightly when choosing the active line. Human
   // perception is asymmetric here: a lyric arriving a hair early reads as in
@@ -167,13 +171,13 @@ function Lyrics({ player, jf }) {
   useEffect(() => {
     const t = setInterval(() => {
       window.conduit?.debug?.(
-        `lyrics track=${current?.Id?.slice(0, 8) || '-'} state=${state} lines=${lines?.length ?? 0} ` +
+        `lyrics track=${trackId?.slice(0, 8) || '-'} state=${state} lines=${lines?.length ?? 0} ` +
         `pos=${position.toFixed(1)} active=${activeIndex} ` +
         `activeStart=${activeIndex >= 0 ? lines[activeIndex]?.start : '-'}`
       );
     }, 2000);
     return () => clearInterval(t);
-  }, [current, state, lines, position, activeIndex]);
+  }, [trackId, state, lines, position, activeIndex]);
 
   if (state === 'loading') return <p className="placeholder-note">Loading lyrics...</p>;
   if (state === 'idle') return <p className="placeholder-note">Play something to see lyrics.</p>;

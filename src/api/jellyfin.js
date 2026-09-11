@@ -40,8 +40,13 @@ export class Jellyfin {
     // Session cache for list reads. A click should never wait on a fetch for
     // something already shown once; mutations evict what they change.
     this._cache = new Map();
-    this._lsPrefix = `conduit.cache.${this.userId || 'x'}.`;
   }
+
+  // Per-user localStorage namespace. Computed, not captured at construction:
+  // login() builds the client BEFORE it knows the user id, so anything written
+  // in that first session would otherwise land under a different prefix from
+  // the one a restored session reads.
+  get _lsPrefix() { return `conduit.cache.${this.userId || 'x'}.`; }
 
   // Read a persisted value written on a previous run (survives reload).
   persisted(key) {

@@ -21,16 +21,29 @@ export function PlayingElsewhereBar({ player }) {
   if (!active) return null;
   return (
     <div className="playing-elsewhere">
-      <span>Playing on {active.name}</span>
-      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
-        <path d="M6 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM1 13.5a1 1 0 1 0 2 0 1 1 0 0 0-2 0zM1 9v2a2.5 2.5 0 0 1 2.5 2.5h2A4.5 4.5 0 0 0 1 9zM1 5v2a6.5 6.5 0 0 1 6.5 6.5h2A8.5 8.5 0 0 0 1 5z" />
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6" />
+        <path d="M2 12a9 9 0 0 1 8 8" />
+        <path d="M2 16a5 5 0 0 1 4 4" />
+        <path d="M2 20h.01" />
       </svg>
+      <span>Playing on {active.name}</span>
     </div>
   );
 }
 
 export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist, panel, onPanel, onLike }) {
-  const { current, nowPlaying, playing, position, duration, volume, device, error } = player;
+  const { current, nowPlaying, playing, position, duration, volume, device, error, roster, relay, repeat, shuffle } = player;
+  // The device the SESSION is on, not just this client's local selection. When
+  // another of my clients is the active player, the picker must point at that
+  // client (matching the green bar) instead of falsely marking "This Computer"
+  // as active -- the contradictory state where the app claimed both at once.
+  const activeId = roster?.activeClientId;
+  const sessionDevice = activeId && activeId !== relay?.id
+    ? (devices.find((d) => d.kind === 'relay' && d.relayClientId === activeId)
+        || { id: `relay:${activeId}`, kind: 'relay', name: (roster.players || []).find((p) => p.id === activeId)?.name || 'Conduit' })
+    : device;
   // nowPlaying covers both our own queue and a session adopted from a speaker
   // that was already playing when the app opened.
   // artId is our own library item; artUrl is a ready URL from a mirrored relay
@@ -96,6 +109,25 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
 
         <div className="player-controls">
           <div className="player-buttons">
+            <button
+              className={`ctl-mode ${shuffle && shuffle !== 'off' ? 'on' : ''}`}
+              onClick={player.cycleShuffle}
+              title={shuffle === 'smart' ? 'Smart shuffle' : shuffle === 'on' ? 'Shuffle' : 'Enable shuffle'}
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 3h5v5" />
+                <path d="M4 20 21 3" />
+                <path d="M21 16v5h-5" />
+                <path d="m15 15 6 6" />
+                <path d="M4 4l5 5" />
+              </svg>
+              {shuffle === 'smart' && (
+                <svg className="ctl-spark" viewBox="0 0 24 24" width="9" height="9" fill="currentColor" aria-hidden="true">
+                  <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z" />
+                </svg>
+              )}
+            </button>
             <button onClick={player.previous} disabled={!current} title="Previous">
               <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
                 <path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z" />
@@ -116,6 +148,20 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
             <button onClick={player.next} disabled={!current} title="Next">
               <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
                 <path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z" />
+              </svg>
+            </button>
+            <button
+              className={`ctl-mode ${repeat && repeat !== 'off' ? 'on' : ''}`}
+              onClick={player.cycleRepeat}
+              title={repeat === 'one' ? 'Repeat one' : repeat === 'all' ? 'Repeat' : 'Enable repeat'}
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m17 2 4 4-4 4" />
+                <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+                <path d="m7 22-4-4 4-4" />
+                <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+                {repeat === 'one' && <path d="M11 10h1v4" />}
               </svg>
             </button>
           </div>
@@ -168,7 +214,7 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
               style={{ '--pct': `${volume}%` }}
             />
           </div>
-          <DevicePicker devices={devices} active={device} onSelect={player.setDevice} />
+          <DevicePicker devices={devices} active={sessionDevice} onSelect={player.setDevice} />
         </div>
       </div>
     </footer>

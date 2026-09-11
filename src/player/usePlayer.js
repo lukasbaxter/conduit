@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-// The local device is always present and is not discovered over mDNS.
+// The local device is always present and is not discovered over mDNS. Named
+// for the runtime: the desktop app IS the computer, the PWA is one web player
+// among possibly several (the relay numbers those for the OTHER clients).
+const IS_DESKTOP = typeof window !== 'undefined' && !!window.conduit;
 export const LOCAL_DEVICE = {
   id: 'local',
   kind: 'local',
-  name: 'This Computer',
-  model: 'Local playback',
+  name: IS_DESKTOP ? 'This Computer' : 'This Web Player',
+  model: IS_DESKTOP ? 'Local playback' : 'Browser playback',
 };
 
 const MIME_BY_CONTAINER = {
@@ -31,6 +34,16 @@ function ticksToSeconds(ticks) {
   return ticks ? ticks / 10_000_000 : 0;
 }
 
+// Fisher-Yates, non-mutating.
+function shuffled(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 /**
  * One playback controller covering local audio, Google Cast and BluOS.
  *
@@ -46,6 +59,10 @@ export function usePlayer(jf) {
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(80);
+  // Spotify-style modes. repeat: 'off' | 'all' | 'one'. shuffle: 'off' | 'on' |
+  // 'smart' (smart = keep going past the queue with similar songs).
+  const [repeat, setRepeat] = useState('off');
+  const [shuffle, setShuffle] = useState('off');
   const [error, setError] = useState(null);
   // What a speaker reports playing when we did not start it ourselves (another
   // client, or this app on another machine). Lets a freshly opened window show
@@ -95,10 +112,27 @@ export function usePlayer(jf) {
   const seekRef = useRef(() => {});
   const yieldRef = useRef(() => {});
   const setVolumeRef = useRef(() => {});
+  const previousRef = useRef(() => {});
+  const setRepeatModeRef = useRef(() => {});
+  const setShuffleModeRef = useRef(() => {});
   const activePlayerRef = useRef(null); // clientId of the active player, if not us
   const rosterRef = useRef({ players: [], lanDevices: [] });
+  const repeatRef = useRef('off');
+  const shuffleRef = useRef('off');
+  // The queue in its original (unshuffled) order, so turning shuffle off can
+  // restore it instead of leaving the tracks scrambled.
+  const originalQueueRef = useRef([]);
+  const advanceRef = useRef(() => {});
+  // Which track (id) the current device actually has loaded. A queue restored
+  // from the last run is shown paused with NOTHING loaded yet; the first play
+  // must (re)start the stream at the saved position instead of resuming a
+  // stream that does not exist.
+  const loadedRef = useRef(null);
+  const restoredRef = useRef(false);
 
   useEffect(() => { deviceRef.current = device; }, [device]);
+  useEffect(() => { repeatRef.current = repeat; }, [repeat]);
+  useEffect(() => { shuffleRef.current = shuffle; }, [shuffle]);
   useEffect(() => { positionRef.current = position; }, [position]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
   useEffect(() => { queueRef.current = queue; }, [queue]);
@@ -191,6 +225,7 @@ export function usePlayer(jf) {
           await remote.seek(dev, seekSeconds).catch(() => {});
         }
       }
+      loadedRef.current = track.Id;
       jf.reportStart(track.Id);
     },
     [jf, metaFor, remote, volume]
@@ -199,6 +234,7 @@ export function usePlayer(jf) {
   const stopOn = useCallback(
     async (dev) => {
       if (!dev) return;
+      loadedRef.current = null;
       if (dev.kind === 'local') {
         const el = audioRef.current;
         el.pause();
@@ -242,11 +278,20 @@ export function usePlayer(jf) {
       setError(null);
       setExternal(null);
       setContextId(ctx);
-      setQueue(tracks);
-      setIndex(startIndex);
-      queueRef.current = tracks;
-      indexRef.current = startIndex;
-      const track = tracks[startIndex];
+      // With shuffle on, keep the chosen track first and scramble the rest.
+      originalQueueRef.current = tracks;
+      let order = tracks;
+      let start = startIndex;
+      if (shuffleRef.current !== 'off' && tracks.length > 1) {
+        const chosen = tracks[startIndex];
+        order = [chosen, ...shuffled(tracks.filter((_, i) => i !== startIndex))];
+        start = 0;
+      }
+      setQueue(order);
+      setIndex(start);
+      queueRef.current = order;
+      indexRef.current = start;
+      const track = order[start];
       setDuration(ticksToSeconds(track?.RunTimeTicks));
       anchorAt(0, true);
       try {
@@ -263,10 +308,15 @@ export function usePlayer(jf) {
   const skipTo = useCallback(
     async (nextIndex) => {
       const q = queueRef.current;
-      if (nextIndex < 0 || nextIndex >= q.length) {
+      if (nextIndex < 0) nextIndex = 0; // "previous" on the first track restarts it
+      if (nextIndex >= q.length) {
+        // Ran out: park on the last track at 0:00, paused. The footer keeps
+        // showing it (play restarts it) instead of going blank.
         await stopOn(deviceRef.current);
         setPlaying(false);
-        setIndex(-1);
+        const last = q.length - 1;
+        setIndex(last); indexRef.current = last;
+        anchorAt(0, false);
         return;
       }
       setIndex(nextIndex);
@@ -284,7 +334,43 @@ export function usePlayer(jf) {
     [anchorAt, startOn, stopOn]
   );
 
-  const next = useCallback(() => skipTo(indexRef.current + 1), [skipTo]);
+  // Smart shuffle: the queue ran out, so extend it with songs similar to the
+  // current track (a Jellyfin instant mix) and keep playing.
+  const smartNext = useCallback(async () => {
+    const cur = queueRef.current[indexRef.current];
+    if (!cur || !jf) return skipTo(queueRef.current.length);
+    try {
+      const q = new URLSearchParams({ userId: jf.userId, Limit: '25', Fields: 'ArtistItems,AlbumArtists,UserData' });
+      const data = await jf._fetch(`/Items/${cur.Id}/InstantMix?${q}`);
+      const have = new Set(queueRef.current.map((t) => t.Id));
+      let pick = (data.Items || []).filter((t) => !have.has(t.Id));
+      if (!pick.length) pick = (data.Items || []).filter((t) => t.Id !== cur.Id);
+      if (!pick.length) return skipTo(queueRef.current.length);
+      const merged = [...queueRef.current, ...pick];
+      setQueue(merged); queueRef.current = merged;
+      await skipTo(indexRef.current + 1);
+    } catch {
+      await skipTo(queueRef.current.length);
+    }
+  }, [jf, skipTo]);
+
+  // Advance the queue. `auto` is true for a track that ended on its own (vs. a
+  // manual skip). At the end of the queue, honour repeat / smart shuffle instead
+  // of just stopping.
+  const advance = useCallback(async (auto = false) => {
+    const q = queueRef.current;
+    const i = indexRef.current;
+    if (auto && repeatRef.current === 'one') return skipTo(i); // replay the track
+    if (i + 1 < q.length) return skipTo(i + 1);
+    // Nothing left.
+    if (repeatRef.current === 'all') return skipTo(0);
+    if (repeatRef.current === 'one') return skipTo(i);
+    if (shuffleRef.current === 'smart') return smartNext();
+    return skipTo(q.length); // falls into the stop branch
+  }, [skipTo, smartNext]);
+  useEffect(() => { advanceRef.current = advance; }, [advance]);
+
+  const next = useCallback(() => advanceRef.current(false), []);
   const previous = useCallback(() => {
     // Match the usual convention: restart the track unless we are near its start.
     if (positionRef.current > 3) return skipTo(indexRef.current);
@@ -297,6 +383,17 @@ export function usePlayer(jf) {
     if (act && relayRef.current) { relayRef.current.command(act, { action: 'toggle' }); return; }
     if (!current && !external) return;
     try {
+      // Nothing loaded on this device for the shown track (a queue restored
+      // from the last run, or a device that was stopped): start it here at the
+      // remembered playhead rather than resuming a stream that is not there.
+      if (!playing && current && loadedRef.current !== current.Id) {
+        relayRef.current?.claim();
+        await startOn(dev, current, positionRef.current);
+        anchorAt(positionRef.current, true);
+        setPlaying(true);
+        return;
+      }
+      if (!playing) relayRef.current?.claim();
       if (dev.kind === 'local') {
         const el = audioRef.current;
         if (playing) el.pause();
@@ -311,7 +408,7 @@ export function usePlayer(jf) {
     } catch (e) {
       setError(e.message);
     }
-  }, [anchorAt, current, external, playing, remote]);
+  }, [anchorAt, current, external, playing, remote, startOn]);
 
   const seek = useCallback(
     async (seconds) => {
@@ -373,6 +470,55 @@ export function usePlayer(jf) {
     [remote]
   );
 
+  // Re-order the queue for a shuffle change, keeping the current track playing.
+  const applyShuffleOrder = useCallback((mode) => {
+    const q = queueRef.current;
+    const cur = q[indexRef.current] || null;
+    if (mode !== 'off') {
+      if (shuffleRef.current === 'off') originalQueueRef.current = q; // remember the real order
+      if (cur && q.length > 1) {
+        const order = [cur, ...shuffled(q.filter((t) => t.Id !== cur.Id))];
+        setQueue(order); queueRef.current = order;
+        setIndex(0); indexRef.current = 0;
+      }
+    } else {
+      const orig = originalQueueRef.current.length ? originalQueueRef.current : q;
+      const pos = cur ? Math.max(0, orig.findIndex((t) => t.Id === cur.Id)) : indexRef.current;
+      setQueue(orig); queueRef.current = orig;
+      setIndex(pos); indexRef.current = pos;
+    }
+  }, []);
+
+  const setShuffleMode = useCallback((mode) => {
+    applyShuffleOrder(mode); shuffleRef.current = mode; setShuffle(mode);
+  }, [applyShuffleOrder]);
+  const setRepeatMode = useCallback((mode) => { repeatRef.current = mode; setRepeat(mode); }, []);
+
+  // Spotify-style cycling toggles. When another client owns the session, route
+  // the change to it so the mode lives with the actual playback -- and base the
+  // next mode on the mode currently SHOWN (mirrored from the active player), not
+  // our stale local ref, or a controller would send the same value forever and
+  // could never toggle back off.
+  const activeMode = (field) => {
+    const act = activePlayerRef.current;
+    if (act) return (rosterRef.current.players || []).find((p) => p.id === act)?.nowPlaying?.[field] || 'off';
+    return field === 'shuffle' ? shuffleRef.current : repeatRef.current;
+  };
+  const cycleShuffle = useCallback(() => {
+    const nextMode = { off: 'on', on: 'smart', smart: 'off' }[activeMode('shuffle')] || 'on';
+    const act = activePlayerRef.current;
+    if (act && relayRef.current) { relayRef.current.command(act, { action: 'setShuffle', mode: nextMode }); return; }
+    setShuffleMode(nextMode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setShuffleMode]);
+  const cycleRepeat = useCallback(() => {
+    const nextMode = { off: 'all', all: 'one', one: 'off' }[activeMode('repeat')] || 'all';
+    const act = activePlayerRef.current;
+    if (act && relayRef.current) { relayRef.current.command(act, { action: 'setRepeat', mode: nextMode }); return; }
+    setRepeatMode(nextMode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setRepeatMode]);
+
   /**
    * On first load, find any speaker that is already playing and adopt it as the
    * active device, so opening the app anywhere shows where music is running.
@@ -391,7 +537,10 @@ export function usePlayer(jf) {
       // list is usually one device; latching on it meant we gave up before the
       // playing speaker had even been found. Only latch once we actually adopt,
       // or once this window starts its own playback.
-      if (queueRef.current.length) {
+      // A queue restored from the last run and still paused is not "our own
+      // playback" -- a speaker that kept playing after the app closed wins.
+      const ownPlayback = queueRef.current.length && (anchorRef.current.playing || loadedRef.current);
+      if (ownPlayback) {
         adoptedRef.current = true;
         return null;
       }
@@ -403,8 +552,10 @@ export function usePlayer(jf) {
       // No one is playing yet; stay unlatched so a later scan can still adopt.
       if (!hit) return null;
       // Re-check: the user may have hit play while we were polling the network.
-      if (queueRef.current.length) return null;
+      if (queueRef.current.length && (anchorRef.current.playing || loadedRef.current)) return null;
       adoptedRef.current = true;
+      // Drop the restored paused queue: the house is playing something else.
+      setQueue([]); setIndex(-1); queueRef.current = []; indexRef.current = -1;
       setDeviceState(hit.d);
       deviceRef.current = hit.d;
       setExternal({ title: hit.s.title, artist: hit.s.artist, album: hit.s.album });
@@ -421,10 +572,49 @@ export function usePlayer(jf) {
     async (nextDevice) => {
       const prev = deviceRef.current;
 
-      // Picking another of my clients: hand the active session to it.
+      // Picking another of my clients: hand the active session to it. The
+      // target must BECOME the active player (claim), resume the CURRENT track
+      // at the CURRENT position, and this client must stop + mirror. A plain
+      // 'play' command would loop: the target still sees THIS client as active
+      // and would route the command straight back, restarting the song here at
+      // 0:00 (the exact bug this replaces).
       if (nextDevice.kind === 'relay' && relayRef.current) {
-        const cur = queueRef.current[indexRef.current];
-        if (cur) relayRef.current.command(nextDevice.relayClientId, { action: 'play', trackIds: [cur.Id], index: 0 });
+        const act = activePlayerRef.current;
+        let itemId = null;
+        let pos = 0;
+        let wasPlaying = true;
+        if (act) {
+          // We are mirroring another session: hand off THAT session's track.
+          const np = (rosterRef.current.players || []).find((p) => p.id === act)?.nowPlaying;
+          if (np) {
+            itemId = np.itemId;
+            pos = np.playing ? (np.position || 0) + (Date.now() - (np.at || Date.now())) / 1000 : (np.position || 0);
+            wasPlaying = np.playing !== false;
+          }
+        } else {
+          // We are the active player: hand off our own current track + playhead.
+          const cur = queueRef.current[indexRef.current];
+          const a = anchorRef.current;
+          if (cur) {
+            itemId = cur.Id;
+            pos = a.playing ? a.pos + (Date.now() - a.at) / 1000 : positionRef.current;
+            wasPlaying = playing;
+          }
+        }
+        relayRef.current.command(nextDevice.relayClientId, {
+          action: 'transfer', trackIds: itemId ? [itemId] : [], index: 0, position: pos, playing: wasPlaying,
+        });
+        // Stop our own local playback right away so the two clients never overlap
+        // while the target spins up. The target's claim also yields us as a
+        // backstop, and the roster update then flips us into the mirror + green
+        // bar.
+        if (!act) {
+          const dev = deviceRef.current;
+          if (dev.kind === 'local') { const el = audioRef.current; if (el) el.pause(); }
+          else if (dev.kind !== 'relay' && remote) remote.stop(dev).catch(() => {});
+          setPlaying(false);
+          anchorRef.current = { pos: positionRef.current, at: Date.now(), playing: false };
+        }
         return;
       }
 
@@ -514,7 +704,7 @@ export function usePlayer(jf) {
       anchorRef.current = { pos: el.currentTime, at: Date.now(), playing: !el.paused };
     };
     const onEnded = () => {
-      if (deviceRef.current.kind === 'local') next();
+      if (deviceRef.current.kind === 'local') advanceRef.current(true);
     };
     const onDuration = () => {
       if (deviceRef.current.kind === 'local' && Number.isFinite(el.duration)) {
@@ -562,7 +752,7 @@ export function usePlayer(jf) {
         if (!s.playing && atEnd) {
           disagreeRef.current = 0;
           anchorRef.current = { pos: reported, at: Date.now(), playing: false };
-          next();
+          advanceRef.current(true);
           return;
         }
 
@@ -627,6 +817,105 @@ export function usePlayer(jf) {
     return () => clearInterval(tick);
   }, [device, playing]);
 
+  // --- remember what was playing across app restarts ---------------------
+
+  // Restore the last run's queue, track, playhead and modes, shown PAUSED. The
+  // player never opens on "Nothing playing": whatever you closed on is right
+  // there to resume, like Spotify. Nothing is loaded on a device until play.
+  useEffect(() => {
+    if (!jf || restoredRef.current) return;
+    restoredRef.current = true;
+    if (queueRef.current.length) return; // something already started (e.g. a transfer)
+    const saved = jf.persisted('playback');
+    if (!saved || !Array.isArray(saved.queue) || !saved.queue.length) return;
+    const head = jf.persisted('playhead') || {};
+    // Prefer the track id over the index: a fallback save may have kept only
+    // the current track, in which case the index no longer applies.
+    let i = saved.queue.findIndex((t) => t?.Id === head.trackId);
+    if (i < 0) i = Math.min(Math.max(0, head.index | 0), saved.queue.length - 1);
+    const track = saved.queue[i];
+    if (!track?.Id) return;
+    setQueue(saved.queue); queueRef.current = saved.queue;
+    setIndex(i); indexRef.current = i;
+    originalQueueRef.current = Array.isArray(saved.original) && saved.original.length ? saved.original : saved.queue;
+    setContextId(saved.contextId || null);
+    const rep = ['off', 'all', 'one'].includes(head.repeat) ? head.repeat : 'off';
+    const shf = ['off', 'on', 'smart'].includes(head.shuffle) ? head.shuffle : 'off';
+    repeatRef.current = rep; setRepeat(rep);
+    shuffleRef.current = shf; setShuffle(shf);
+    const dur = ticksToSeconds(track.RunTimeTicks);
+    setDuration(dur);
+    const pos = Number.isFinite(head.position) ? Math.max(0, Math.min(head.position, dur || head.position)) : 0;
+    anchorAt(pos, false);
+    setPlaying(false);
+  }, [jf, anchorAt]);
+
+  // Two keys: the queue (big, written only when it changes) and the playhead
+  // (tiny, written on a slow tick, on pause and on close). Stringifying a
+  // 2000-track playlist every few seconds is not free, so it is not done.
+  const saveQueue = useCallback(() => {
+    if (!jf) return;
+    const q = queueRef.current;
+    const i = indexRef.current;
+    if (!q.length || i < 0 || !q[i]) return;
+    const key = `${jf._lsPrefix}playback`;
+    const write = (queue, original) => {
+      localStorage.setItem(key, JSON.stringify({ queue, original, contextId }));
+    };
+    try {
+      write(q, shuffleRef.current !== 'off' ? originalQueueRef.current : []);
+    } catch {
+      // Too big for localStorage: keep at least the current track.
+      try { write([q[i]], []); } catch { /* private mode / no storage */ }
+    }
+  }, [jf, contextId]);
+  const savePlayhead = useCallback(() => {
+    if (!jf) return;
+    const q = queueRef.current;
+    const i = indexRef.current;
+    if (!q.length || i < 0 || !q[i]) return;
+    const a = anchorRef.current;
+    const pos = a.playing ? a.pos + (Date.now() - a.at) / 1000 : positionRef.current;
+    try {
+      localStorage.setItem(`${jf._lsPrefix}playhead`, JSON.stringify({
+        trackId: q[i].Id, index: i, position: Math.max(0, pos),
+        repeat: repeatRef.current, shuffle: shuffleRef.current,
+      }));
+    } catch { /* ignore */ }
+  }, [jf]);
+  const saveQueueRef = useRef(saveQueue);
+  const savePlayheadRef = useRef(savePlayhead);
+  useEffect(() => { saveQueueRef.current = saveQueue; }, [saveQueue]);
+  useEffect(() => { savePlayheadRef.current = savePlayhead; }, [savePlayhead]);
+
+  useEffect(() => {
+    if (!jf || !current) return;
+    saveQueueRef.current();
+  }, [jf, current, queue, contextId, shuffle]);
+
+  useEffect(() => {
+    if (!jf || !current) return;
+    savePlayheadRef.current();
+  }, [jf, current, index, repeat, shuffle, playing]);
+
+  useEffect(() => {
+    if (!jf || !current || !playing) return undefined;
+    const t = setInterval(() => savePlayheadRef.current(), 5000);
+    return () => clearInterval(t);
+  }, [jf, current, playing]);
+
+  useEffect(() => {
+    const flush = () => savePlayheadRef.current();
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('beforeunload', flush);
+      document.removeEventListener('visibilitychange', flush);
+    };
+  }, []);
+
   // Report progress back to Jellyfin so play counts and resume work.
   useEffect(() => {
     if (!jf || !current) return undefined;
@@ -648,8 +937,20 @@ export function usePlayer(jf) {
   const relayTargetId = activePlayer?.id || null;
 
   // Either the mirrored active session, our own queue item, or an adopted speaker.
+  // A mirrored track's art is resolved by ID through THIS client's own Jellyfin
+  // base URL + token. The active player's ready-made artUrl is only a fallback:
+  // it is built for ITS origin (the browser's same-origin /jf proxy, or the
+  // desktop's LAN address) and does not load from the other runtime -- that
+  // was the missing cover on the desktop while a web player was the master.
   const nowPlaying = activePlayer
-    ? (relayTarget ? { title: relayTarget.title, artist: relayTarget.artist, artUrl: relayTarget.artUrl, artId: null } : null)
+    ? (relayTarget ? {
+        title: relayTarget.title,
+        artist: relayTarget.artist,
+        artId: relayTarget.albumId || relayTarget.itemId || null,
+        artUrl: relayTarget.artUrl || null,
+        albumId: relayTarget.albumId || null,
+        artistId: relayTarget.artistId || null,
+      } : null)
     : current
     ? {
         title: current.Name,
@@ -664,10 +965,59 @@ export function usePlayer(jf) {
     ? { title: external.title, artist: external.artist || '', artId: null }
     : null;
 
+  // The Jellyfin item id of whatever is playing session-wide, so views like
+  // lyrics work on a mirroring client (where `current` is null) too.
+  const nowPlayingId = relayTarget?.itemId || current?.Id || null;
+
+  // Take over as the active player and resume a handed-off track locally at the
+  // given position. Bypasses playQueue's active-player routing on purpose: when
+  // a transfer arrives, THIS client is not yet the active player (the sender
+  // still is), so playQueue would route the command straight back. We claim
+  // first, then play here directly.
+  const startHere = useCallback(async (tracks, startIndex, position, shouldPlay) => {
+    relayRef.current?.claim();
+    activePlayerRef.current = null;
+    setError(null);
+    setExternal(null);
+    setContextId(null);
+    setQueue(tracks);
+    setIndex(startIndex);
+    queueRef.current = tracks;
+    indexRef.current = startIndex;
+    const track = tracks[startIndex];
+    setDuration(ticksToSeconds(track?.RunTimeTicks));
+    anchorAt(position, shouldPlay);
+    try {
+      if (shouldPlay) {
+        await startOn(deviceRef.current, track, position);
+        setPlaying(true);
+      }
+    } catch (e) {
+      setError(e.message);
+      setPlaying(false);
+    }
+  }, [anchorAt, startOn]);
+  const startHereRef = useRef(startHere);
+  useEffect(() => { startHereRef.current = startHere; }, [startHere]);
+
   // Run a command another client routed to us.
   const executeCommand = useCallback(async (cmd) => {
     if (!cmd) return;
-    if (cmd.action === 'play' && jf && Array.isArray(cmd.trackIds) && cmd.trackIds.length) {
+    if (cmd.action === 'transfer' && jf) {
+      // Another client handed the active session to us. Claim immediately so we
+      // stop routing controls away, then resume the track at its playhead.
+      relayRef.current?.claim();
+      activePlayerRef.current = null;
+      if (Array.isArray(cmd.trackIds) && cmd.trackIds.length) {
+        try {
+          const q = new URLSearchParams({ Ids: cmd.trackIds.join(','), userId: jf.userId, Fields: 'MediaSources,ArtistItems,AlbumArtists,UserData' });
+          const data = await jf._fetch(`/Items?${q}`);
+          const byId = new Map((data.Items || []).map((t) => [t.Id, t]));
+          const tracks = cmd.trackIds.map((id) => byId.get(id)).filter(Boolean);
+          if (tracks.length) startHereRef.current(tracks, cmd.index || 0, cmd.position || 0, cmd.playing !== false);
+        } catch { /* ignore */ }
+      }
+    } else if (cmd.action === 'play' && jf && Array.isArray(cmd.trackIds) && cmd.trackIds.length) {
       try {
         const q = new URLSearchParams({ Ids: cmd.trackIds.join(','), userId: jf.userId, Fields: 'ArtistItems,AlbumArtists,UserData' });
         const data = await jf._fetch(`/Items?${q}`);
@@ -678,6 +1028,10 @@ export function usePlayer(jf) {
     } else if (cmd.action === 'toggle') { toggleRef.current(); }
     else if (cmd.action === 'seek') { seekRef.current(cmd.pos || 0); }
     else if (cmd.action === 'setVolume') { setVolumeRef.current(cmd.level ?? 100); }
+    else if (cmd.action === 'next') { advanceRef.current(false); }
+    else if (cmd.action === 'previous') { previousRef.current(); }
+    else if (cmd.action === 'setRepeat') { setRepeatModeRef.current(cmd.mode || 'off'); }
+    else if (cmd.action === 'setShuffle') { setShuffleModeRef.current(cmd.mode || 'off'); }
     else if (cmd.action === 'yield') { yieldRef.current(); }
   }, [jf]);
 
@@ -697,6 +1051,9 @@ export function usePlayer(jf) {
   useEffect(() => { toggleRef.current = toggle; }, [toggle]);
   useEffect(() => { seekRef.current = seek; }, [seek]);
   useEffect(() => { setVolumeRef.current = setVolume; }, [setVolume]);
+  useEffect(() => { previousRef.current = previous; }, [previous]);
+  useEffect(() => { setRepeatModeRef.current = setRepeatMode; }, [setRepeatMode]);
+  useEffect(() => { setShuffleModeRef.current = setShuffleMode; }, [setShuffleMode]);
   useEffect(() => { activePlayerRef.current = relayTargetId; }, [relayTargetId]);
 
   // Broadcast what we're playing so the roster shows it on other clients. The
@@ -714,10 +1071,12 @@ export function usePlayer(jf) {
       title: current.Name,
       artist: current.Artists?.join(', ') || current.AlbumArtist || '',
       artUrl: `${npBaseUrl}/Items/${current.AlbumId || current.Id}/Images/Primary?maxHeight=128`,
-      playing, position, duration, volume, at: Date.now(),
+      albumId: current.AlbumId || null,
+      artistId: current.ArtistItems?.[0]?.Id || current.AlbumArtists?.[0]?.Id || null,
+      playing, position, duration, volume, repeat, shuffle, at: Date.now(),
     } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current, playing, Math.floor(position), duration, volume, relayTarget]);
+  }, [current, playing, Math.floor(position), duration, volume, repeat, shuffle, relayTarget]);
 
   const [, forceTick] = useState(0);
   useEffect(() => {
@@ -733,20 +1092,24 @@ export function usePlayer(jf) {
   const shownDuration = relayTarget ? (relayTarget.duration || 0) : duration;
   const shownPlaying = relayTarget ? Boolean(relayTarget.playing) : playing;
   const shownVolume = relayTarget && typeof relayTarget.volume === 'number' ? relayTarget.volume : volume;
+  const shownRepeat = relayTarget ? (relayTarget.repeat || 'off') : repeat;
+  const shownShuffle = relayTarget ? (relayTarget.shuffle || 'off') : shuffle;
 
   return useMemo(
     () => ({
-      device, setDevice, adoptActive, nowPlaying, external, patchQueue, contextId,
+      device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, contextId,
       relayDevices, attachRelay, applyRoster, executeCommand, roster, relay: relayInstance,
       queue, index, current,
       playing: shownPlaying, position: shownPosition, duration: shownDuration, volume: shownVolume, error,
+      repeat: shownRepeat, shuffle: shownShuffle, cycleRepeat, cycleShuffle,
       playQueue, toggle, next, previous, seek, setVolume, skipTo,
       clearError: () => setError(null),
     }),
     // eslint-disable-next-line
-    [device, setDevice, adoptActive, nowPlaying, external, patchQueue, contextId,
+    [device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, contextId,
      relayDevices, attachRelay, applyRoster, executeCommand, roster, relayInstance, queue, index, current,
-     shownPlaying, shownPosition, shownDuration, shownVolume, error, playQueue, toggle, next,
+     shownPlaying, shownPosition, shownDuration, shownVolume, error, shownRepeat, shownShuffle,
+     cycleRepeat, cycleShuffle, playQueue, toggle, next,
      previous, seek, setVolume, skipTo]
   );
 }

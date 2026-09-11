@@ -11,8 +11,8 @@ import puppeteer from 'puppeteer';
 
 const APP = 'http://192.168.1.85:8748';
 const JELLYFIN = 'http://192.168.1.85:2101';
-const USER = 'lukasbaxter';
-const PASS = 'Conduit-Temp-4417';
+const USER = 'conduittest'; // dedicated test account: never the real session
+const PASS = 'Conduit-Test-9921';
 
 // Two distinct real tracks.
 const X = { id: '48202c7882093a3cb6637bd61ac61bd4', title: 'Feeling Like I' };
@@ -56,11 +56,25 @@ async function takeOver(page) {
   });
 }
 
+// This client's relay clientId (short suffix matches the debug overlay).
+const clientId = (page) => page.evaluate(() => window.__player.relay?.id || null);
+
+// Push playback onto ANOTHER client by picking it in the device picker. This is
+// the browser -> desktop transfer path: the target must take over the CURRENT
+// song at the CURRENT position, not restart at 0.
+async function transferTo(page, targetClientId) {
+  await page.evaluate((tid) => {
+    window.__player.setDevice({ id: `relay:${tid}`, kind: 'relay', name: 'target', relayClientId: tid });
+  }, targetClientId);
+}
+
+const parseT = (s) => { if (!s) return -1; const [m, x] = s.split(':').map(Number); return m * 60 + x; };
 const state = (page) => page.evaluate(() => ({
   active: (document.querySelector('div[style*="monospace"]')?.textContent.match(/active=(\w+)/) || [])[1] || 'none',
   myId: (document.querySelector('div[style*="monospace"]')?.textContent.match(/myId=(\w+)/) || [])[1] || '?',
   title: document.querySelector('.player-title')?.textContent || '',
   green: document.querySelector('.playing-elsewhere')?.textContent || '',
+  pos: document.querySelector('.player-seek .t')?.textContent || '',
 }));
 
 async function main() {
@@ -115,6 +129,26 @@ async function main() {
   log('B1:', JSON.stringify(s1)); log('B2:', JSON.stringify(s2));
   assert(s1.active === s1.myId, 'B1 is the active player again');
   assert(s2.active === s1.myId, 'B2 sees B1 as active');
+
+  // 5. B1 PUSHES playback to B2 via the device picker (browser -> desktop). The
+  //    song must move to B2 and keep playing at its position, B1 must stop and
+  //    show the green bar. This is the exact flow that used to restart at 0:00
+  //    on the sender and do nothing on the target.
+  log('\n[5] B1 pushes playback to B2 (device picker transfer)');
+  const b2id = await clientId(B2);
+  await sleep(2500); // let Y advance so we can prove it did NOT restart at 0
+  const before = parseT((await state(B1)).pos);
+  log('B1 position before transfer:', before);
+  await transferTo(B1, b2id);
+  await sleep(4500);
+  s1 = await state(B1); s2 = await state(B2);
+  log('B1:', JSON.stringify(s1)); log('B2:', JSON.stringify(s2));
+  assert(s2.active === s2.myId, 'B2 became the active player');
+  assert(s1.active === s2.myId, 'B1 sees B2 as active');
+  assert(s2.title.includes(Y.title), 'B2 is playing the same song (Y)');
+  assert(parseT(s2.pos) >= Math.max(0, before - 1), `B2 resumed at position, not 0 (${before} -> ${s2.pos})`);
+  assert(s1.green.includes('Playing on'), 'B1 shows the green bar after pushing to B2');
+  assert(s1.title.includes(Y.title), 'B1 mirrors Y');
 
   await browser.close();
   console.log(failures ? `\n  ${failures} FAILURE(S)` : '\n  ALL PASSED');
