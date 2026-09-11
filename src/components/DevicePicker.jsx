@@ -70,6 +70,7 @@ export default function DevicePicker({ devices, active, onSelect }) {
   ].filter((g) => g.items.length);
 
   const remoteCount = visible.length;
+  const isBrowser = typeof window !== 'undefined' && !window.conduit;
 
   return (
     <div className="devicepicker" ref={ref}>
@@ -86,7 +87,7 @@ export default function DevicePicker({ devices, active, onSelect }) {
         <div className="devicemenu" role="menu">
           <div className="devicemenu-head">
             <strong>Play on</strong>
-            <span>{remoteCount ? `${remoteCount} found` : 'searching...'}</span>
+            <span>{remoteCount ? `${remoteCount} found` : (isBrowser ? '' : 'searching...')}</span>
           </div>
 
           {groups.map((g) => (
@@ -110,7 +111,13 @@ export default function DevicePicker({ devices, active, onSelect }) {
             </div>
           ))}
 
-          {!remoteCount && (
+          {!remoteCount && isBrowser && (
+            <p className="devicemenu-empty">
+              Speaker control lives in the Conduit desktop app for now. In your
+              browser you can play through this device.
+            </p>
+          )}
+          {!remoteCount && !isBrowser && (
             <p className="devicemenu-empty">
               No speakers found yet. Chromecast and Bluesound players appear here
               automatically once they are awake on the same network.
