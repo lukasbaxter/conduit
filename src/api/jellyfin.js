@@ -313,6 +313,15 @@ export class Jellyfin {
     return this._cached(`favorites:${opts.limit || 500}`, () => this._favoriteTracks(opts));
   }
 
+  async favoriteCount() {
+    const q = new URLSearchParams({
+      IncludeItemTypes: 'Audio', Recursive: 'true', Filters: 'IsFavorite',
+      Limit: '0', userId: this.userId,
+    });
+    const data = await this._fetch(`/Items?${q}`);
+    return data.TotalRecordCount ?? 0;
+  }
+
   async _favoriteTracks({ limit = 500 } = {}) {
     const q = new URLSearchParams({
       IncludeItemTypes: 'Audio',

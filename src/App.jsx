@@ -119,12 +119,8 @@ export default function App() {
   // Restore a saved session, but only if the token still works.
   useEffect(() => {
     const saved = loadSession();
-    if (!saved) { setBooting(false); return; }
-    const client = new Jellyfin(saved);
-    client.albums({ limit: 1 })
-      .then(() => setJf(client))
-      .catch(() => clearSession())
-      .finally(() => setBooting(false));
+    if (saved) setJf(new Jellyfin(saved));
+    setBooting(false);
   }, []);
 
   useEffect(() => {
@@ -138,21 +134,21 @@ export default function App() {
   useEffect(() => {
     if (!jf) return;
     setLibLoading(true);
-    Promise.all([jf.albums({ limit: 500 }), jf.artists({ limit: 500 }), jf.playlists(), jf.favoriteTracks()])
-      .then(([a, r, p, f]) => {
-        setAlbums(a.items); setArtists(r.items); setPlaylists(p.items);
-        setLikedCount(f.total); likedCacheRef.current = f.items;
-      })
-      .catch(() => {})
+    jf.albums({ limit: 500 }).then((a) => setAlbums(a.items))
+      .catch((e) => { if (String(e).includes('401')) { clearSession(); setJf(null); } })
       .finally(() => setLibLoading(false));
+    jf.artists({ limit: 500 }).then((r) => setArtists(r.items)).catch(() => {});
+    jf.playlists().then((p) => setPlaylists(p.items)).catch(() => {});
+    // Just the count for the sidebar; the tracks load when Liked Songs is opened.
+    jf.favoriteCount().then(setLikedCount).catch(() => {});
   }, [jf]);
 
   const notify = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
 
   const refreshPlaylists = async () => {
     try {
-      const [p, f] = await Promise.all([jf.playlists(), jf.favoriteTracks({ limit: 1 })]);
-      setPlaylists(p.items); setLikedCount(f.total);
+      const [p, n] = await Promise.all([jf.playlists(), jf.favoriteCount()]);
+      setPlaylists(p.items); setLikedCount(n);
     } catch { /* ignore */ }
   };
 
