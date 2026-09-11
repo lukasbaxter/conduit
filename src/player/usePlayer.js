@@ -84,10 +84,9 @@ export function usePlayer(jf) {
   const startOn = useCallback(
     async (dev, track, seekSeconds = 0) => {
       if (!jf || !track) return;
-      const url = jf.streamUrl(track.Id);
       if (dev.kind === 'local') {
         const el = audioRef.current;
-        el.src = url;
+        el.src = jf.streamUrl(track.Id);
         el.volume = volume / 100;
         if (seekSeconds > 0) {
           // currentTime only sticks once the browser knows the duration.
@@ -95,10 +94,10 @@ export function usePlayer(jf) {
         }
         await el.play();
       } else {
+        // Remote receivers pull the stream themselves, so an offset is baked
+        // into the URL rather than issued as a seek after the fact.
+        const url = jf.streamUrl(track.Id, { startSeconds: seekSeconds });
         await remote.play(dev, url, metaFor(track));
-        if (seekSeconds > 0) {
-          await remote.seek(dev, seekSeconds).catch(() => {});
-        }
       }
       jf.reportStart(track.Id);
     },
@@ -197,14 +196,31 @@ export function usePlayer(jf) {
     async (seconds) => {
       const dev = deviceRef.current;
       setPosition(seconds);
+      if (dev.kind === 'local') {
+        audioRef.current.currentTime = seconds;
+        return;
+      }
       try {
-        if (dev.kind === 'local') audioRef.current.currentTime = seconds;
-        else await remote.seek(dev, seconds);
+        await remote.seek(dev, seconds);
       } catch (e) {
+        // BluOS refuses to seek a URL stream and tearing one down mid-seek
+        // leaves the player stopped. Restarting the stream from the offset is
+        // the only way to move within a track there.
+        const track = queueRef.current[indexRef.current];
+        if (track) {
+          try {
+            await startOn(dev, track, seconds);
+            setPlaying(true);
+            return;
+          } catch (e2) {
+            setError(e2.message);
+            return;
+          }
+        }
         setError(e.message);
       }
     },
-    [remote]
+    [remote, startOn]
   );
 
   const setVolume = useCallback(

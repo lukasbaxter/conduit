@@ -133,9 +133,13 @@ export class Jellyfin {
 
   // --- urls handed to remote devices --------------------------------------
 
-  streamUrl(itemId, { container = null } = {}) {
+  // `startSeconds` lets us fake seeking on receivers that refuse to seek a URL
+  // stream (BluOS reports canSeek=0 for these): re-issue the stream from an
+  // offset instead of asking the device to move within it.
+  streamUrl(itemId, { container = null, startSeconds = 0 } = {}) {
     const q = new URLSearchParams({ static: 'true', api_key: this.token });
     if (container) q.set('container', container);
+    if (startSeconds > 0) q.set('startTimeTicks', String(Math.round(startSeconds * 10_000_000)));
     return `${this.baseUrl}/Audio/${itemId}/stream?${q}`;
   }
 

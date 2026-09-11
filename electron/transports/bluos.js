@@ -78,7 +78,17 @@ class BluOSTransport {
     return this._get(`/Volume?level=${v}`);
   }
 
+  // A URL handed to /Play?url= is treated as a radio stream, and BluOS reports
+  // canSeek=0 for those. Issuing /Play?seek= against one does not just fail, it
+  // tears down the stream and leaves the player stopped. So refuse the request
+  // and let the caller fall back to restarting the stream at an offset.
   async seek(seconds) {
+    const { canSeek } = await this.status();
+    if (!canSeek) {
+      const err = new Error('BluOS cannot seek a URL stream');
+      err.code = 'ENOSEEK';
+      throw err;
+    }
     return this._get(`/Play?seek=${Math.max(0, Math.round(seconds))}`);
   }
 
@@ -95,6 +105,7 @@ class BluOSTransport {
       volume: Number(tag(xml, 'volume') ?? 0),
       position: Number(tag(xml, 'secs') ?? 0),
       duration: Number(tag(xml, 'totlen') ?? 0),
+      canSeek: tag(xml, 'canSeek') === '1',
     };
   }
 }
