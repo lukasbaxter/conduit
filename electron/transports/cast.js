@@ -144,10 +144,21 @@ class CastTransport {
     return promisify(this.client.setVolume, this.client)({ level: v });
   }
 
+  // The RECEIVER volume (device level), read from the connection, not the media
+  // player. The media player's own volume is a separate stream gain that stays
+  // at 1.0 -- reading that was making the slider snap back to 100.
+  async _receiverVolume() {
+    if (!this.client) return null;
+    try {
+      const st = await new Promise((resolve) => this.client.getStatus((e, x) => resolve(e ? null : x)));
+      return typeof st?.volume?.level === 'number' ? Math.round(st.volume.level * 100) : null;
+    } catch { return null; }
+  }
+
   async status() {
-    if (!this.player) return { playing: false, state: 'IDLE' };
+    if (!this.player) return { playing: false, state: 'IDLE', volume: await this._receiverVolume() };
     const s = await this._withPlayer('getStatus');
-    if (!s) return { playing: false, state: 'IDLE' };
+    if (!s) return { playing: false, state: 'IDLE', volume: await this._receiverVolume() };
     const md = s.media?.metadata || {};
     return {
       playing: s.playerState === 'PLAYING',
@@ -157,7 +168,7 @@ class CastTransport {
       album: md.albumName || null,
       position: s.currentTime || 0,
       duration: s.media?.duration || 0,
-      volume: Math.round((s.volume?.level ?? 0) * 100),
+      volume: await this._receiverVolume(),
       streamUrl: s.media?.contentId || null,
     };
   }
