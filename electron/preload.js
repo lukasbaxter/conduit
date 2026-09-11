@@ -49,7 +49,7 @@ contextBridge.exposeInMainWorld('conduit', {
   },
 
   remote: {
-    play: (device, url, meta) => call('device:play', device, url, meta),
+    play: (device, url, meta, startAt = 0) => call('device:play', device, url, meta, startAt),
     resume: (device) => call('device:resume', device),
     pause: (device) => call('device:pause', device),
     stop: (device) => call('device:stop', device),

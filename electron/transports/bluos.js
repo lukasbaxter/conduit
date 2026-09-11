@@ -146,7 +146,14 @@ class BluOSTransport {
   }
 
   // `url` must be absolute and LAN-reachable by the speaker itself.
-  async play(url, meta = {}) {
+  //
+  // `startAt` (seconds): BluOS cannot open a stream at an offset (an offset
+  // stream from Jellyfin is chunked with no Content-Length and the player
+  // refuses it), so the only way to resume mid-track is play-from-zero then
+  // seek. Unmuted, that leaks the first second of the song before the seek
+  // lands. So: mute, play, seek, wait for the playhead to reach the target,
+  // unmute. The user hears silence for a beat, then the right spot.
+  async play(url, meta = {}, startAt = 0) {
     const q = new URLSearchParams({ url });
     if (await this._metadataIsSafe()) {
       // Shown in the BluOS app and on the device's display.
@@ -155,7 +162,30 @@ class BluOSTransport {
       if (meta.album) q.set('title3', meta.album);
       if (meta.artwork) q.set('image', meta.artwork);
     }
-    return this._get(`/Play?${q.toString()}`);
+    const target = Math.max(0, Math.round(startAt || 0));
+    // Under ~2s the leak is shorter than the mute dance itself; just play.
+    if (target < 2) return this._get(`/Play?${q.toString()}`);
+
+    let muted = false;
+    try {
+      await this._get('/Volume?mute=1');
+      muted = true;
+      const res = await this._get(`/Play?${q.toString()}`);
+      // A failed seek is not a failed play (the old path ignored it too); the
+      // track still plays, just from the top.
+      await this.seek(target).catch(() => {});
+      // seek() confirms within 12s of the target; tighten that to "the
+      // playhead has actually left the head of the track" before unmuting.
+      const deadline = Date.now() + 2500;
+      while (Date.now() < deadline) {
+        const s = await this.status().catch(() => null);
+        if (s && s.position >= target - 1) break;
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      return res;
+    } finally {
+      if (muted) await this._get('/Volume?mute=0').catch(() => {});
+    }
   }
 
   resume() { return this._get('/Play'); }

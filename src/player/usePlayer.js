@@ -226,17 +226,14 @@ export function usePlayer(jf) {
         if (!containerOf(track) && jf.container) {
           try { track._container = await jf.container(track.Id); } catch { /* default */ }
         }
-        // Play the static file, then seek. The offset cannot go in the URL:
-        // Jellyfin's transcoded offset stream is chunked with no Content-Length
-        // and BluOS silently refuses to load it.
+        // Play the static file with the offset handed to the transport. The
+        // offset cannot go in the URL (Jellyfin's offset stream is chunked with
+        // no Content-Length and BluOS refuses it), so each transport does what
+        // its device can: Cast loads at currentTime; BluOS mutes, plays, seeks
+        // and unmutes once the playhead is there -- either way nothing from
+        // the head of the track is heard.
         const url = jf.streamUrl(track.Id);
-        await remote.play(dev, url, metaFor(track));
-        if (seekSeconds > 0) {
-          // No fixed delay here: the transport waits for the device to report
-          // the stream open and seekable. Seeking too early tears the stream
-          // down and leaves the player frozen at 0 with no audio.
-          await remote.seek(dev, seekSeconds).catch(() => {});
-        }
+        await remote.play(dev, url, metaFor(track), seekSeconds > 0 ? seekSeconds : 0);
       }
       loadedRef.current = track.Id;
       jf.reportStart(track.Id);

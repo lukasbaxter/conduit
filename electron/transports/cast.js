@@ -44,16 +44,19 @@ class CastTransport {
     return this.player;
   }
 
-  async play(url, meta = {}) {
+  // `startAt` (seconds) goes into the LOAD itself (currentTime), so the
+  // receiver opens the stream at the offset instead of playing the head of
+  // the track and then jumping.
+  async play(url, meta = {}, startAt = 0) {
     // Serialise loads. Two overlapping LOADs create two media sessions on the
     // receiver, and whichever id we cached is then wrong for every command
     // that follows. Let a second play wait for the first to settle.
     if (this._loading) await this._loading.catch(() => {});
-    this._loading = this._play(url, meta);
+    this._loading = this._play(url, meta, startAt);
     try { return await this._loading; } finally { this._loading = null; }
   }
 
-  async _play(url, meta = {}) {
+  async _play(url, meta = {}, startAt = 0) {
     const player = await this._connect();
     const media = {
       contentId: url,
@@ -70,7 +73,9 @@ class CastTransport {
         images: [meta.artwork, meta.artworkFallback].filter(Boolean).map((url) => ({ url })),
       },
     };
-    const status = await promisify(player.load, player)(media, { autoplay: true });
+    const opts = { autoplay: true };
+    if (startAt > 0) opts.currentTime = Math.max(0, Math.floor(startAt));
+    const status = await promisify(player.load, player)(media, opts);
 
     // A receiver that cannot actually play (TV off, Streamer in standby, media
     // unreachable from the device) still ACKS the load, then flips to

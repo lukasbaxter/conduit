@@ -166,7 +166,7 @@ ipcMain.on('renderer:debug', (_e, msg) => trace(`ui: ${msg}`));
 
 handle('devices:list', () => (discovery ? withSyncInfo(discovery.list()) : []));
 
-handle('device:play', (device, url, meta) => transportFor(device).play(url, meta));
+handle('device:play', (device, url, meta, startAt) => transportFor(device).play(url, meta, startAt || 0));
 handle('device:resume', (device) => transportFor(device).resume());
 handle('device:pause', (device) => transportFor(device).pause());
 handle('device:stop', (device) => transportFor(device).stop());
