@@ -100,6 +100,17 @@ mapping the code when we stopped.
 ---
 
 ## Shipped 2026-09-11 (done, deployed to :8748, tested)
+- Speakers everywhere: the active player broadcasts its output `device`
+  ({id,kind,name}); the green bar says "Playing on NODE 2i-98C1" on EVERY
+  client (including the one driving it) when the session is on a speaker, and
+  the picker shows the speaker. Browser pickers list LAN speakers from
+  `roster.lanDevices`; picking one sends `transfer{deviceId}` to `viaClient`
+  (the desktop), which stops its old output, switches device and resumes.
+  Picking a client = its own output (`deviceId:'local'`). RELAY FIX: every
+  private IP (+ the home WAN IP, learned via ipify hourly / HOME_PUBLIC_IP)
+  folds into one 'lan' network -- before, desktop (192.168.1.x direct) and
+  browser (192.168.1.y via nginx XFF) were "different networks", so the web
+  never saw the speakers. `test/speaker.test.mjs`. Relay redeployed.
 - Footer heart follows the SESSION track (nowPlaying.itemId/liked): works on
   a mirroring client; a like there sends `patchLiked` to the active player so
   its queue (source of the mirrored state) updates. `test/liked.test.mjs`.

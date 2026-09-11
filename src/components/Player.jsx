@@ -10,15 +10,22 @@ function fmt(seconds) {
 }
 
 export function PlayingElsewhereBar({ player }) {
-  const { roster, relay } = player;
-  // The shared session lives on another of my clients: name it. Shown whenever
-  // the active player is not this client, regardless of what this client shows.
+  const { roster, relay, device } = player;
+  // Where the sound is coming out, if not this client's own output:
+  //  - the session is on another of my clients -> that client's name, unless
+  //    that client is itself driving a speaker -> the speaker's name;
+  //  - this client is the player but the sound is on a speaker (Node, TV) ->
+  //    the speaker's name. Every client then shows the same "Playing on Node".
   const myId = relay?.id;
   const activeId = roster?.activeClientId;
   const active = activeId && activeId !== myId
     ? (roster.players || []).find((p) => p.id === activeId)
     : null;
-  if (!active) return null;
+  const isSpeaker = (d) => d && d.kind !== 'local' && d.kind !== 'relay';
+  let label = null;
+  if (active) label = isSpeaker(active.nowPlaying?.device) ? active.nowPlaying.device.name : active.name;
+  else if (isSpeaker(device)) label = device.name;
+  if (!label) return null;
   return (
     <div className="playing-elsewhere">
       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
@@ -28,7 +35,7 @@ export function PlayingElsewhereBar({ player }) {
         <path d="M2 16a5 5 0 0 1 4 4" />
         <path d="M2 20h.01" />
       </svg>
-      <span>Playing on {active.name}</span>
+      <span>Playing on {label}</span>
     </div>
   );
 }
@@ -40,9 +47,14 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
   // client (matching the green bar) instead of falsely marking "This Computer"
   // as active -- the contradictory state where the app claimed both at once.
   const activeId = roster?.activeClientId;
+  const activeSpeaker = nowPlaying?.device && nowPlaying.device.kind !== 'local' && nowPlaying.device.kind !== 'relay'
+    ? nowPlaying.device : null;
   const sessionDevice = activeId && activeId !== relay?.id
-    ? (devices.find((d) => d.kind === 'relay' && d.relayClientId === activeId)
-        || { id: `relay:${activeId}`, kind: 'relay', name: (roster.players || []).find((p) => p.id === activeId)?.name || 'Conduit' })
+    ? (activeSpeaker
+        // The other client is driving a speaker: the session is ON the speaker.
+        ? (devices.find((d) => d.id === activeSpeaker.id) || { ...activeSpeaker, model: '' })
+        : devices.find((d) => d.kind === 'relay' && d.relayClientId === activeId)
+          || { id: `relay:${activeId}`, kind: 'relay', name: (roster.players || []).find((p) => p.id === activeId)?.name || 'Conduit' })
     : device;
   // nowPlaying covers both our own queue and a session adopted from a speaker
   // that was already playing when the app opened.

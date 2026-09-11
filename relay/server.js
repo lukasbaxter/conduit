@@ -49,12 +49,39 @@ async function verify(token) {
   }
 }
 
-// The network a socket is on: the public IP it arrived from. Clients behind the
-// same NAT share it, which is our proxy for "same LAN". Behind nginx/CF we read
-// the forwarded chain's last hop.
+// The network a socket is on. Clients behind the same NAT share a public IP,
+// which is our proxy for "same LAN". Behind nginx/CF we read the forwarded
+// chain's last hop.
+//
+// Every private address is the relay's OWN LAN (the relay runs at home): a
+// desktop connecting straight to :8788 shows as 192.168.1.x, a browser on the
+// same LAN via nginx shows as ITS 192.168.1.y -- different strings, same
+// network. Without this fold the web player never saw the speakers the desktop
+// reported. A LAN client that hairpins through the public hostname arrives as
+// the home's WAN IP, so that is folded into 'lan' too (learned at startup and
+// refreshed hourly; HOME_PUBLIC_IP env overrides).
+let homePublicIp = process.env.HOME_PUBLIC_IP || null;
+async function learnPublicIp() {
+  if (process.env.HOME_PUBLIC_IP) return;
+  try {
+    const r = await fetch('https://api.ipify.org', { signal: AbortSignal.timeout(5000) });
+    const ip = (await r.text()).trim();
+    if (/^[0-9a-f.:]+$/i.test(ip)) homePublicIp = ip;
+  } catch { /* keep the last known value */ }
+}
+learnPublicIp();
+setInterval(learnPublicIp, 60 * 60 * 1000);
+
+function isPrivate(ip) {
+  return /^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(ip)
+    || ip === '::1' || /^f[cd]/i.test(ip) || /^fe80:/i.test(ip);
+}
 function networkOf(req) {
   const xff = (req.headers['x-forwarded-for'] || '').split(',').map((s) => s.trim()).filter(Boolean);
-  return xff[xff.length - 1] || req.socket.remoteAddress || 'unknown';
+  let ip = xff[xff.length - 1] || req.socket.remoteAddress || 'unknown';
+  ip = ip.replace(/^::ffff:/, '');
+  if (isPrivate(ip) || (homePublicIp && ip === homePublicIp)) return 'lan';
+  return ip;
 }
 
 const server = http.createServer((req, res) => {

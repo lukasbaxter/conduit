@@ -204,6 +204,11 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jf]);
 
+  // The player needs the raw speaker list to resolve a transfer that names a
+  // device id (a browser picking one of this desktop's speakers).
+  const { registerDevices } = player;
+  useEffect(() => { registerDevices(devices); }, [devices, registerDevices]);
+
   // The desktop app tells the relay which LAN speakers it can see, so the
   // user's other clients on the same network can target them.
   useEffect(() => {
@@ -472,7 +477,7 @@ pos=${Math.round(player.position)} playing=${player.playing} vol=${player.volume
       <Player
         player={player}
         jf={jf}
-        devices={[...devices, ...player.relayDevices]}
+        devices={[...devices, ...player.relayDevices, ...player.lanDevices]}
         onOpenAlbum={openAlbumById}
         onOpenArtist={openArtistById}
         panel={panel}

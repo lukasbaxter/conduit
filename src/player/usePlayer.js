@@ -154,6 +154,19 @@ export function usePlayer(jf) {
   // so this just stores the roster.
   const applyRoster = useCallback((r) => { rosterRef.current = r; setRoster(r); }, []);
 
+  // The speakers THIS client can drive itself (desktop mDNS list), so a
+  // transfer command naming a device id can be resolved to a real device.
+  const localDevicesRef = useRef([]);
+  const registerDevices = useCallback((list) => { localDevicesRef.current = list || []; }, []);
+
+  // Speakers another of my clients on this network can see, offered to a
+  // browser (which cannot discover or drive them itself). Picking one asks
+  // that client (viaClient) to play the session on it. The desktop already
+  // lists its own speakers, so this is browser-only.
+  const lanDevices = remote ? [] : (roster.lanDevices || [])
+    .filter((d, i, arr) => arr.findIndex((x) => x.id === d.id) === i)
+    .map((d) => ({ id: d.id, kind: d.kind, name: d.name, model: d.kind === 'bluos' ? 'Bluesound' : 'Chromecast', viaClient: d.viaClient }));
+
   // Remote players from the relay, presented as selectable devices.
   const relayDevices = roster.players
     .filter((p) => p.canPlay)
@@ -578,7 +591,8 @@ export function usePlayer(jf) {
       // 'play' command would loop: the target still sees THIS client as active
       // and would route the command straight back, restarting the song here at
       // 0:00 (the exact bug this replaces).
-      if (nextDevice.kind === 'relay' && relayRef.current) {
+      const viaRelay = nextDevice.kind === 'relay' || (nextDevice.viaClient && !remote);
+      if (viaRelay && relayRef.current) {
         const act = activePlayerRef.current;
         let itemId = null;
         let pos = 0;
@@ -601,8 +615,15 @@ export function usePlayer(jf) {
             wasPlaying = playing;
           }
         }
-        relayRef.current.command(nextDevice.relayClientId, {
+        // A speaker seen through another client: that client takes the
+        // session and plays it on the named device.
+        const target = nextDevice.kind === 'relay' ? nextDevice.relayClientId : nextDevice.viaClient;
+        relayRef.current.command(target, {
           action: 'transfer', trackIds: itemId ? [itemId] : [], index: 0, position: pos, playing: wasPlaying,
+          // Picking a client means ITS OWN output (Spotify: "This Computer"),
+          // even if that client last drove a speaker; the speakers are listed
+          // separately.
+          deviceId: nextDevice.kind === 'relay' ? 'local' : nextDevice.id,
         });
         // Stop our own local playback right away so the two clients never overlap
         // while the target spins up. The target's claim also yields us as a
@@ -952,6 +973,7 @@ export function usePlayer(jf) {
         artistId: relayTarget.artistId || null,
         itemId: relayTarget.itemId || null,
         liked: Boolean(relayTarget.liked),
+        device: relayTarget.device || null,
       } : null)
     : current
     ? {
@@ -1012,6 +1034,15 @@ export function usePlayer(jf) {
       // stop routing controls away, then resume the track at its playhead.
       relayRef.current?.claim();
       activePlayerRef.current = null;
+      // A browser picked one of OUR speakers: play there instead of locally.
+      // Stop whatever this client was driving so two outputs never overlap.
+      if (cmd.deviceId) {
+        const dev = cmd.deviceId === 'local' ? LOCAL_DEVICE : localDevicesRef.current.find((d) => d.id === cmd.deviceId);
+        if (dev && dev.id !== deviceRef.current.id) {
+          await stopOn(deviceRef.current).catch(() => {});
+          setDeviceState(dev); deviceRef.current = dev; pinnedRef.current = true;
+        }
+      }
       if (Array.isArray(cmd.trackIds) && cmd.trackIds.length) {
         try {
           const q = new URLSearchParams({ Ids: cmd.trackIds.join(','), userId: jf.userId, Fields: 'MediaSources,ArtistItems,AlbumArtists,UserData' });
@@ -1046,7 +1077,7 @@ export function usePlayer(jf) {
         queueRef.current = n; return n;
       });
     }
-  }, [jf]);
+  }, [jf, stopOn]);
 
   const patchQueue = useCallback((fn) => {
     setQueue((q) => { const n = q.map(fn); queueRef.current = n; return n; });
@@ -1094,10 +1125,13 @@ export function usePlayer(jf) {
       albumId: current.AlbumId || null,
       artistId: current.ArtistItems?.[0]?.Id || current.AlbumArtists?.[0]?.Id || null,
       liked: Boolean(current.UserData?.IsFavorite),
+      // Where the sound actually comes out, so every client can say "Playing
+      // on Node" when the session is on a speaker rather than on a client.
+      device: { id: device.id, kind: device.kind, name: device.name },
       playing, position, duration, volume, repeat, shuffle, at: Date.now(),
     } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current, playing, Math.floor(position), duration, volume, repeat, shuffle, relayTarget]);
+  }, [current, playing, Math.floor(position), duration, volume, repeat, shuffle, relayTarget, device]);
 
   const [, forceTick] = useState(0);
   useEffect(() => {
@@ -1119,7 +1153,7 @@ export function usePlayer(jf) {
   return useMemo(
     () => ({
       device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId,
-      relayDevices, attachRelay, applyRoster, executeCommand, roster, relay: relayInstance,
+      relayDevices, lanDevices, registerDevices, attachRelay, applyRoster, executeCommand, roster, relay: relayInstance,
       queue, index, current,
       playing: shownPlaying, position: shownPosition, duration: shownDuration, volume: shownVolume, error,
       repeat: shownRepeat, shuffle: shownShuffle, cycleRepeat, cycleShuffle,
@@ -1128,7 +1162,7 @@ export function usePlayer(jf) {
     }),
     // eslint-disable-next-line
     [device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId,
-     relayDevices, attachRelay, applyRoster, executeCommand, roster, relayInstance, queue, index, current,
+     relayDevices, lanDevices, registerDevices, attachRelay, applyRoster, executeCommand, roster, relayInstance, queue, index, current,
      shownPlaying, shownPosition, shownDuration, shownVolume, error, shownRepeat, shownShuffle,
      cycleRepeat, cycleShuffle, playQueue, toggle, next,
      previous, seek, setVolume, skipTo]
