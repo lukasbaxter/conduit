@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import TrackRow, { PlayGlyph, Heart } from './TrackRow.jsx';
+import Home from './Home.jsx';
 
 export const LIKED_ID = '__liked__';
 
@@ -43,7 +44,7 @@ const SEARCH_TYPES = ['All', 'Songs', 'Artists', 'Albums', 'Playlists'];
 
 export default function Library({
   jf, player, view, albums, artists, playlists, detail, setDetail, query, setQuery,
-  onLike, onAddTo, onNewPlaylist, onRemoveFromPlaylist, onReorder, onOpenPlaylist, onOpenLiked,
+  onLike, onAddTo, onNewPlaylist, onRemoveFromPlaylist, onReorder, onOpenPlaylist, onOpenLiked, likedCount,
 }) {
   const [results, setResults] = useState(null);
   const [searchType, setSearchType] = useState('All');
@@ -373,19 +374,11 @@ export default function Library({
 
   // --- home ---------------------------------------------------------------
   return (
-    <div className="content">
-      <div className="contentbar">
-        <div className="pills">
-          <button className="pill on">All</button>
-          <button className="pill" onClick={() => setSeeAll('albums')}>Albums</button>
-          <button className="pill" onClick={() => setSeeAll('artists')}>Artists</button>
-        </div>
-      </div>
-      <div className="pad">
-        {err && <div className="banner error">{err}</div>}
-        <Shelf title="Jump back in" items={shelves.jump} jf={jf} onOpen={open} onPlay={playItem} onSeeAll={() => setSeeAll('albums')} />
-        <Shelf title="Artists you have" items={shelves.artists} jf={jf} round onOpen={open} onPlay={startMix} onSeeAll={() => setSeeAll('artists')} />
-      </div>
-    </div>
+    <Home
+      jf={jf} player={player} albums={albums} artists={artists} playlists={playlists}
+      likedCount={likedCount}
+      onOpen={open} onOpenLiked={onOpenLiked} onOpenPlaylist={onOpenPlaylist}
+      onSeeAll={setSeeAll}
+    />
   );
 }

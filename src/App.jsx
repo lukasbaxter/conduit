@@ -368,6 +368,7 @@ export default function App() {
           onReorder={onReorder}
           onOpenPlaylist={openPlaylist}
           onOpenLiked={openLiked}
+          likedCount={likedCount}
         />
         {panel && <div className="panel-spacer" />}
         {panel && (

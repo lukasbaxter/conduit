@@ -521,3 +521,35 @@ input[type="range"]:disabled { opacity: .4; }
   padding: 12px 16px; border-radius: 8px; z-index: 100;
   box-shadow: 0 4px 12px rgba(0,0,0,.5);
 }
+
+/* ---------- home ---------- */
+
+.home .greeting { font-size: 32px; font-weight: 700; letter-spacing: -1px; margin: 8px 0 20px; }
+
+/* Spotify's shortcut grid: 2 columns, 64px rows, art flush left, white 7%
+   background, play button revealed on hover at the right. */
+.shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 32px; }
+@media (min-width: 1200px) { .shortcuts { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.shortcut {
+  display: flex; align-items: center; gap: 16px; height: 64px; overflow: hidden;
+  background: #ffffff12; border-radius: var(--r-art); cursor: pointer; position: relative;
+  transition: background-color .3s;
+}
+.shortcut:hover { background: #ffffff1f; }
+.shortcut-art { width: 64px; height: 64px; object-fit: cover; flex: none; border-radius: 4px 0 0 4px; background: var(--card-hover); }
+.shortcut-art.ph { background: var(--card-hover); }
+.shortcut-title { font-size: 16px; font-weight: 700; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 56px; }
+.shortcut .shortcut-play { position: absolute; right: 8px; top: 50%; bottom: auto; transform: translateY(-50%) translateY(8px); width: 48px; height: 48px; }
+.shortcut:hover .shortcut-play { opacity: 1; transform: translateY(-50%); }
+
+.homeshelf .shelf { min-height: 0; }
+
+/* Daily Mix tiles: photo, then a solid colour band carrying the label. */
+.mixart img { object-position: top; }
+.mixband {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 12px;
+  background: var(--mix, #1e3264); color: #fff; font-size: 16px; font-weight: 700;
+  letter-spacing: -.2px; border-radius: 0 0 var(--r-art) var(--r-art);
+}
+.mixart .ph { background: linear-gradient(160deg, color-mix(in srgb, var(--mix) 55%, #000), var(--mix)); }
+.mixcard .card-play { bottom: 56px; }
