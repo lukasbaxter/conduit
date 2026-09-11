@@ -54,6 +54,7 @@ export function usePlayer(jf) {
   const [contextId, setContextId] = useState(null);
   const [roster, setRoster] = useState({ players: [], lanDevices: [] });
   const relayRef = useRef(null);
+  const pinnedRef = useRef(false); // user explicitly chose a device
   const adoptedRef = useRef(false);
 
   const audioRef = useRef(null);
@@ -112,7 +113,21 @@ export function usePlayer(jf) {
 
   const [relayInstance, setRelayInstance] = useState(null);
   const attachRelay = useCallback((relay) => { relayRef.current = relay; setRelayInstance(relay); }, []);
-  const applyRoster = useCallback((r) => setRoster(r), []);
+  const applyRoster = useCallback((r) => {
+    setRoster(r);
+    const myId = relayRef.current?.id;
+    const act = r.activeClientId;
+    // Follow the shared session unless the user pinned a specific output.
+    if (!pinnedRef.current) {
+      if (act && act !== myId) {
+        const p = (r.players || []).find((x) => x.id === act);
+        if (p) { setDeviceState({ id: `relay:${act}`, kind: 'relay', name: p.name, model: 'Conduit', relayClientId: act }); deviceRef.current = { id: `relay:${act}`, kind: 'relay', name: p.name, relayClientId: act }; }
+      } else if (deviceRef.current.kind === 'relay') {
+        // active session ended or became us -> drop back to local
+        setDeviceState(LOCAL_DEVICE); deviceRef.current = LOCAL_DEVICE;
+      }
+    }
+  }, []);
 
   // Remote players from the relay, presented as selectable devices.
   const relayDevices = roster.players
@@ -421,6 +436,7 @@ export function usePlayer(jf) {
   const setDevice = useCallback(
     async (nextDevice) => {
       const prev = deviceRef.current;
+      pinnedRef.current = true; // explicit user choice; stop auto-following
       if (prev.id === nextDevice.id) return;
       const track = queueRef.current[indexRef.current] || null;
       const wasPlaying = playing;

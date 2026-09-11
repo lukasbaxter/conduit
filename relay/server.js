@@ -27,6 +27,8 @@ const JELLYFIN = process.env.JELLYFIN_URL || 'http://192.168.1.85:2101';
 // userId -> Map(clientId -> client). A client:
 //   { id, ws, name, kind, net, token, canPlay, devices:[], nowPlaying }
 const users = new Map();
+// userId -> clientId of the current active player (the one actually playing).
+const active = new Map();
 
 function userMap(uid) {
   if (!users.has(uid)) users.set(uid, new Map());
@@ -88,7 +90,7 @@ function rosterFor(self) {
       }
     }
   }
-  return { type: 'roster', players, lanDevices };
+  return { type: 'roster', players, lanDevices, activeClientId: active.get(self.uid) || null };
 }
 
 function broadcastRoster(uid) {
@@ -153,9 +155,11 @@ wss.on('connection', (ws, req) => {
       // tell every other client of this user to yield (pause). Spotify Connect's
       // single-active-device model.
       case 'claim': {
+        active.set(self.uid, self.id);
         for (const c of userMap(self.uid).values()) {
           if (c.id !== self.id) send(c.ws, { type: 'command', from: self.id, command: { action: 'yield' } });
         }
+        broadcastRoster(self.uid);
         break;
       }
 
@@ -172,6 +176,7 @@ wss.on('connection', (ws, req) => {
     clearTimeout(timeout);
     if (self) {
       userMap(self.uid).delete(self.id);
+      if (active.get(self.uid) === self.id) active.delete(self.uid);
       broadcastRoster(self.uid);
     }
   });
