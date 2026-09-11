@@ -56,7 +56,7 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
                   {nowPlaying.artist}
                 </button>
               ) : (
-                nowPlaying?.artist || (nowPlaying && !current ? `on ${device.name}` : '')
+                nowPlaying?.artist || ''
               )}
             </div>
           </div>
