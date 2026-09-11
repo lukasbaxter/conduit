@@ -119,7 +119,17 @@ export default function App() {
   // Restore a saved session, but only if the token still works.
   useEffect(() => {
     const saved = loadSession();
-    if (saved) setJf(new Jellyfin(saved));
+    if (saved) {
+      const client = new Jellyfin(saved);
+      setJf(client);
+      // Paint instantly from the last run's data; the fetch below refreshes it.
+      const alb = client.persisted('albums'); if (alb) setAlbums(alb);
+      const art = client.persisted('artists'); if (art) setArtists(art);
+      const pls = client.persisted('playlists'); if (pls) setPlaylists(pls);
+      const lc = client.persisted('likedCount'); if (lc != null) setLikedCount(lc);
+      const lk = client.persisted('liked'); if (lk) likedCacheRef.current = lk;
+      if (alb) setLibLoading(false);
+    }
     setBooting(false);
   }, []);
 
@@ -133,14 +143,12 @@ export default function App() {
   // playlists are what "Your Library" shows.
   useEffect(() => {
     if (!jf) return;
-    setLibLoading(true);
-    jf.albums({ limit: 500 }).then((a) => setAlbums(a.items))
+    jf.albums({ limit: 500 }).then((a) => { setAlbums(a.items); jf._persist('albums', a.items); })
       .catch((e) => { if (String(e).includes('401')) { clearSession(); setJf(null); } })
       .finally(() => setLibLoading(false));
-    jf.artists({ limit: 500 }).then((r) => setArtists(r.items)).catch(() => {});
-    jf.playlists().then((p) => setPlaylists(p.items)).catch(() => {});
-    // Just the count for the sidebar; the tracks load when Liked Songs is opened.
-    jf.favoriteCount().then(setLikedCount).catch(() => {});
+    jf.artists({ limit: 500 }).then((r) => { setArtists(r.items); jf._persist('artists', r.items); }).catch(() => {});
+    jf.playlists().then((p) => { setPlaylists(p.items); jf._persist('playlists', p.items); }).catch(() => {});
+    jf.favoriteCount().then((n) => { setLikedCount(n); jf._persist('likedCount', n); }).catch(() => {});
   }, [jf]);
 
   const notify = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
@@ -222,6 +230,7 @@ export default function App() {
     try {
       const { items } = await jf.favoriteTracks();
       likedCacheRef.current = items;
+      jf._persist('liked', items);
       setDetail((d) => (d && d.item?.Id === LIKED_ID ? { ...d, tracks: items, loading: false } : d));
     } catch { /* keep what we showed */ }
   };

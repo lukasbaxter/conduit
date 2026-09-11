@@ -19,12 +19,12 @@ const MIME_BY_CONTAINER = {
 };
 
 function containerOf(track) {
-  const c = (track?.MediaSources?.[0]?.Container || track?.Container || '').toLowerCase();
-  return c.split(',')[0] || 'mp3';
+  const c = (track?._container || track?.MediaSources?.[0]?.Container || track?.Container || '').toLowerCase();
+  return c.split(',')[0] || '';
 }
 
 function mimeOf(track) {
-  return MIME_BY_CONTAINER[containerOf(track)] || 'audio/mpeg';
+  return MIME_BY_CONTAINER[containerOf(track) || 'mp3'] || 'audio/mpeg';
 }
 
 function ticksToSeconds(ticks) {
@@ -153,6 +153,11 @@ export function usePlayer(jf) {
         }
         await el.play();
       } else {
+        // The list fetch skipped MediaSources; get the container now so Cast
+        // gets the right MIME. One tiny request, cached.
+        if (!containerOf(track) && jf.container) {
+          try { track._container = await jf.container(track.Id); } catch { /* default */ }
+        }
         // Play the static file, then seek. The offset cannot go in the URL:
         // Jellyfin's transcoded offset stream is chunked with no Content-Length
         // and BluOS silently refuses to load it.

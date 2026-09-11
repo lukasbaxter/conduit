@@ -40,6 +40,20 @@ export class Jellyfin {
     // Session cache for list reads. A click should never wait on a fetch for
     // something already shown once; mutations evict what they change.
     this._cache = new Map();
+    this._lsPrefix = `conduit.cache.${this.userId || 'x'}.`;
+  }
+
+  // Read a persisted value written on a previous run (survives reload).
+  persisted(key) {
+    try {
+      const raw = localStorage.getItem(this._lsPrefix + key);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  }
+
+  _persist(key, value) {
+    try { localStorage.setItem(this._lsPrefix + key, JSON.stringify(value)); }
+    catch { /* quota or private mode; the in-memory cache still works */ }
   }
 
   _cached(key, fn) {
@@ -196,7 +210,7 @@ export class Jellyfin {
     const q = new URLSearchParams({
       IncludeItemTypes: 'Audio',
       Recursive: 'true',
-      Fields: 'MediaSources,ParentId,ArtistItems,AlbumArtists,UserData',
+      Fields: 'ParentId,ArtistItems,AlbumArtists,UserData',
       SortBy: albumId ? 'ParentIndexNumber,IndexNumber,SortName' : 'SortName',
       Limit: String(limit),
       userId: this.userId,
@@ -238,7 +252,7 @@ export class Jellyfin {
     const q = new URLSearchParams({
       userId: this.userId,
       Limit: String(limit),
-      Fields: 'MediaSources,ParentId,ArtistItems,AlbumArtists,UserData',
+      Fields: 'ParentId,ArtistItems,AlbumArtists,UserData',
     });
     const data = await this._fetch(`/Playlists/${playlistId}/Items?${q}`);
     return { items: data.Items || [], total: data.TotalRecordCount ?? 0 };
@@ -329,12 +343,23 @@ export class Jellyfin {
       Filters: 'IsFavorite',
       SortBy: 'DateCreated',
       SortOrder: 'Descending',
-      Fields: 'MediaSources,ParentId,ArtistItems,AlbumArtists,UserData',
+      Fields: 'ParentId,ArtistItems,AlbumArtists,UserData',
       Limit: String(limit),
       userId: this.userId,
     });
     const data = await this._fetch(`/Items?${q}`);
     return { items: data.Items || [], total: data.TotalRecordCount ?? 0 };
+  }
+
+  // Container for one track, fetched lazily at play time so list fetches can
+  // skip the heavy MediaSources field. Cached per id.
+  async container(itemId) {
+    return this._cached(`container:${itemId}`, async () => {
+      const q = new URLSearchParams({ Ids: itemId, Fields: 'MediaSources', userId: this.userId });
+      const d = await this._fetch(`/Items?${q}`);
+      const c = d.Items?.[0]?.MediaSources?.[0]?.Container || '';
+      return c.split(',')[0].toLowerCase();
+    });
   }
 
   // --- playlist mutation ---------------------------------------------------
