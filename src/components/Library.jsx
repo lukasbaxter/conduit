@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import TrackRow, { PlayGlyph, Heart } from './TrackRow.jsx';
+import TrackRow, { PlayGlyph, PauseGlyph, Heart } from './TrackRow.jsx';
 import Home from './Home.jsx';
 
 export const LIKED_ID = '__liked__';
@@ -45,6 +45,7 @@ const SEARCH_TYPES = ['All', 'Songs', 'Artists', 'Albums', 'Playlists'];
 export default function Library({
   jf, player, view, albums, artists, playlists, detail, setDetail, query, setQuery,
   onLike, onAddTo, onNewPlaylist, onRemoveFromPlaylist, onReorder, onOpenPlaylist, onOpenLiked, likedCount,
+  onOpenArtistById, onOpenAlbumById,
 }) {
   const [results, setResults] = useState(null);
   const [searchType, setSearchType] = useState('All');
@@ -107,11 +108,13 @@ export default function Library({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [albums.length, artists.length]);
 
-  const rowProps = (tracks, i, extra = {}) => ({
+  const rowProps = (tracks, i, extra = {}, ctx = null) => ({
     track: tracks[i], n: i + 1, jf,
     active: player.current?.Id === tracks[i].Id,
-    onPlay: () => player.playQueue(tracks, i),
+    isPlaying: player.playing,
+    onPlay: () => player.playQueue(tracks, i, ctx),
     onLike, playlists, onAddTo, onNewPlaylist,
+    onOpenArtist: onOpenArtistById, onOpenAlbum: onOpenAlbumById,
     ...extra,
   });
 
@@ -175,9 +178,19 @@ export default function Library({
         </header>
 
         <div className="actions">
-          <button className="bigplay" onClick={() => tracks.length && player.playQueue(tracks, 0)} title="Play">
-            <PlayGlyph size={24} />
-          </button>
+          {(() => {
+            const here = player.contextId === item.Id;
+            const showPause = here && player.playing;
+            return (
+              <button
+                className="bigplay"
+                onClick={() => (here ? player.toggle() : tracks.length && player.playQueue(tracks, 0, item.Id))}
+                title={showPause ? 'Pause' : 'Play'}
+              >
+                {showPause ? <PauseGlyph size={24} /> : <PlayGlyph size={24} />}
+              </button>
+            );
+          })()}
           {!isLiked && <button className="btn-secondary" onClick={() => startMix(item)}>Instant mix</button>}
           {isArtist && <button className="btn-secondary" disabled title="Not wired up yet">Follow</button>}
         </div>
@@ -187,7 +200,7 @@ export default function Library({
             <section>
               <div className="shelf-head"><h2>Popular</h2></div>
               <div className="tracklist" style={{ padding: 0 }}>
-                {tracks.slice(0, 10).map((t, i) => <TrackRow key={t.Id} {...rowProps(tracks, i)} />)}
+                {tracks.slice(0, 10).map((t, i) => <TrackRow key={t.Id} {...rowProps(tracks, i, {}, item.Id)} />)}
               </div>
             </section>
             {detail.albums?.length > 0 && (
@@ -212,7 +225,7 @@ export default function Library({
           </div>
         ) : (
           <div className="tracklist">
-            {tracks.length === 0 && (
+            {tracks.length === 0 && !detail.loading && (
               <p className="placeholder-note">
                 {isLiked ? 'Songs you like will appear here. Save songs by tapping the heart icon.' : 'This playlist is empty.'}
               </p>
@@ -224,7 +237,7 @@ export default function Library({
                     showArt: isPlaylist,
                     onRemove: isPlaylist && !isLiked ? () => onRemoveFromPlaylist(item, t) : undefined,
                     ...dnd(i),
-                  })}
+                  }, item.Id)}
                 />
               </div>
             ))}

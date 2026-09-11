@@ -1,9 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 export const PlayGlyph = ({ size = 20 }) => (
-  <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor">
-    <path d="M8 5v14l11-7z" />
+  <svg viewBox="0 0 16 16" width={size} height={size} fill="currentColor">
+    <path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z" />
   </svg>
+);
+export const PauseGlyph = ({ size = 20 }) => (
+  <svg viewBox="0 0 16 16" width={size} height={size} fill="currentColor">
+    <path d="M2.7 1a.7.7 0 0 0-.7.7v12.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7H2.7zm8 0a.7.7 0 0 0-.7.7v12.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-2.6z" />
+  </svg>
+);
+// Spotify's subtle "now playing" mark: three animated bars in the index column.
+export const NowPlayingBars = () => (
+  <span className="npbars" aria-label="Now playing"><i /><i /><i /></span>
 );
 
 // Spotify's liked heart is #1DB954, one of the two places that shade is used.
@@ -38,8 +47,9 @@ function fmtDur(ticks) {
  * inside a user playlist. `onRemove` shows "Remove from this playlist".
  */
 export default function TrackRow({
-  track, n, active, onPlay, onLike, playlists = [], onAddTo, onNewPlaylist,
+  track, n, active, isPlaying = false, onPlay, onLike, playlists = [], onAddTo, onNewPlaylist,
   onRemove, draggable = false, onDragStart, onDragOver, onDrop, showArt = false, jf,
+  onOpenArtist, onOpenAlbum,
 }) {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef(null);
@@ -62,7 +72,7 @@ export default function TrackRow({
       onDoubleClick={onPlay}
     >
       <button className="trackrow-n" onClick={onPlay} title="Play">
-        <span className="trackrow-idx">{n}</span>
+        <span className="trackrow-idx">{active && isPlaying ? <NowPlayingBars /> : n}</span>
         <span className="trackrow-playglyph"><PlayGlyph size={14} /></span>
       </button>
 
@@ -72,10 +82,24 @@ export default function TrackRow({
 
       <span className="trackrow-name">
         <span>{track.Name}</span>
-        <small>{track.Artists?.join(', ') || track.AlbumArtist || ''}</small>
+        <small>
+          {(track.ArtistItems?.length ? track.ArtistItems : (track.Artists || []).map((n2) => ({ Name: n2 }))).map((a, i, arr) => (
+            <React.Fragment key={a.Id || a.Name}>
+              {a.Id && onOpenArtist ? (
+                <button className="rowlink" onClick={(e) => { e.stopPropagation(); onOpenArtist(a.Id); }}>{a.Name}</button>
+              ) : a.Name}
+              {i < arr.length - 1 ? ', ' : ''}
+            </React.Fragment>
+          ))}
+          {!track.ArtistItems?.length && !track.Artists?.length ? (track.AlbumArtist || '') : ''}
+        </small>
       </span>
 
-      <span className="trackrow-album">{track.Album || ''}</span>
+      {track.AlbumId && onOpenAlbum ? (
+        <button className="trackrow-album rowlink" onClick={(e) => { e.stopPropagation(); onOpenAlbum(track.AlbumId); }}>{track.Album || ''}</button>
+      ) : (
+        <span className="trackrow-album">{track.Album || ''}</span>
+      )}
 
       <button
         className={`trackrow-like ${liked ? 'on' : ''}`}

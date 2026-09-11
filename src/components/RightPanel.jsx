@@ -163,6 +163,18 @@ function Lyrics({ player, jf }) {
     activeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [activeIndex]);
 
+  // Breadcrumb every ~2s: what the lyrics view believes.
+  useEffect(() => {
+    const t = setInterval(() => {
+      window.conduit?.debug?.(
+        `lyrics track=${current?.Id?.slice(0, 8) || '-'} state=${state} lines=${lines?.length ?? 0} ` +
+        `pos=${position.toFixed(1)} active=${activeIndex} ` +
+        `activeStart=${activeIndex >= 0 ? lines[activeIndex]?.start : '-'}`
+      );
+    }, 2000);
+    return () => clearInterval(t);
+  }, [current, state, lines, position, activeIndex]);
+
   if (state === 'loading') return <p className="placeholder-note">Loading lyrics...</p>;
   if (state === 'idle') return <p className="placeholder-note">Play something to see lyrics.</p>;
   if (state === 'none') {

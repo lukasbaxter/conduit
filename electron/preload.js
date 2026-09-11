@@ -34,6 +34,8 @@ window.addEventListener('unhandledrejection', (e) => {
 
 contextBridge.exposeInMainWorld('conduit', {
   platform: process.platform,
+  // Renderer-side breadcrumbs into the same trace file as device calls.
+  debug: (msg) => ipcRenderer.send('renderer:debug', String(msg)),
   deviceName: friendlyDeviceName(),
 
   devices: {

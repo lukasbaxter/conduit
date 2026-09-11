@@ -51,6 +51,7 @@ export function usePlayer(jf) {
   // client, or this app on another machine). Lets a freshly opened window show
   // the house's current playback instead of claiming nothing is on.
   const [external, setExternal] = useState(null);
+  const [contextId, setContextId] = useState(null);
   const adoptedRef = useRef(false);
 
   const audioRef = useRef(null);
@@ -201,9 +202,10 @@ export function usePlayer(jf) {
   // --- public controls ----------------------------------------------------
 
   const playQueue = useCallback(
-    async (tracks, startIndex = 0) => {
+    async (tracks, startIndex = 0, ctx = null) => {
       setError(null);
       setExternal(null);
+      setContextId(ctx);
       setQueue(tracks);
       setIndex(startIndex);
       queueRef.current = tracks;
@@ -468,8 +470,14 @@ export function usePlayer(jf) {
         const expected = a.playing ? a.pos + (Date.now() - a.at) / 1000 : a.pos;
         const reported = s.position || 0;
 
-        // Track finished: advance the queue.
-        if (!s.playing && s.duration > 0 && reported >= s.duration - 1.5) {
+        // Track finished: advance the queue. Two signatures, because devices
+        // disagree about what "finished" looks like:
+        //   Cast:  playing=false with position sitting at the end.
+        //   BluOS: playing=false with position reset to 0 -- indistinguishable
+        //          from a stop unless we remember we were near the end.
+        const dur = s.duration || durationRef.current;
+        const atEnd = dur > 0 && (reported >= dur - 1.5 || (a.playing && reported === 0 && expected >= dur - 3));
+        if (!s.playing && atEnd) {
           disagreeRef.current = 0;
           next();
           return;
@@ -509,6 +517,9 @@ export function usePlayer(jf) {
         anchorRef.current = { pos: debiased, at: Date.now(), playing: !!s.playing };
         if (s.duration) setDuration(s.duration);
         setPlaying(Boolean(s.playing));
+        // The ticker only runs while playing; once it stops nothing else would
+        // move the displayed position, so pin it to what the device reports.
+        if (!s.playing) setPosition(debiased);
         // Mirror the speaker's own volume, including changes made from the
         // BluOS app or a physical dial -- but never while the user is dragging.
         if (typeof s.volume === 'number' && Date.now() > volumeHeldRef.current) {
@@ -563,13 +574,13 @@ export function usePlayer(jf) {
 
   return useMemo(
     () => ({
-      device, setDevice, adoptActive, nowPlaying, external, patchQueue,
+      device, setDevice, adoptActive, nowPlaying, external, patchQueue, contextId,
       queue, index, current,
       playing, position, duration, volume, error,
       playQueue, toggle, next, previous, seek, setVolume, skipTo,
       clearError: () => setError(null),
     }),
-    [device, setDevice, adoptActive, nowPlaying, external, patchQueue, queue, index, current,
+    [device, setDevice, adoptActive, nowPlaying, external, patchQueue, contextId, queue, index, current,
      playing, position, duration, volume, error, playQueue, toggle, next,
      previous, seek, setVolume, skipTo]
   );

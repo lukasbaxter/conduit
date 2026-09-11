@@ -67,6 +67,7 @@ export default function App() {
   const [view, setView] = useState('home');
   const [playlists, setPlaylists] = useState([]);
   const [likedCount, setLikedCount] = useState(null);
+  const likedCacheRef = useRef(null);
   const [toast, setToast] = useState(null);
   const [me, setMe] = useState(null);
   const [avatarOk, setAvatarOk] = useState(true);
@@ -137,8 +138,11 @@ export default function App() {
   useEffect(() => {
     if (!jf) return;
     setLibLoading(true);
-    Promise.all([jf.albums({ limit: 500 }), jf.artists({ limit: 500 }), jf.playlists(), jf.favoriteTracks({ limit: 1 })])
-      .then(([a, r, p, f]) => { setAlbums(a.items); setArtists(r.items); setPlaylists(p.items); setLikedCount(f.total); })
+    Promise.all([jf.albums({ limit: 500 }), jf.artists({ limit: 500 }), jf.playlists(), jf.favoriteTracks()])
+      .then(([a, r, p, f]) => {
+        setAlbums(a.items); setArtists(r.items); setPlaylists(p.items);
+        setLikedCount(f.total); likedCacheRef.current = f.items;
+      })
       .catch(() => {})
       .finally(() => setLibLoading(false));
   }, [jf]);
@@ -189,10 +193,7 @@ export default function App() {
   // Footer links: art -> album, artist name -> artist page.
   const openAlbumById = async (albumId) => {
     try {
-      const [meta, trackList] = await Promise.all([
-        jf.itemById(albumId),
-        jf.tracks({ albumId }),
-      ]);
+      const [meta, trackList] = await Promise.all([jf.itemById(albumId), jf.tracks({ albumId })]);
       if (meta) { setView('home'); setDetail({ item: meta, tracks: trackList.items, kind: 'Album' }); }
     } catch { /* ignore */ }
   };
@@ -208,19 +209,25 @@ export default function App() {
   };
 
   const openPlaylist = async (pl) => {
+    setView('home');
+    setDetail({ item: pl, tracks: [], kind: 'Playlist', loading: true });
     try {
       const { items } = await jf.playlistTracks(pl.Id);
-      setView('home');
-      setDetail({ item: pl, tracks: items, kind: 'Playlist' });
+      setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, tracks: items, loading: false } : d));
     } catch { /* surfaced in the library view */ }
   };
 
   const openLiked = async () => {
+    const item = { Id: LIKED_ID, Name: 'Liked Songs', Type: 'Playlist' };
+    // Navigate NOW with whatever we have; a 500-track fetch is not something to
+    // make the click wait on.
+    setView('home');
+    setDetail({ item, tracks: likedCacheRef.current || [], kind: 'Playlist', loading: !likedCacheRef.current });
     try {
       const { items } = await jf.favoriteTracks();
-      setView('home');
-      setDetail({ item: { Id: LIKED_ID, Name: 'Liked Songs', Type: 'Playlist' }, tracks: items, kind: 'Playlist' });
-    } catch { /* ignore */ }
+      likedCacheRef.current = items;
+      setDetail((d) => (d && d.item?.Id === LIKED_ID ? { ...d, tracks: items, loading: false } : d));
+    } catch { /* keep what we showed */ }
   };
 
   const onLike = async (track, liked) => {
@@ -232,12 +239,13 @@ export default function App() {
       // Liked Songs view stays live: unliking drops the row, liking (e.g. the
       // now-playing track from the footer) prepends it, newest first like
       // Spotify. No re-opening the page.
+      const row = { ...track, UserData: { ...(track.UserData || {}), IsFavorite: true } };
+      const cache = likedCacheRef.current || [];
+      likedCacheRef.current = liked ? [row, ...cache.filter((t) => t.Id !== track.Id)] : cache.filter((t) => t.Id !== track.Id);
       setDetail((d) => {
         if (!d || d.item?.Id !== LIKED_ID) return d;
         const without = d.tracks.filter((t) => t.Id !== track.Id);
-        if (!liked) return { ...d, tracks: without };
-        const row = { ...track, UserData: { ...(track.UserData || {}), IsFavorite: true } };
-        return { ...d, tracks: [row, ...without] };
+        return { ...d, tracks: liked ? [row, ...without] : without };
       });
     } catch (e) {
       patchLiked(track.Id, !liked);
@@ -369,6 +377,8 @@ export default function App() {
           onOpenPlaylist={openPlaylist}
           onOpenLiked={openLiked}
           likedCount={likedCount}
+          onOpenArtistById={openArtistById}
+          onOpenAlbumById={openAlbumById}
         />
         {panel && <div className="panel-spacer" />}
         {panel && (
