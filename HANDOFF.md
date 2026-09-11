@@ -99,6 +99,17 @@ mapping the code when we stopped.
 
 ---
 
+## Shipped 2026-09-11 (done, deployed to :8748, tested)
+- Playback memory: last track/queue/playhead/modes restored PAUSED on open;
+  play resumes at the saved spot; queue end parks on the last track (no more
+  "Nothing playing"). `test/restore.test.mjs`.
+- Mirrored cover art resolved by item id via the local jf client (desktop
+  mirroring a web player had a broken image).
+- Browser local device is "This Web Player" (was "This Computer").
+- `_lsPrefix` getter fix (first-session caches were written under the wrong key).
+- ALL TESTS NOW USE THE `conduittest` JELLYFIN USER (pw Conduit-Test-9921). A
+  run as lukasbaxter hijacked the live web player. Do not switch back.
+
 ## Shipped earlier this session (done, deployed, tested)
 - Browser→desktop transfer via device picker (was restarting at 0:00 / looping):
   new `transfer` command — target claims + resumes current track at position,
