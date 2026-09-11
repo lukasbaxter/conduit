@@ -53,6 +53,8 @@ export default function Library({
   const [err, setErr] = useState(null);
   const [seeAll, setSeeAll] = useState(null);
   const [dragIdx, setDragIdx] = useState(null);
+  // Artist page "Popular": 5 rows, "See more" expands to 10, like Spotify.
+  const [popularExpanded, setPopularExpanded] = useState(false);
   const [overIdx, setOverIdx] = useState(null);
 
   useEffect(() => {
@@ -72,6 +74,7 @@ export default function Library({
   };
 
   const openArtist = async (artist) => {
+    setPopularExpanded(false);
     setDetail({ item: artist, tracks: [], albums: [], kind: 'Artist', loading: true });
     try {
       const [t, a] = await Promise.all([
@@ -204,8 +207,13 @@ export default function Library({
             <section>
               <div className="shelf-head"><h2>Popular</h2></div>
               <div className="tracklist" style={{ padding: 0 }}>
-                {tracks.slice(0, 10).map((t, i) => <TrackRow key={t.Id} {...rowProps(tracks, i, {}, item.Id)} />)}
+                {tracks.slice(0, popularExpanded ? 10 : 5).map((t, i) => <TrackRow key={t.Id} {...rowProps(tracks, i, {}, item.Id)} />)}
               </div>
+              {tracks.length > 5 && (
+                <button className="seemore" onClick={() => setPopularExpanded((v) => !v)}>
+                  {popularExpanded ? 'Show less' : 'See more'}
+                </button>
+              )}
             </section>
             {detail.albums?.length > 0 && (
               <section>

@@ -567,3 +567,7 @@ input[type="range"]:disabled { opacity: .4; }
 /* inline links inside rows (artist names, album) */
 .rowlink { padding: 0; font: inherit; color: inherit; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .rowlink:hover { color: var(--fg); text-decoration: underline; }
+
+/* Spotify's "See more" under Popular: small, bold, subdued, left-aligned with the rows. */
+.seemore { color: var(--fg-dim); font-size: 14px; font-weight: 700; padding: 14px 16px; }
+.seemore:hover { color: var(--fg); }
