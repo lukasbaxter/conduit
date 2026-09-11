@@ -85,6 +85,9 @@ export class Relay {
     this._send({ type: 'nowplaying', nowPlaying: np });
   }
 
+  // I just started playing here: make the user's other clients yield.
+  claim() { this._send({ type: 'claim' }); }
+
   // Tell another client to do something.
   command(toClientId, command) {
     this._send({ type: 'command', to: toClientId, command });

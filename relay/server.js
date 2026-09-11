@@ -149,6 +149,16 @@ wss.on('connection', (ws, req) => {
         break;
       }
 
+      // This client just started playing -> it becomes the sole active device;
+      // tell every other client of this user to yield (pause). Spotify Connect's
+      // single-active-device model.
+      case 'claim': {
+        for (const c of userMap(self.uid).values()) {
+          if (c.id !== self.id) send(c.ws, { type: 'command', from: self.id, command: { action: 'yield' } });
+        }
+        break;
+      }
+
       // Keepalive.
       case 'ping':
         send(ws, { type: 'pong' });

@@ -92,6 +92,7 @@ export function usePlayer(jf) {
   const playQueueRef = useRef(() => {});
   const toggleRef = useRef(() => {});
   const seekRef = useRef(() => {});
+  const yieldRef = useRef(() => {});
 
   useEffect(() => { deviceRef.current = device; }, [device]);
   useEffect(() => { positionRef.current = position; }, [position]);
@@ -233,6 +234,8 @@ export function usePlayer(jf) {
         setContextId(ctx); setPlaying(true);
         return;
       }
+      // We are the active device now; ask the others to pause.
+      if (relayRef.current) relayRef.current.claim();
       setError(null);
       setExternal(null);
       setContextId(ctx);
@@ -627,12 +630,21 @@ export function usePlayer(jf) {
       } catch { /* ignore */ }
     } else if (cmd.action === 'toggle') { toggleRef.current(); }
     else if (cmd.action === 'seek') { seekRef.current(cmd.pos || 0); }
+    else if (cmd.action === 'yield') { yieldRef.current(); }
   }, [jf]);
 
   const patchQueue = useCallback((fn) => {
     setQueue((q) => { const n = q.map(fn); queueRef.current = n; return n; });
   }, []);
 
+  // Stop local audio and remote-device playback because another client took over.
+  yieldRef.current = () => {
+    const dev = deviceRef.current;
+    if (dev.kind === 'local') { const el = audioRef.current; if (el) el.pause(); }
+    else if (dev.kind !== 'relay' && remote) remote.pause(dev).catch(() => {});
+    setPlaying(false);
+    anchorRef.current = { pos: positionRef.current, at: Date.now(), playing: false };
+  };
   useEffect(() => { playQueueRef.current = playQueue; }, [playQueue]);
   useEffect(() => { toggleRef.current = toggle; }, [toggle]);
   useEffect(() => { seekRef.current = seek; }, [seek]);
