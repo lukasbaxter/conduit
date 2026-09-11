@@ -37,6 +37,18 @@ export class Jellyfin {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.token = token;
     this.userId = userId;
+    // Session cache for list reads. A click should never wait on a fetch for
+    // something already shown once; mutations evict what they change.
+    this._cache = new Map();
+  }
+
+  _cached(key, fn) {
+    if (this._cache.has(key)) return Promise.resolve(this._cache.get(key));
+    return fn().then((v) => { this._cache.set(key, v); return v; });
+  }
+
+  _evict(prefix) {
+    for (const k of [...this._cache.keys()]) if (k.startsWith(prefix)) this._cache.delete(k);
   }
 
   async _fetch(path, options = {}) {
@@ -155,7 +167,11 @@ export class Jellyfin {
   }
 
   // Albums credited to an artist, newest first (Spotify's discography order).
-  async artistAlbums(artistId, { limit = 60 } = {}) {
+  artistAlbums(artistId, opts = {}) {
+    return this._cached(`artistAlbums:${artistId}`, () => this._artistAlbums(artistId, opts));
+  }
+
+  async _artistAlbums(artistId, { limit = 60 } = {}) {
     const q = new URLSearchParams({
       IncludeItemTypes: 'MusicAlbum',
       Recursive: 'true',
@@ -170,7 +186,13 @@ export class Jellyfin {
     return { items: data.Items || [], total: data.TotalRecordCount ?? 0 };
   }
 
-  async tracks({ albumId = null, artistId = null, limit = 500, search = null } = {}) {
+  tracks(opts = {}) {
+    // Searches are not cached; everything else keyed on its arguments.
+    if (opts.search) return this._tracks(opts);
+    return this._cached(`tracks:${opts.albumId || ''}:${opts.artistId || ''}:${opts.limit || 500}`, () => this._tracks(opts));
+  }
+
+  async _tracks({ albumId = null, artistId = null, limit = 500, search = null } = {}) {
     const q = new URLSearchParams({
       IncludeItemTypes: 'Audio',
       Recursive: 'true',
@@ -208,7 +230,11 @@ export class Jellyfin {
     return { items, total: items.length };
   }
 
-  async playlistTracks(playlistId, { limit = 500 } = {}) {
+  playlistTracks(playlistId, opts = {}) {
+    return this._cached(`playlist:${playlistId}`, () => this._playlistTracks(playlistId, opts));
+  }
+
+  async _playlistTracks(playlistId, { limit = 500 } = {}) {
     const q = new URLSearchParams({
       userId: this.userId,
       Limit: String(limit),
@@ -238,7 +264,11 @@ export class Jellyfin {
   }
 
   // Fetch a single item (album, artist, track) by id.
-  async itemById(id) {
+  itemById(id) {
+    return this._cached(`item:${id}`, () => this._itemById(id));
+  }
+
+  async _itemById(id) {
     const q = new URLSearchParams({
       Ids: id,
       userId: this.userId,
@@ -270,13 +300,20 @@ export class Jellyfin {
   // --- favourites ("Liked Songs") ----------------------------------------
 
   async setFavorite(itemId, liked) {
+    this._evict('favorites:');
+    // The track's UserData is embedded in every cached list that contains it.
+    this._evict('tracks:'); this._evict('playlist:');
     return this._fetch(`/Users/${this.userId}/FavoriteItems/${itemId}`, {
       method: liked ? 'POST' : 'DELETE',
     });
   }
 
   // Newest likes first, which is how Spotify orders Liked Songs.
-  async favoriteTracks({ limit = 500 } = {}) {
+  favoriteTracks(opts = {}) {
+    return this._cached(`favorites:${opts.limit || 500}`, () => this._favoriteTracks(opts));
+  }
+
+  async _favoriteTracks({ limit = 500 } = {}) {
     const q = new URLSearchParams({
       IncludeItemTypes: 'Audio',
       Recursive: 'true',
@@ -301,6 +338,7 @@ export class Jellyfin {
   }
 
   async addToPlaylist(playlistId, itemIds) {
+    this._evict(`playlist:${playlistId}`);
     const q = new URLSearchParams({ ids: itemIds.join(','), userId: this.userId });
     return this._fetch(`/Playlists/${playlistId}/Items?${q}`, { method: 'POST' });
   }
@@ -308,15 +346,18 @@ export class Jellyfin {
   // Jellyfin removes by the playlist ENTRY id (PlaylistItemId), not the track id,
   // so the same track added twice can be removed individually.
   async removeFromPlaylist(playlistId, entryIds) {
+    this._evict(`playlist:${playlistId}`);
     const q = new URLSearchParams({ entryIds: entryIds.join(',') });
     return this._fetch(`/Playlists/${playlistId}/Items?${q}`, { method: 'DELETE' });
   }
 
   async movePlaylistItem(playlistId, entryId, newIndex) {
+    this._evict(`playlist:${playlistId}`);
     return this._fetch(`/Playlists/${playlistId}/Items/${entryId}/Move/${newIndex}`, { method: 'POST' });
   }
 
   async deletePlaylist(playlistId) {
+    this._evict(`playlist:${playlistId}`);
     return this._fetch(`/Items/${playlistId}`, { method: 'DELETE' });
   }
 

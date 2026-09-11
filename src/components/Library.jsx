@@ -63,19 +63,21 @@ export default function Library({
   }, [query, jf, view]);
 
   const openAlbum = async (album) => {
+    setDetail({ item: album, tracks: [], kind: 'Album', loading: true });
     try {
       const { items } = await jf.tracks({ albumId: album.Id });
-      setDetail({ item: album, tracks: items, kind: 'Album' });
+      setDetail((d) => (d && d.item?.Id === album.Id ? { ...d, tracks: items, loading: false } : d));
     } catch (e) { setErr(e.message); }
   };
 
   const openArtist = async (artist) => {
+    setDetail({ item: artist, tracks: [], albums: [], kind: 'Artist', loading: true });
     try {
       const [t, a] = await Promise.all([
         jf.tracks({ artistId: artist.Id, limit: 200 }),
         jf.artistAlbums(artist.Id).catch(() => ({ items: [] })),
       ]);
-      setDetail({ item: artist, tracks: t.items, albums: a.items, kind: 'Artist' });
+      setDetail((d) => (d && d.item?.Id === artist.Id ? { ...d, tracks: t.items, albums: a.items, loading: false } : d));
     } catch (e) { setErr(e.message); }
   };
 
