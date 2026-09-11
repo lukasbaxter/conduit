@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Jellyfin, loadSession, persistSession, clearSession } from './api/jellyfin.js';
 import { usePlayer } from './player/usePlayer.js';
 import Sidebar from './components/Sidebar.jsx';
-import Library from './components/Library.jsx';
+import Library, { LIKED_ID } from './components/Library.jsx';
 import Player from './components/Player.jsx';
 import RightPanel from './components/RightPanel.jsx';
 
@@ -66,6 +66,8 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [view, setView] = useState('home');
   const [playlists, setPlaylists] = useState([]);
+  const [likedCount, setLikedCount] = useState(null);
+  const [toast, setToast] = useState(null);
   const [libLoading, setLibLoading] = useState(true);
   const [albums, setAlbums] = useState([]);
   const [artists, setArtists] = useState([]);
@@ -91,11 +93,27 @@ export default function App() {
   useEffect(() => {
     if (!jf) return;
     setLibLoading(true);
-    Promise.all([jf.albums({ limit: 500 }), jf.artists({ limit: 500 }), jf.playlists()])
-      .then(([a, r, p]) => { setAlbums(a.items); setArtists(r.items); setPlaylists(p.items); })
+    Promise.all([jf.albums({ limit: 500 }), jf.artists({ limit: 500 }), jf.playlists(), jf.favoriteTracks({ limit: 1 })])
+      .then(([a, r, p, f]) => { setAlbums(a.items); setArtists(r.items); setPlaylists(p.items); setLikedCount(f.total); })
       .catch(() => {})
       .finally(() => setLibLoading(false));
   }, [jf]);
+
+  const notify = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
+
+  const refreshPlaylists = async () => {
+    try {
+      const [p, f] = await Promise.all([jf.playlists(), jf.favoriteTracks({ limit: 1 })]);
+      setPlaylists(p.items); setLikedCount(f.total);
+    } catch { /* ignore */ }
+  };
+
+  // Update a track's liked state everywhere it is currently shown.
+  const patchLiked = (trackId, liked) => {
+    const patch = (t) => t.Id === trackId ? { ...t, UserData: { ...(t.UserData || {}), IsFavorite: liked } } : t;
+    setDetail((d) => d ? { ...d, tracks: d.tracks.map(patch) } : d);
+    player.patchQueue?.(patch);
+  };
 
   // Device list is pushed from the main process as mDNS finds things.
   useEffect(() => {
@@ -148,8 +166,85 @@ export default function App() {
   const openPlaylist = async (pl) => {
     try {
       const { items } = await jf.playlistTracks(pl.Id);
+      setView('home');
       setDetail({ item: pl, tracks: items, kind: 'Playlist' });
     } catch { /* surfaced in the library view */ }
+  };
+
+  const openLiked = async () => {
+    try {
+      const { items } = await jf.favoriteTracks();
+      setView('home');
+      setDetail({ item: { Id: LIKED_ID, Name: 'Liked Songs', Type: 'Playlist' }, tracks: items, kind: 'Playlist' });
+    } catch { /* ignore */ }
+  };
+
+  const onLike = async (track, liked) => {
+    patchLiked(track.Id, liked);
+    try {
+      await jf.setFavorite(track.Id, liked);
+      notify(liked ? 'Added to Liked Songs' : 'Removed from Liked Songs');
+      setLikedCount((c) => (c == null ? c : Math.max(0, c + (liked ? 1 : -1))));
+      // Liked Songs view: drop the row immediately on unlike.
+      if (!liked) setDetail((d) => d && d.item?.Id === LIKED_ID ? { ...d, tracks: d.tracks.filter((t) => t.Id !== track.Id) } : d);
+    } catch (e) {
+      patchLiked(track.Id, !liked);
+      notify(`Could not update: ${e.message}`);
+    }
+  };
+
+  const onCreatePlaylist = async (name, firstTrack = null) => {
+    try {
+      await jf.createPlaylist(name, firstTrack ? [firstTrack.Id] : []);
+      await refreshPlaylists();
+      notify(firstTrack ? `Added to ${name}` : `Created ${name}`);
+    } catch (e) { notify(`Could not create playlist: ${e.message}`); }
+  };
+
+  const onNewPlaylistWithTrack = (track) => {
+    const name = window.prompt('New playlist name', track.Album || 'My Playlist');
+    if (name && name.trim()) onCreatePlaylist(name.trim(), track);
+  };
+
+  const onAddTo = async (pl, track) => {
+    try {
+      await jf.addToPlaylist(pl.Id, [track.Id]);
+      notify(`Added to ${pl.Name}`);
+      refreshPlaylists();
+      // If that playlist is open, show the new row.
+      if (detail?.item?.Id === pl.Id) {
+        const { items } = await jf.playlistTracks(pl.Id);
+        setDetail((d) => d ? { ...d, tracks: items } : d);
+      }
+    } catch (e) { notify(`Could not add: ${e.message}`); }
+  };
+
+  const onRemoveFromPlaylist = async (pl, track) => {
+    if (!track.PlaylistItemId) return;
+    try {
+      await jf.removeFromPlaylist(pl.Id, [track.PlaylistItemId]);
+      setDetail((d) => d ? { ...d, tracks: d.tracks.filter((t) => t.PlaylistItemId !== track.PlaylistItemId) } : d);
+      notify('Removed from playlist');
+      refreshPlaylists();
+    } catch (e) { notify(`Could not remove: ${e.message}`); }
+  };
+
+  const onReorder = async (pl, track, from, to) => {
+    // Optimistic: move in the UI first, then tell Jellyfin.
+    setDetail((d) => {
+      if (!d) return d;
+      const next = [...d.tracks];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return { ...d, tracks: next };
+    });
+    try {
+      await jf.movePlaylistItem(pl.Id, track.PlaylistItemId, to);
+    } catch (e) {
+      notify(`Could not reorder: ${e.message}`);
+      const { items } = await jf.playlistTracks(pl.Id).catch(() => ({ items: null }));
+      if (items) setDetail((d) => d ? { ...d, tracks: items } : d);
+    }
   };
 
   if (booting) return <div className="boot">Starting Conduit...</div>;
@@ -169,8 +264,11 @@ export default function App() {
           view={view}
           onView={goView}
           playlists={playlists}
+          likedCount={likedCount}
           loading={libLoading}
           onOpen={openPlaylist}
+          onOpenLiked={openLiked}
+          onCreate={(name) => onCreatePlaylist(name)}
           jf={jf}
         />
         <Library
@@ -180,10 +278,18 @@ export default function App() {
           onView={goView}
           albums={albums}
           artists={artists}
+          playlists={playlists}
           detail={detail}
           setDetail={setDetail}
           query={query}
           setQuery={setQuery}
+          onLike={onLike}
+          onAddTo={onAddTo}
+          onNewPlaylist={onNewPlaylistWithTrack}
+          onRemoveFromPlaylist={onRemoveFromPlaylist}
+          onReorder={onReorder}
+          onOpenPlaylist={openPlaylist}
+          onOpenLiked={openLiked}
         />
         {panel && (
           <RightPanel
@@ -198,6 +304,8 @@ export default function App() {
         )}
       </div>
 
+      {toast && <div className="toast">{toast}</div>}
+
       <Player
         player={player}
         jf={jf}
@@ -206,6 +314,7 @@ export default function App() {
         onOpenArtist={openArtistById}
         panel={panel}
         onPanel={setPanel}
+        onLike={onLike}
       />
     </div>
   );

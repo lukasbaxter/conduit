@@ -45,6 +45,15 @@ class CastTransport {
   }
 
   async play(url, meta = {}) {
+    // Serialise loads. Two overlapping LOADs create two media sessions on the
+    // receiver, and whichever id we cached is then wrong for every command
+    // that follows. Let a second play wait for the first to settle.
+    if (this._loading) await this._loading.catch(() => {});
+    this._loading = this._play(url, meta);
+    try { return await this._loading; } finally { this._loading = null; }
+  }
+
+  async _play(url, meta = {}) {
     const player = await this._connect();
     const media = {
       contentId: url,
@@ -83,12 +92,27 @@ class CastTransport {
       err.code = 'ECASTLOAD';
       throw err;
     }
+    // castv2-client only learns the new mediaSessionId from a later broadcast;
+    // its load() callback does NOT update the cache. A seek or pause issued in
+    // that gap goes out with the previous session's id and the receiver
+    // answers INVALID_MEDIA_SESSION_ID. Refresh now so the id is current.
+    await promisify(player.getStatus, player)().catch(() => {});
     return settled || status;
   }
 
   async _withPlayer(method, ...args) {
     const player = await this._connect();
-    return promisify(player[method], player)(...args);
+    try {
+      return await promisify(player[method], player)(...args);
+    } catch (err) {
+      if (!/INVALID_MEDIA_SESSION_ID/.test(err?.message || '')) throw err;
+      // The receiver is on a different session than we think (a new load, or
+      // the old one ended). Resync and try once more; if there is genuinely
+      // nothing loaded, a transport command has nothing to act on.
+      const s = await promisify(player.getStatus, player)().catch(() => null);
+      if (!s || !s.mediaSessionId) return null;
+      return promisify(player[method], player)(...args);
+    }
   }
 
   resume() { return this._withPlayer('play'); }

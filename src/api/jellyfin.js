@@ -101,6 +101,49 @@ export class Jellyfin {
     return { items: data.Items || [], total: data.TotalRecordCount ?? 0 };
   }
 
+  // Albums this user has played most recently -- feeds the home shortcuts and
+  // the "Recently played" shelf, both of which Spotify drives from history.
+  async recentlyPlayedAlbums({ limit = 8 } = {}) {
+    const q = new URLSearchParams({
+      IncludeItemTypes: 'Audio',
+      Recursive: 'true',
+      SortBy: 'DatePlayed',
+      SortOrder: 'Descending',
+      Filters: 'IsPlayed',
+      Fields: 'ParentId',
+      Limit: '200',
+      userId: this.userId,
+    });
+    const data = await this._fetch(`/Items?${q}`);
+    // Collapse tracks to their albums, keeping play order.
+    const seen = new Set();
+    const ids = [];
+    for (const t of data.Items || []) {
+      const id = t.AlbumId;
+      if (id && !seen.has(id)) { seen.add(id); ids.push(id); }
+      if (ids.length >= limit) break;
+    }
+    if (!ids.length) return { items: [] };
+    const q2 = new URLSearchParams({ Ids: ids.join(','), userId: this.userId, Fields: 'ProductionYear' });
+    const d2 = await this._fetch(`/Items?${q2}`);
+    const byId = new Map((d2.Items || []).map((a) => [a.Id, a]));
+    return { items: ids.map((id) => byId.get(id)).filter(Boolean) };
+  }
+
+  async recentlyAddedAlbums({ limit = 8 } = {}) {
+    const q = new URLSearchParams({
+      IncludeItemTypes: 'MusicAlbum',
+      Recursive: 'true',
+      SortBy: 'DateCreated',
+      SortOrder: 'Descending',
+      Fields: 'ProductionYear',
+      Limit: String(limit),
+      userId: this.userId,
+    });
+    const data = await this._fetch(`/Items?${q}`);
+    return { items: data.Items || [] };
+  }
+
   // Albums credited to an artist, newest first (Spotify's discography order).
   async artistAlbums(artistId, { limit = 60 } = {}) {
     const q = new URLSearchParams({
@@ -121,7 +164,7 @@ export class Jellyfin {
     const q = new URLSearchParams({
       IncludeItemTypes: 'Audio',
       Recursive: 'true',
-      Fields: 'MediaSources,ParentId,ArtistItems,AlbumArtists',
+      Fields: 'MediaSources,ParentId,ArtistItems,AlbumArtists,UserData',
       SortBy: albumId ? 'ParentIndexNumber,IndexNumber,SortName' : 'SortName',
       Limit: String(limit),
       userId: this.userId,
@@ -159,7 +202,7 @@ export class Jellyfin {
     const q = new URLSearchParams({
       userId: this.userId,
       Limit: String(limit),
-      Fields: 'MediaSources,ParentId,ArtistItems,AlbumArtists',
+      Fields: 'MediaSources,ParentId,ArtistItems,AlbumArtists,UserData',
     });
     const data = await this._fetch(`/Playlists/${playlistId}/Items?${q}`);
     return { items: data.Items || [], total: data.TotalRecordCount ?? 0 };
@@ -196,12 +239,15 @@ export class Jellyfin {
   }
 
   async search(term, limit = 40) {
-    const [albums, artists, tracks] = await Promise.all([
+    const [albums, artists, tracks, playlists] = await Promise.all([
       this.albums({ search: term, limit }),
       this.artists({ search: term, limit }),
       this.tracks({ search: term, limit }),
+      this.playlists().then((p) => ({
+        items: p.items.filter((x) => x.Name.toLowerCase().includes(term.toLowerCase())),
+      })),
     ]);
-    return { albums: albums.items, artists: artists.items, tracks: tracks.items };
+    return { albums: albums.items, artists: artists.items, tracks: tracks.items, playlists: playlists.items };
   }
 
   // Jellyfin's own "more like this" -- no Last.fm key required.
@@ -209,6 +255,67 @@ export class Jellyfin {
     const q = new URLSearchParams({ userId: this.userId, Limit: String(limit) });
     const data = await this._fetch(`/Items/${itemId}/InstantMix?${q}`);
     return data.Items || [];
+  }
+
+  // --- favourites ("Liked Songs") ----------------------------------------
+
+  async setFavorite(itemId, liked) {
+    return this._fetch(`/Users/${this.userId}/FavoriteItems/${itemId}`, {
+      method: liked ? 'POST' : 'DELETE',
+    });
+  }
+
+  // Newest likes first, which is how Spotify orders Liked Songs.
+  async favoriteTracks({ limit = 500 } = {}) {
+    const q = new URLSearchParams({
+      IncludeItemTypes: 'Audio',
+      Recursive: 'true',
+      Filters: 'IsFavorite',
+      SortBy: 'DateCreated',
+      SortOrder: 'Descending',
+      Fields: 'MediaSources,ParentId,ArtistItems,AlbumArtists,UserData',
+      Limit: String(limit),
+      userId: this.userId,
+    });
+    const data = await this._fetch(`/Items?${q}`);
+    return { items: data.Items || [], total: data.TotalRecordCount ?? 0 };
+  }
+
+  // --- playlist mutation ---------------------------------------------------
+
+  async createPlaylist(name, itemIds = []) {
+    return this._fetch('/Playlists', {
+      method: 'POST',
+      body: JSON.stringify({ Name: name, Ids: itemIds, UserId: this.userId, MediaType: 'Audio' }),
+    });
+  }
+
+  async addToPlaylist(playlistId, itemIds) {
+    const q = new URLSearchParams({ ids: itemIds.join(','), userId: this.userId });
+    return this._fetch(`/Playlists/${playlistId}/Items?${q}`, { method: 'POST' });
+  }
+
+  // Jellyfin removes by the playlist ENTRY id (PlaylistItemId), not the track id,
+  // so the same track added twice can be removed individually.
+  async removeFromPlaylist(playlistId, entryIds) {
+    const q = new URLSearchParams({ entryIds: entryIds.join(',') });
+    return this._fetch(`/Playlists/${playlistId}/Items?${q}`, { method: 'DELETE' });
+  }
+
+  async movePlaylistItem(playlistId, entryId, newIndex) {
+    return this._fetch(`/Playlists/${playlistId}/Items/${entryId}/Move/${newIndex}`, { method: 'POST' });
+  }
+
+  async deletePlaylist(playlistId) {
+    return this._fetch(`/Items/${playlistId}`, { method: 'DELETE' });
+  }
+
+  async renamePlaylist(playlistId, name) {
+    const item = await this._fetch(`/Users/${this.userId}/Items/${playlistId}`);
+    return this._fetch(`/Items/${playlistId}`, {
+      method: 'POST',
+      body: JSON.stringify({ ...item, Name: name }),
+    });
   }
 
   // --- urls handed to remote devices --------------------------------------

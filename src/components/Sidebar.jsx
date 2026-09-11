@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Heart } from './TrackRow.jsx';
 
 const ICONS = {
   home: 'M12 3 3 10v11h6v-6h6v6h6V10z',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4.2-4.2',
   library: 'M4 4v16M9 4v16M14 5l5 15',
+  plus: 'M12 5v14M5 12h14',
 };
 
-function Icon({ name }) {
+function Icon({ name, size = 22 }) {
   return (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor"
       strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
       <path d={ICONS[name]} />
     </svg>
@@ -16,11 +18,22 @@ function Icon({ name }) {
 }
 
 /**
- * Left rail. "Your Library" is deliberately playlists only -- the things the
- * user actually made. Albums and artists live under Home and Search so the
- * library does not become a dump of all 3,291 albums.
+ * Left rail. "Your Library" is Liked Songs pinned first, then the user's own
+ * playlists -- Spotify's layout. Albums and artists live under Home and Search.
  */
-export default function Sidebar({ view, onView, playlists, onOpen, jf, loading }) {
+export default function Sidebar({ view, onView, playlists, likedCount, onOpen, onOpenLiked, onCreate, jf, loading }) {
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState('');
+
+  const submit = (e) => {
+    e.preventDefault();
+    const n = name.trim();
+    if (!n) return;
+    onCreate(n);
+    setName('');
+    setCreating(false);
+  };
+
   return (
     <aside className="sidebar">
       <nav className="nav">
@@ -37,9 +50,35 @@ export default function Sidebar({ view, onView, playlists, onOpen, jf, loading }
           <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <Icon name="library" /> Your Library
           </span>
+          <button className="icon-btn" onClick={() => setCreating((v) => !v)} title="Create playlist">
+            <Icon name="plus" size={18} />
+          </button>
         </div>
 
         <div className="liblist">
+          {creating && (
+            <form onSubmit={submit} style={{ padding: '4px 8px 10px' }}>
+              <input
+                className="newplaylist-input"
+                autoFocus
+                placeholder="Playlist name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Escape' && setCreating(false)}
+              />
+            </form>
+          )}
+
+          <button className="libitem" onClick={onOpenLiked} title="Liked Songs">
+            <div className="liked-art" style={{ width: 48, height: 48, borderRadius: 4, flex: 'none' }}>
+              <Heart on={false} size={20} />
+            </div>
+            <span className="libitem-text">
+              <span className="libitem-name">Liked Songs</span>
+              <span className="libitem-sub">Playlist{likedCount != null ? ` · ${likedCount} songs` : ''}</span>
+            </span>
+          </button>
+
           {playlists.map((pl) => {
             const art = jf.imageUrl(pl.Id, { maxHeight: 84 });
             return (
@@ -47,9 +86,7 @@ export default function Sidebar({ view, onView, playlists, onOpen, jf, loading }
                 {art ? <img src={art} alt="" loading="lazy" /> : <div className="ph" />}
                 <span className="libitem-text">
                   <span className="libitem-name">{pl.Name}</span>
-                  <span className="libitem-sub">
-                    Playlist{pl.ChildCount ? ` · ${pl.ChildCount} songs` : ''}
-                  </span>
+                  <span className="libitem-sub">Playlist{pl.ChildCount ? ` · ${pl.ChildCount} songs` : ''}</span>
                 </span>
               </button>
             );
@@ -57,7 +94,7 @@ export default function Sidebar({ view, onView, playlists, onOpen, jf, loading }
 
           {!playlists.length && !loading && (
             <p className="devicemenu-empty">
-              No playlists yet. Ones you create in Jellyfin show up here.
+              Create your first playlist with the + button.
             </p>
           )}
         </div>

@@ -1,10 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import TrackRow, { PlayGlyph, Heart } from './TrackRow.jsx';
 
-const PlayGlyph = ({ size = 20 }) => (
-  <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor">
-    <path d="M8 5v14l11-7z" />
-  </svg>
-);
+export const LIKED_ID = '__liked__';
 
 function Card({ title, subtitle, image, round, onOpen, onPlay }) {
   return (
@@ -12,11 +9,7 @@ function Card({ title, subtitle, image, round, onOpen, onPlay }) {
       onKeyDown={(e) => e.key === 'Enter' && onOpen?.()}>
       <div className="card-art">
         {image ? <img src={image} alt="" loading="lazy" /> : <div className="ph" />}
-        <button
-          className="card-play"
-          onClick={(e) => { e.stopPropagation(); onPlay?.(); }}
-          title="Play"
-        >
+        <button className="card-play" onClick={(e) => { e.stopPropagation(); onPlay?.(); }} title="Play">
           <PlayGlyph />
         </button>
       </div>
@@ -26,54 +19,39 @@ function Card({ title, subtitle, image, round, onOpen, onPlay }) {
   );
 }
 
-function TrackRow({ track, n, onPlay, active }) {
-  const secs = track.RunTimeTicks ? track.RunTimeTicks / 10_000_000 : 0;
-  const dur = `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`;
-  return (
-    <button className={`trackrow ${active ? 'active' : ''}`} onClick={onPlay}>
-      <span className="trackrow-n">{active ? <PlayGlyph size={13} /> : n}</span>
-      <span className="trackrow-name">
-        <span>{track.Name}</span>
-        <small>{track.Artists?.join(', ')}</small>
-      </span>
-      <span className="trackrow-dur">{dur}</span>
-    </button>
-  );
-}
-
-function Shelf({ title, items, jf, round, onOpen, onPlay, onSeeAll }) {
+function Shelf({ title, items, jf, round, onOpen, onPlay, onSeeAll, subtitle }) {
   if (!items.length) return null;
   return (
     <section>
       <div className="shelf-head">
-        <h2>{title}</h2>
+        <h2 onClick={onSeeAll}>{title}</h2>
         {onSeeAll && <button onClick={onSeeAll}>Show all</button>}
       </div>
       <div className="shelf">
         {items.map((it) => (
-          <Card
-            key={it.Id}
-            title={it.Name}
-            subtitle={round ? 'Artist' : it.AlbumArtist}
-            image={jf.imageUrl(it.Id, { maxHeight: 320 })}
-            round={round}
-            onOpen={() => onOpen(it)}
-            onPlay={() => onPlay(it)}
-          />
+          <Card key={it.Id} title={it.Name}
+            subtitle={subtitle ? subtitle(it) : (round ? 'Artist' : it.AlbumArtist)}
+            image={jf.imageUrl(it.Id, { maxHeight: 320 })} round={round}
+            onOpen={() => onOpen(it)} onPlay={() => onPlay(it)} />
         ))}
       </div>
     </section>
   );
 }
 
+const SEARCH_TYPES = ['All', 'Songs', 'Artists', 'Albums', 'Playlists'];
+
 export default function Library({
-  jf, player, view, onView, albums, artists, detail, setDetail, query, setQuery,
+  jf, player, view, albums, artists, playlists, detail, setDetail, query, setQuery,
+  onLike, onAddTo, onNewPlaylist, onRemoveFromPlaylist, onReorder, onOpenPlaylist, onOpenLiked,
 }) {
   const [results, setResults] = useState(null);
+  const [searchType, setSearchType] = useState('All');
   const [err, setErr] = useState(null);
   const [seeAll, setSeeAll] = useState(null);
+  const [dragIdx, setDragIdx] = useState(null);
+  const [overIdx, setOverIdx] = useState(null);
 
-  // Debounced so typing does not fire a request per keystroke.
   useEffect(() => {
     if (view !== 'search' || !query.trim()) { setResults(null); return undefined; }
     const t = setTimeout(() => {
@@ -99,13 +77,18 @@ export default function Library({
     } catch (e) { setErr(e.message); }
   };
 
-  const open = (it) => (it.Type === 'MusicArtist' ? openArtist(it) : openAlbum(it));
+  const open = (it) => {
+    if (it.Type === 'MusicArtist') return openArtist(it);
+    if (it.Type === 'Playlist') return onOpenPlaylist(it);
+    return openAlbum(it);
+  };
 
   const playItem = async (it) => {
     try {
-      const { items } = it.Type === 'MusicArtist'
-        ? await jf.tracks({ artistId: it.Id, limit: 200 })
-        : await jf.tracks({ albumId: it.Id });
+      let items;
+      if (it.Type === 'MusicArtist') ({ items } = await jf.tracks({ artistId: it.Id, limit: 200 }));
+      else if (it.Type === 'Playlist') ({ items } = await jf.playlistTracks(it.Id));
+      else ({ items } = await jf.tracks({ albumId: it.Id }));
       if (items.length) player.playQueue(items, 0);
     } catch (e) { setErr(e.message); }
   };
@@ -117,32 +100,52 @@ export default function Library({
     } catch (e) { setErr(e.message); }
   };
 
-  // Stable pseudo-random picks so the home page is not identical every render.
   const shelves = useMemo(() => {
-    const pick = (arr, n) => arr.slice(0, n);
     const shuffled = [...albums].sort(() => Math.random() - 0.5);
-    return {
-      recent: pick(albums, 8),
-      jump: pick(shuffled, 8),
-      artists: pick(artists, 8),
-    };
+    return { jump: shuffled.slice(0, 8), artists: artists.slice(0, 8) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [albums.length, artists.length]);
+
+  const rowProps = (tracks, i, extra = {}) => ({
+    track: tracks[i], n: i + 1, jf,
+    active: player.current?.Id === tracks[i].Id,
+    onPlay: () => player.playQueue(tracks, i),
+    onLike, playlists, onAddTo, onNewPlaylist,
+    ...extra,
+  });
 
   // --- detail view --------------------------------------------------------
   if (detail) {
     const { item, tracks, kind } = detail;
     const isArtist = kind === 'Artist';
-    const totalMin = Math.round(
-      tracks.reduce((s2, t) => s2 + (t.RunTimeTicks || 0) / 10_000_000, 0) / 60
-    );
+    const isPlaylist = kind === 'Playlist';
+    const isLiked = item.Id === LIKED_ID;
+    const totalMin = Math.round(tracks.reduce((s2, t) => s2 + (t.RunTimeTicks || 0) / 10_000_000, 0) / 60);
+
+    // Drag-to-reorder for user playlists (Liked Songs is date-ordered, not reorderable).
+    const dnd = (i) => (isPlaylist && !isLiked ? {
+      draggable: true,
+      onDragStart: () => setDragIdx(i),
+      onDragOver: (e) => { e.preventDefault(); setOverIdx(i); },
+      onDrop: (e) => {
+        e.preventDefault();
+        if (dragIdx != null && dragIdx !== i) onReorder(item, tracks[dragIdx], dragIdx, i);
+        setDragIdx(null); setOverIdx(null);
+      },
+    } : {});
 
     return (
       <div className="content">
         <button className="back" onClick={() => setDetail(null)}>&larr; Back</button>
 
         <header className={`hero ${isArtist ? 'artist' : ''}`}>
-          <img src={jf.imageUrl(item.Id, { maxHeight: 464 })} alt="" />
+          {isLiked ? (
+            <div className="liked-art" style={{ width: 232, height: 232, borderRadius: 4, boxShadow: '0 16px 40px rgba(0,0,0,.6)' }}>
+              <Heart on={false} size={100} />
+            </div>
+          ) : (
+            <img src={jf.imageUrl(item.Id, { maxHeight: 464 })} alt="" />
+          )}
           <div style={{ minWidth: 0 }}>
             {isArtist ? (
               <span className="verified">
@@ -152,23 +155,23 @@ export default function Library({
                 Verified Artist
               </span>
             ) : (
-              <div className="kind">{kind}</div>
+              <div className="kind">{isLiked ? 'Playlist' : kind}</div>
             )}
             <h1>{item.Name}</h1>
             <p>
-              {!isArtist && item.AlbumArtist && <b>{item.AlbumArtist}</b>}
-              {!isArtist && item.ProductionYear ? ` · ${item.ProductionYear}` : ''}
-              {`${isArtist ? '' : ' · '}${tracks.length} tracks`}
+              {!isArtist && !isPlaylist && item.AlbumArtist && <b>{item.AlbumArtist}</b>}
+              {!isArtist && !isPlaylist && item.ProductionYear ? ` · ${item.ProductionYear}` : ''}
+              {`${isArtist || isPlaylist ? '' : ' · '}${tracks.length} songs`}
               {totalMin ? `, about ${totalMin} min` : ''}
             </p>
           </div>
         </header>
 
         <div className="actions">
-          <button className="bigplay" onClick={() => player.playQueue(tracks, 0)} title="Play">
+          <button className="bigplay" onClick={() => tracks.length && player.playQueue(tracks, 0)} title="Play">
             <PlayGlyph size={24} />
           </button>
-          <button className="btn-secondary" onClick={() => startMix(item)}>Instant mix</button>
+          {!isLiked && <button className="btn-secondary" onClick={() => startMix(item)}>Instant mix</button>}
           {isArtist && <button className="btn-secondary" disabled title="Not wired up yet">Follow</button>}
         </div>
 
@@ -177,48 +180,46 @@ export default function Library({
             <section>
               <div className="shelf-head"><h2>Popular</h2></div>
               <div className="tracklist" style={{ padding: 0 }}>
-                {tracks.slice(0, 10).map((t, i) => (
-                  <TrackRow key={t.Id} track={t} n={i + 1}
-                    active={player.current?.Id === t.Id}
-                    onPlay={() => player.playQueue(tracks, i)} />
-                ))}
+                {tracks.slice(0, 10).map((t, i) => <TrackRow key={t.Id} {...rowProps(tracks, i)} />)}
               </div>
             </section>
-
             {detail.albums?.length > 0 && (
               <section>
                 <div className="shelf-head"><h2>Discography</h2></div>
                 <div className="grid">
                   {detail.albums.map((a) => (
-                    <Card key={a.Id} title={a.Name}
-                      subtitle={a.ProductionYear ? `${a.ProductionYear} · Album` : 'Album'}
-                      image={jf.imageUrl(a.Id, { maxHeight: 320 })}
-                      onOpen={() => openAlbum(a)} onPlay={() => playItem(a)} />
+                    <Card key={a.Id} title={a.Name} subtitle={a.ProductionYear ? `${a.ProductionYear} · Album` : 'Album'}
+                      image={jf.imageUrl(a.Id, { maxHeight: 320 })} onOpen={() => openAlbum(a)} onPlay={() => playItem(a)} />
                   ))}
                 </div>
               </section>
             )}
-
             <section>
               <div className="shelf-head"><h2>Fans also like</h2></div>
-              <p className="placeholder-note">
-                Similar artists need a metadata provider. Not wired up yet.
-              </p>
+              <p className="placeholder-note">Similar artists need a metadata provider. Not wired up yet.</p>
             </section>
-
             <section>
               <div className="shelf-head"><h2>About</h2></div>
-              <p className="placeholder-note">
-                {item.Overview || 'No biography yet. These arrive with artist metadata.'}
-              </p>
+              <p className="placeholder-note">{item.Overview || 'No biography yet. These arrive with artist metadata.'}</p>
             </section>
           </div>
         ) : (
           <div className="tracklist">
+            {tracks.length === 0 && (
+              <p className="placeholder-note">
+                {isLiked ? 'Songs you like will appear here. Save songs by tapping the heart icon.' : 'This playlist is empty.'}
+              </p>
+            )}
             {tracks.map((t, i) => (
-              <TrackRow key={t.Id} track={t} n={i + 1}
-                active={player.current?.Id === t.Id}
-                onPlay={() => player.playQueue(tracks, i)} />
+              <div key={t.PlaylistItemId || `${t.Id}-${i}`} className={overIdx === i && dragIdx != null ? 'dropbefore' : ''}>
+                <TrackRow
+                  {...rowProps(tracks, i, {
+                    showArt: isPlaylist,
+                    onRemove: isPlaylist && !isLiked ? () => onRemoveFromPlaylist(item, t) : undefined,
+                    ...dnd(i),
+                  })}
+                />
+              </div>
             ))}
           </div>
         )}
@@ -233,15 +234,13 @@ export default function Library({
       <div className="content">
         <div className="contentbar">
           <button className="back" style={{ padding: 0 }} onClick={() => setSeeAll(null)}>&larr; Back</button>
-          <h2 style={{ margin: 0, fontSize: 20 }}>{seeAll === 'artists' ? 'Artists' : 'Albums'}</h2>
+          <h2 style={{ margin: 0, fontSize: 24 }}>{seeAll === 'artists' ? 'Artists' : 'Albums'}</h2>
         </div>
         <div className="pad">
           <div className="grid">
             {items.map((it) => (
-              <Card key={it.Id} title={it.Name}
-                subtitle={seeAll === 'artists' ? 'Artist' : it.AlbumArtist}
-                image={jf.imageUrl(it.Id, { maxHeight: 320 })}
-                round={seeAll === 'artists'}
+              <Card key={it.Id} title={it.Name} subtitle={seeAll === 'artists' ? 'Artist' : it.AlbumArtist}
+                image={jf.imageUrl(it.Id, { maxHeight: 320 })} round={seeAll === 'artists'}
                 onOpen={() => open(it)} onPlay={() => playItem(it)} />
             ))}
           </div>
@@ -252,57 +251,110 @@ export default function Library({
 
   // --- search -------------------------------------------------------------
   if (view === 'search') {
+    const r = results;
+    // Spotify's Top result: the single best hit, artist preferred if the name
+    // matches closely, else the first song's album/artist.
+    const top = r
+      ? (r.artists[0] && r.artists[0].Name.toLowerCase().startsWith(query.trim().toLowerCase()) ? { kind: 'Artist', item: r.artists[0] }
+        : r.albums[0] ? { kind: 'Album', item: r.albums[0] }
+        : r.artists[0] ? { kind: 'Artist', item: r.artists[0] }
+        : r.tracks[0] ? { kind: 'Song', item: r.tracks[0] } : null)
+      : null;
+    const show = (t) => searchType === 'All' || searchType === t;
+
     return (
       <div className="content">
         <div className="contentbar">
-          <input className="search" autoFocus placeholder="What do you want to listen to?"
+          <input className="search" autoFocus placeholder="What do you want to play?"
             value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
+        {r && (
+          <div className="searchtypes">
+            {SEARCH_TYPES.map((t) => (
+              <button key={t} className={`pill ${searchType === t ? 'on' : ''}`} onClick={() => setSearchType(t)}>{t}</button>
+            ))}
+          </div>
+        )}
         <div className="pad">
           {err && <div className="banner error">{err}</div>}
-          {!query.trim() && <p className="card-sub">Search your library by track, album or artist.</p>}
-          {results && (
+          {!query.trim() && (
             <>
-              {results.tracks.length > 0 && (
-                <section>
-                  <div className="shelf-head"><h2>Songs</h2></div>
-                  <div className="tracklist" style={{ padding: 0 }}>
-                    {results.tracks.slice(0, 20).map((t, i) => (
-                      <TrackRow key={t.Id} track={t} n={i + 1}
-                        active={player.current?.Id === t.Id}
-                        onPlay={() => player.playQueue(results.tracks, i)} />
-                    ))}
-                  </div>
-                </section>
-              )}
-              {results.albums.length > 0 && (
-                <section>
-                  <div className="shelf-head"><h2>Albums</h2></div>
-                  <div className="grid">
-                    {results.albums.map((a) => (
-                      <Card key={a.Id} title={a.Name} subtitle={a.AlbumArtist}
-                        image={jf.imageUrl(a.Id, { maxHeight: 320 })}
-                        onOpen={() => openAlbum(a)} onPlay={() => playItem(a)} />
-                    ))}
-                  </div>
-                </section>
-              )}
-              {results.artists.length > 0 && (
-                <section>
-                  <div className="shelf-head"><h2>Artists</h2></div>
-                  <div className="grid">
-                    {results.artists.map((a) => (
-                      <Card key={a.Id} title={a.Name} subtitle="Artist" round
-                        image={jf.imageUrl(a.Id, { maxHeight: 320 })}
-                        onOpen={() => openArtist(a)} onPlay={() => startMix(a)} />
-                    ))}
-                  </div>
-                </section>
-              )}
-              {!results.tracks.length && !results.albums.length && !results.artists.length && (
-                <div className="banner">No matches for &ldquo;{query}&rdquo;.</div>
-              )}
+              <div className="shelf-head"><h2>Browse all</h2></div>
+              <p className="placeholder-note">Genre and mood browsing needs genre tags, which the retag is adding. Search by song, album or artist above.</p>
             </>
+          )}
+
+          {r && searchType === 'All' && top && (
+            <div className="searchgrid">
+              <section>
+                <div className="shelf-head"><h2>Top result</h2></div>
+                <div className={`topresult ${top.kind === 'Artist' ? 'round' : ''}`}
+                  onClick={() => top.kind === 'Song' ? openAlbum({ Id: top.item.AlbumId, Name: top.item.Album }) : open(top.item)}>
+                  <img src={jf.imageUrl(top.kind === 'Song' ? (top.item.AlbumId || top.item.Id) : top.item.Id, { maxHeight: 200 })} alt="" />
+                  <div>
+                    <h3>{top.item.Name}</h3>
+                    <div className="kind">
+                      {top.kind === 'Song' ? (top.item.Artists?.join(', ') || '') : (top.item.AlbumArtist || '')}
+                      <b>{top.kind}</b>
+                    </div>
+                  </div>
+                  <button className="card-play" onClick={(e) => { e.stopPropagation(); top.kind === 'Song' ? player.playQueue(r.tracks, 0) : playItem(top.item); }}>
+                    <PlayGlyph />
+                  </button>
+                </div>
+              </section>
+              <section>
+                <div className="shelf-head"><h2>Songs</h2></div>
+                <div className="tracklist" style={{ padding: 0 }}>
+                  {r.tracks.slice(0, 4).map((t, i) => <TrackRow key={t.Id} {...rowProps(r.tracks, i, { showArt: true })} />)}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {r && show('Songs') && searchType !== 'All' && r.tracks.length > 0 && (
+            <section>
+              <div className="shelf-head"><h2>Songs</h2></div>
+              <div className="tracklist" style={{ padding: 0 }}>
+                {r.tracks.map((t, i) => <TrackRow key={t.Id} {...rowProps(r.tracks, i, { showArt: true })} />)}
+              </div>
+            </section>
+          )}
+          {r && show('Artists') && r.artists.length > 0 && (
+            <section>
+              <div className="shelf-head"><h2>Artists</h2></div>
+              <div className="grid">
+                {r.artists.map((a) => (
+                  <Card key={a.Id} title={a.Name} subtitle="Artist" round
+                    image={jf.imageUrl(a.Id, { maxHeight: 320 })} onOpen={() => openArtist(a)} onPlay={() => startMix(a)} />
+                ))}
+              </div>
+            </section>
+          )}
+          {r && show('Albums') && r.albums.length > 0 && (
+            <section>
+              <div className="shelf-head"><h2>Albums</h2></div>
+              <div className="grid">
+                {r.albums.map((a) => (
+                  <Card key={a.Id} title={a.Name} subtitle={`${a.ProductionYear ? a.ProductionYear + ' · ' : ''}${a.AlbumArtist || 'Album'}`}
+                    image={jf.imageUrl(a.Id, { maxHeight: 320 })} onOpen={() => openAlbum(a)} onPlay={() => playItem(a)} />
+                ))}
+              </div>
+            </section>
+          )}
+          {r && show('Playlists') && r.playlists.length > 0 && (
+            <section>
+              <div className="shelf-head"><h2>Playlists</h2></div>
+              <div className="grid">
+                {r.playlists.map((p) => (
+                  <Card key={p.Id} title={p.Name} subtitle="Playlist"
+                    image={jf.imageUrl(p.Id, { maxHeight: 320 })} onOpen={() => onOpenPlaylist(p)} onPlay={() => playItem(p)} />
+                ))}
+              </div>
+            </section>
+          )}
+          {r && !r.tracks.length && !r.albums.length && !r.artists.length && !r.playlists.length && (
+            <div className="banner">No results found for &ldquo;{query}&rdquo;. Check the spelling, or try a different search.</div>
           )}
         </div>
       </div>
@@ -321,12 +373,8 @@ export default function Library({
       </div>
       <div className="pad">
         {err && <div className="banner error">{err}</div>}
-        <Shelf title="Recently added" items={shelves.recent} jf={jf}
-          onOpen={open} onPlay={playItem} onSeeAll={() => setSeeAll('albums')} />
-        <Shelf title="Jump back in" items={shelves.jump} jf={jf}
-          onOpen={open} onPlay={playItem} onSeeAll={() => setSeeAll('albums')} />
-        <Shelf title="Artists you have" items={shelves.artists} jf={jf} round
-          onOpen={open} onPlay={startMix} onSeeAll={() => setSeeAll('artists')} />
+        <Shelf title="Jump back in" items={shelves.jump} jf={jf} onOpen={open} onPlay={playItem} onSeeAll={() => setSeeAll('albums')} />
+        <Shelf title="Artists you have" items={shelves.artists} jf={jf} round onOpen={open} onPlay={startMix} onSeeAll={() => setSeeAll('artists')} />
       </div>
     </div>
   );

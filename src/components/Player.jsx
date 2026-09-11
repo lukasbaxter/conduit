@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import DevicePicker from './DevicePicker.jsx';
+import { Heart } from './TrackRow.jsx';
 
 function fmt(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -8,7 +9,7 @@ function fmt(seconds) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist, panel, onPanel }) {
+export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist, panel, onPanel, onLike }) {
   const { current, nowPlaying, playing, position, duration, volume, device, error } = player;
   // nowPlaying covers both our own queue and a session adopted from a speaker
   // that was already playing when the app opened.
@@ -59,6 +60,16 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
               )}
             </div>
           </div>
+          {current && (
+            <button
+              className={`trackrow-like ${current.UserData?.IsFavorite ? 'on' : ''}`}
+              style={{ opacity: 1 }}
+              onClick={() => onLike?.(current, !current.UserData?.IsFavorite)}
+              title={current.UserData?.IsFavorite ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
+            >
+              <Heart on={Boolean(current.UserData?.IsFavorite)} />
+            </button>
+          )}
         </div>
 
         <div className="player-controls">

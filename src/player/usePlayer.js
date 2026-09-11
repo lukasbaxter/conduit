@@ -557,15 +557,19 @@ export function usePlayer(jf) {
     ? { title: external.title, artist: external.artist || '', artId: null }
     : null;
 
+  const patchQueue = useCallback((fn) => {
+    setQueue((q) => { const n = q.map(fn); queueRef.current = n; return n; });
+  }, []);
+
   return useMemo(
     () => ({
-      device, setDevice, adoptActive, nowPlaying, external,
+      device, setDevice, adoptActive, nowPlaying, external, patchQueue,
       queue, index, current,
       playing, position, duration, volume, error,
       playQueue, toggle, next, previous, seek, setVolume, skipTo,
       clearError: () => setError(null),
     }),
-    [device, setDevice, adoptActive, nowPlaying, external, queue, index, current,
+    [device, setDevice, adoptActive, nowPlaying, external, patchQueue, queue, index, current,
      playing, position, duration, volume, error, playQueue, toggle, next,
      previous, seek, setVolume, skipTo]
   );
