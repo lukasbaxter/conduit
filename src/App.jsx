@@ -358,6 +358,13 @@ export default function App() {
     }
   };
 
+  // Test hook: drive playback/transfer from the headless test. Gated on ?debug.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('debug')) {
+      window.__jf = jf; window.__player = player;
+    }
+  }, [jf, player]);
+
   if (booting) return <div className="boot">Starting Conduit...</div>;
   if (!jf) return <Login onConnected={setJf} />;
 

@@ -96,6 +96,7 @@ export function usePlayer(jf) {
   const yieldRef = useRef(() => {});
   const setVolumeRef = useRef(() => {});
   const activePlayerRef = useRef(null); // clientId of the active player, if not us
+  const rosterRef = useRef({ players: [], lanDevices: [] });
 
   useEffect(() => { deviceRef.current = device; }, [device]);
   useEffect(() => { positionRef.current = position; }, [position]);
@@ -117,7 +118,7 @@ export function usePlayer(jf) {
   const attachRelay = useCallback((relay) => { relayRef.current = relay; setRelayInstance(relay); }, []);
   // Display and control-routing follow the shared session (derived at render),
   // so this just stores the roster.
-  const applyRoster = useCallback((r) => setRoster(r), []);
+  const applyRoster = useCallback((r) => { rosterRef.current = r; setRoster(r); }, []);
 
   // Remote players from the relay, presented as selectable devices.
   const relayDevices = roster.players
@@ -431,15 +432,18 @@ export function usePlayer(jf) {
       // or a speaker): take over playback of that session's current track here.
       const act = activePlayerRef.current;
       if (act) {
-        const np = (roster.players || []).find((p) => p.id === act)?.nowPlaying;
+        const np = (rosterRef.current.players || []).find((p) => p.id === act)?.nowPlaying;
         setDeviceState(nextDevice); deviceRef.current = nextDevice;
+        // Become the active player immediately -- unconditionally, so taking
+        // over never silently fails just because the track can't be resumed.
+        relayRef.current?.claim();
+        activePlayerRef.current = null;
         if (np?.itemId && jf) {
           try {
             const q = new URLSearchParams({ Ids: np.itemId, userId: jf.userId, Fields: 'MediaSources,ArtistItems,AlbumArtists,UserData' });
             const data = await jf._fetch(`/Items?${q}`);
             const t = (data.Items || [])[0];
             if (t) {
-              relayRef.current?.claim();
               setQueue([t]); setIndex(0); queueRef.current = [t]; indexRef.current = 0;
               setDuration(ticksToSeconds(t.RunTimeTicks));
               anchorAt(np.position || 0, true);
@@ -644,8 +648,8 @@ export function usePlayer(jf) {
   const relayTargetId = activePlayer?.id || null;
 
   // Either the mirrored active session, our own queue item, or an adopted speaker.
-  const nowPlaying = relayTarget
-    ? { title: relayTarget.title, artist: relayTarget.artist, artUrl: relayTarget.artUrl, artId: null }
+  const nowPlaying = activePlayer
+    ? (relayTarget ? { title: relayTarget.title, artist: relayTarget.artist, artUrl: relayTarget.artUrl, artId: null } : null)
     : current
     ? {
         title: current.Name,
