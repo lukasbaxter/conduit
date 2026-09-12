@@ -8,6 +8,7 @@ import Player, { PlayingElsewhereBar } from './components/Player.jsx';
 import RightPanel from './components/RightPanel.jsx';
 import { downloadTrack } from './api/download.js';
 import { applyTheme, DEFAULT_THEME } from './api/prefs.js';
+import { search as relaySearch } from './api/search.js';
 
 // Everything goes through music.baxtergroup.io (Let's Encrypt on the origin,
 // Cloudflare proxy deliberately off -- it throttles the audio). The browser
@@ -383,21 +384,32 @@ export default function App() {
   };
 
   // Footer links: art -> album, artist name -> artist page.
-  const openAlbumById = async (albumId) => {
+  // Navigation is instant: the page opens in its loading state on the click
+  // and fills in as data lands, instead of the click doing nothing for the
+  // seconds Jellyfin takes.
+  const openAlbumById = async (albumId, known = null) => {
+    setView('home');
+    setDetail({ item: known || { Id: albumId, Name: '' }, tracks: [], kind: 'Album', loading: true });
     try {
       const [meta, trackList] = await Promise.all([jf.itemById(albumId), jf.tracks({ albumId })]);
-      if (meta) { setView('home'); setDetail({ item: meta, tracks: trackList.items, kind: 'Album' }); }
-    } catch { /* ignore */ }
+      setDetail((d) => (d && d.item?.Id === albumId ? { ...d, item: meta || d.item, tracks: trackList.items, loading: false } : d));
+    } catch { setDetail((d) => (d && d.item?.Id === albumId ? { ...d, loading: false } : d)); }
   };
 
-  const openArtistById = async (artistId) => {
+  const openArtistById = async (artistId, known = null) => {
+    setView('home');
+    setDetail({ item: known || { Id: artistId, Name: '' }, tracks: [], albums: [], kind: 'Artist', loading: true });
+    const alive = () => true;
+    // Jellyfin's ArtistIds join takes ~1.7 s here; the search index answers the
+    // same question (this artist's tracks, most played first) in ~20 ms.
+    const fast = relaySearch(jf, '', { filter: `artistIds = "${artistId}"`, limit: 50 }).then((r) => r.tracks).catch(() => null);
+    jf.itemById(artistId).then((meta) => { if (alive() && meta) setDetail((d) => (d && d.item?.Id === artistId ? { ...d, item: meta } : d)); }).catch(() => {});
+    jf.artistAlbums(artistId).then((a) => setDetail((d) => (d && d.item?.Id === artistId ? { ...d, albums: a.items } : d))).catch(() => {});
     try {
-      const [meta, trackList] = await Promise.all([
-        jf.itemById(artistId),
-        jf.tracks({ artistId, limit: 200 }),
-      ]);
-      if (meta) { setView('home'); setDetail({ item: meta, tracks: trackList.items, kind: 'Artist' }); }
-    } catch { /* ignore */ }
+      let tracks = await fast;
+      if (!tracks || !tracks.length) tracks = (await jf.tracks({ artistId, limit: 200 })).items;
+      setDetail((d) => (d && d.item?.Id === artistId ? { ...d, tracks, loading: false } : d));
+    } catch { setDetail((d) => (d && d.item?.Id === artistId ? { ...d, loading: false } : d)); }
   };
 
   const openPlaylist = async (pl) => {

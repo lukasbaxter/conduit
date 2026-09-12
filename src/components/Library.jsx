@@ -265,25 +265,9 @@ export default function Library({
     return () => { alive = false; ctrl.abort(); clearTimeout(t); };
   }, [within, detail?.item?.Id, detail?.tracks?.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openAlbum = async (album) => {
-    setDetail({ item: album, tracks: [], kind: 'Album', loading: true });
-    try {
-      const { items } = await jf.tracks({ albumId: album.Id });
-      setDetail((d) => (d && d.item?.Id === album.Id ? { ...d, tracks: items, loading: false } : d));
-    } catch (e) { setErr(e.message); }
-  };
+  const openAlbum = (album) => onOpenAlbumById(album.Id, album.Name ? album : null);
 
-  const openArtist = async (artist) => {
-    setPopularExpanded(false);
-    setDetail({ item: artist, tracks: [], albums: [], kind: 'Artist', loading: true });
-    try {
-      const [t, a] = await Promise.all([
-        jf.tracks({ artistId: artist.Id, limit: 200 }),
-        jf.artistAlbums(artist.Id).catch(() => ({ items: [] })),
-      ]);
-      setDetail((d) => (d && d.item?.Id === artist.Id ? { ...d, tracks: t.items, albums: a.items, loading: false } : d));
-    } catch (e) { setErr(e.message); }
-  };
+  const openArtist = (artist) => { setPopularExpanded(false); onOpenArtistById(artist.Id, artist); };
 
   const open = (it) => {
     if (it.Type === 'MusicArtist') return openArtist(it);
@@ -584,6 +568,14 @@ export default function Library({
             )}
             {detail.loading && <p className="placeholder-note">Loading...</p>}
           </div>
+        </div>
+      );
+    }
+
+    if (detail.loading && !item.Name) {
+      return (
+        <div className="content loading-screen">
+          <div className="dots"><i /><i /><i /></div>
         </div>
       );
     }
