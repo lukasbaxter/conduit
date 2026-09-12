@@ -660,3 +660,7 @@ input[type="range"]:disabled { opacity: .4; }
 .modal-actions .primary:disabled { opacity: .4; }
 
 .trackhead.with-art > span:nth-child(2) { width: 40px; }
+
+/* A playlist you own: clicking the title opens Edit details, like the cover. */
+.hero-title-edit { display: block; padding: 0; text-align: left; color: inherit; max-width: 100%; cursor: pointer; }
+.hero-title-edit h1 { margin: 8px 0 16px; }

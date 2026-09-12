@@ -271,7 +271,13 @@ export default function Library({
                 ) : (
                   <div className="kind">{isLiked ? 'Playlist' : kind === 'Album' ? releaseType({ ...item, ChildCount: item.ChildCount ?? tracks.length, RunTimeTicks: item.RunTimeTicks || totalTicks }) : kind}</div>
                 )}
-                <FittedTitle text={item.Name} maxLines={2} />
+                {canEdit ? (
+                  <button className="hero-title-edit" onClick={() => setEditPl({ name: item.Name, file: null, preview: null })} title="Edit details">
+                    <FittedTitle text={item.Name} maxLines={2} />
+                  </button>
+                ) : (
+                  <FittedTitle text={item.Name} maxLines={2} />
+                )}
                 <p className="hero-meta">
                   {lead && (
                     <>
