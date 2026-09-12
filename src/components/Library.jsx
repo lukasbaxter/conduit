@@ -132,6 +132,16 @@ export default function Library({
     if (!jf) return;
     relayBrowse(jf).then((t) => { setTiles(t); try { localStorage.setItem('conduit.browse', JSON.stringify(t)); } catch {} }).catch(() => {});
   }, [jf]);
+  // A Daily Mix as a page: Jellyfin's instant mix seeded from the artist,
+  // shown like a playlist (list, play, shuffle) rather than played blind.
+  const openMix = async (seed, n, color) => {
+    const id = `mix:${seed.Id}`;
+    setDetail({ item: { Id: id, Name: `Daily Mix ${n}`, Type: 'Playlist', _mix: true, _art: jf.imageUrl(seed.Id, { maxHeight: 464 }), _color: color, _sub: `${seed.Name} and more` }, tracks: [], kind: 'Playlist', loading: true });
+    try {
+      const items = await jf.instantMix(seed.Id, 50);
+      setDetail((d) => (d && d.item?.Id === id ? { ...d, tracks: items, loading: false } : d));
+    } catch (e) { setErr(e.message); setDetail((d) => (d && d.item?.Id === id ? { ...d, loading: false } : d)); }
+  };
   const openRadar = async () => {
     setDetail({ item: { Id: 'radar', Name: 'Release Radar', Type: 'Radar', _color: '#8d67ab' }, tracks: [], kind: 'Radar', releases: null });
     try {
@@ -326,10 +336,10 @@ export default function Library({
     // The colour lives on the page wrapper so the band behind the action bar
     // (.actions::before) sees it too, not just the header.
     const banner = isArtist ? jf.bannerUrl(item) : null;
-    const heroStyle = tint && !isArtist ? { '--hero': tint } : isLiked ? { '--hero': '#5038a0' } : isArtist && tint ? { '--hero': tint } : undefined;
+    const heroStyle = item._color ? { '--hero': item._color } : tint && !isArtist ? { '--hero': tint } : isLiked ? { '--hero': '#5038a0' } : isArtist && tint ? { '--hero': tint } : undefined;
 
     // Drag-to-reorder for user playlists (Liked Songs is date-ordered, not reorderable).
-    const dnd = (i) => (isPlaylist && !isLiked ? {
+    const dnd = (i) => (isPlaylist && !isLiked && !item._mix ? {
       draggable: true,
       onDragStart: () => setDragIdx(i),
       onDragOver: (e) => { e.preventDefault(); setOverIdx(i); },
@@ -585,7 +595,7 @@ export default function Library({
 
 
         {(() => {
-          const canEdit = isPlaylist && !isLiked;
+          const canEdit = isPlaylist && !isLiked && !item._mix;
           return (
             <header className={`hero ${isArtist ? 'artist' : ''} ${banner ? 'with-banner' : ''} ${tint || isLiked ? 'tinted' : ''}`} style={banner ? { '--banner': `url("${banner}")` } : undefined}>
               {isLiked ? (
@@ -597,7 +607,7 @@ export default function Library({
                   title={canEdit ? 'Choose photo' : undefined}
                   disabled={!canEdit}
                 >
-                  <img src={jf.imageUrl(item.Id, { maxHeight: 464 })} alt="" />
+                  <img src={item._art || jf.imageUrl(item.Id, { maxHeight: 464 })} alt="" />
                   {canEdit && <span className="hero-cover-edit">Choose photo</span>}
                 </button>
               )}
@@ -610,7 +620,7 @@ export default function Library({
                     Verified Artist
                   </span>
                 ) : (
-                  <div className="kind">{isLiked ? 'Playlist' : kind === 'Album' ? releaseType({ ...item, ChildCount: item.ChildCount ?? tracks.length, RunTimeTicks: item.RunTimeTicks || totalTicks }) : kind}</div>
+                  <div className="kind">{isLiked || item._mix ? 'Playlist' : kind === 'Album' ? releaseType({ ...item, ChildCount: item.ChildCount ?? tracks.length, RunTimeTicks: item.RunTimeTicks || totalTicks }) : kind}</div>
                 )}
                 {canEdit ? (
                   <button className="hero-title-edit" onClick={() => setEditPl({ name: item.Name, file: null, preview: null })} title="Edit details">
@@ -631,7 +641,8 @@ export default function Library({
                       {' · '}
                     </>
                   )}
-                  {isPlaylist && <><button className="rowlink strong" onClick={onOpenProfile}>{me?.Name || 'You'}</button>{' · '}</>}
+                  {isPlaylist && !item._mix && <><button className="rowlink strong" onClick={onOpenProfile}>{me?.Name || 'You'}</button>{' · '}</>}
+                  {item._mix && <><b>Made for you</b>{item._sub ? ` · ${item._sub}` : ''}{' · '}</>}
                   {isArtist ? `${tracks.length} songs in your library` : `${tracks.length} songs`}
                   {!isArtist && totalTicks ? `, ${fmtTotal(totalTicks)}` : ''}
                 </p>
@@ -655,9 +666,9 @@ export default function Library({
               ] } : null,
               lead ? { label: 'Go to artist', onClick: () => onOpenArtistById(lead.Id) } : null,
               kind === 'Album' ? { label: item.UserData?.IsFavorite ? 'Remove from Your Library' : 'Save to Your Library', onClick: () => onFollowAlbum?.(item, !item.UserData?.IsFavorite) } : null,
-              isPlaylist && !isLiked ? { sep: true } : null,
-              isPlaylist && !isLiked ? { label: 'Edit details', onClick: () => setEditPl({ name: item.Name, file: null, preview: null }) } : null,
-              isPlaylist && !isLiked ? { label: 'Delete', danger: true, onClick: () => { if (window.confirm(`Delete "${item.Name}"?`)) onDeletePlaylist(item); } } : null,
+              isPlaylist && !isLiked && !item._mix ? { sep: true } : null,
+              isPlaylist && !isLiked && !item._mix ? { label: 'Edit details', onClick: () => setEditPl({ name: item.Name, file: null, preview: null }) } : null,
+              isPlaylist && !isLiked && !item._mix ? { label: 'Delete', danger: true, onClick: () => { if (window.confirm(`Delete "${item.Name}"?`)) onDeletePlaylist(item); } } : null,
             ];
             return (
               <>
@@ -847,7 +858,7 @@ export default function Library({
                       {...rowProps(shown, i, {
                         showArt: isPlaylist,
                         hideAlbum: kind === 'Album',
-                        onRemove: isPlaylist && !isLiked ? () => onRemoveFromPlaylist(item, t) : undefined,
+                        onRemove: isPlaylist && !isLiked && !item._mix ? () => onRemoveFromPlaylist(item, t) : undefined,
                         ...(filtered ? {} : dnd(i)),
                       }, item.Id)}
                     />
@@ -1069,6 +1080,7 @@ export default function Library({
       bar={<FilterPills where="all" setSeeAll={setSeeAll} goHome={() => onView('home')} />}
       onOpenArtist={onOpenArtistById}
       onOpenRadar={openRadar}
+      onOpenMix={openMix}
     />
   );
 }

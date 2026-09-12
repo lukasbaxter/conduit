@@ -87,7 +87,7 @@ function Card({ title, subtitle, image, round, onOpen, onPlay }) {
  * mixes are. Discover Weekly and Release Radar need listening data we do not
  * have and are labelled placeholders.
  */
-export default function Home({ jf, player, albums, artists, playlists, onOpen, onOpenLiked, onOpenPlaylist, onSeeAll, likedCount, bar, onOpenArtist, onOpenRadar }) {
+export default function Home({ jf, player, albums, artists, playlists, onOpen, onOpenLiked, onOpenPlaylist, onSeeAll, likedCount, bar, onOpenArtist, onOpenRadar, onOpenMix }) {
   const [recent, setRecent] = useState(() => jf?.persisted('home.recent') || []);
   const [added, setAdded] = useState(() => jf?.persisted('home.added') || []);
   const [topArtists, setTopArtists] = useState(() => jf?.persisted('home.topArtists') || []);
@@ -177,7 +177,7 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
           {mixSeeds.map((a, i) => (
             <MixTile key={a.Id} label={`Daily Mix ${i + 1}`} sub={`${a.Name} and more`}
               image={jf.imageUrl(a.Id, { maxHeight: 320 })} color={MIX_COLORS[i % MIX_COLORS.length]}
-              onOpen={() => playMix(a)} onPlay={() => playMix(a)} />
+              onOpen={() => onOpenMix(a, i + 1, MIX_COLORS[i % MIX_COLORS.length])} onPlay={() => playMix(a)} />
           ))}
           {explo.map((e) => e.pl ? (
             <MixTile key={e.key} label={e.label} sub={e.sub} color={e.color} image={jf.imageUrl(e.pl.Id, { maxHeight: 320 })}
