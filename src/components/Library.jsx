@@ -395,6 +395,23 @@ export default function Library({
             </section>
 
             <section className="settings-section">
+              <h2>Scrobbling &amp; discovery</h2>
+              <div className="settings-hint" style={{ marginBottom: 12 }}>
+                Every song you play for at least half its length is sent to <a href="https://listenbrainz.org" target="_blank" rel="noreferrer">ListenBrainz</a> as a listen.
+                That history powers the Weekly Exploration / Daily Jams playlists (Explo) on Home. Get the token from listenbrainz.org → Settings.
+              </div>
+              <div className="settings-field">
+                <label>ListenBrainz username</label>
+                <input className="settings-input" value={prefs?.listenbrainz?.user || ''} onChange={(e) => onUpdatePrefs({ listenbrainz: { ...(prefs?.listenbrainz || {}), user: e.target.value.trim() } })} spellCheck="false" placeholder="username" />
+              </div>
+              <div className="settings-field" style={{ marginTop: 10 }}>
+                <label>ListenBrainz user token</label>
+                <input className="settings-input" type="password" value={prefs?.listenbrainz?.token || ''} onChange={(e) => onUpdatePrefs({ listenbrainz: { ...(prefs?.listenbrainz || {}), token: e.target.value.trim() } })} spellCheck="false" placeholder="xxxxxxxx-xxxx-…" />
+                <div className="settings-hint">{prefs?.listenbrainz?.token ? 'Scrobbling is on.' : 'Scrobbling is off until a token is set.'}</div>
+              </div>
+            </section>
+
+            <section className="settings-section">
               <h2>Appearance</h2>
               <div className="settings-hint" style={{ marginBottom: 12 }}>Saved to your account and applied to every Conduit you have open, instantly.</div>
               <div className="theme-presets">

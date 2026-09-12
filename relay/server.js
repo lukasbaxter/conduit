@@ -116,6 +116,45 @@ function networkOf(req) {
   return ip;
 }
 
+// --- ListenBrainz scrobbling -----------------------------------------------
+// The active player already reports what it plays; once a track has been
+// heard for half its length (or 4 minutes) it is submitted as a listen to
+// the account's ListenBrainz (token kept in the user's Conduit settings). That
+// history is what feeds Explo's Weekly Exploration / Daily Jams.
+const lbTokens = new Map();   // uid -> { user, token } | null
+const lbSeen = new Map();     // clientId -> { itemId, startedAt, sent }
+async function lbTokenFor(self) {
+  if (lbTokens.has(self.uid)) return lbTokens.get(self.uid);
+  try {
+    const r = await fetch(`${JELLYFIN}/DisplayPreferences/conduit?userId=${self.uid}&client=conduit`, { headers: { Authorization: `MediaBrowser Token="${self.token}"` }, signal: AbortSignal.timeout(5000) });
+    const dp = r.ok ? await r.json() : null;
+    const raw = dp?.CustomPrefs?.listenbrainz;
+    const v = raw ? JSON.parse(raw) : null;
+    lbTokens.set(self.uid, v && v.token ? v : null);
+  } catch { lbTokens.set(self.uid, null); }
+  return lbTokens.get(self.uid);
+}
+async function submitListen(lb, np) {
+  const body = { listen_type: 'single', payload: [{ listened_at: Math.floor(Date.now() / 1000), track_metadata: {
+    artist_name: (np.artist || '').split(',')[0].trim() || np.artist || 'Unknown', track_name: np.title, release_name: np.album || undefined,
+    additional_info: { media_player: 'Conduit', submission_client: 'conduit-relay', duration_ms: np.duration ? Math.round(np.duration * 1000) : undefined } } }] };
+  const r = await fetch('https://api.listenbrainz.org/1/submit-listens', { method: 'POST', headers: { Authorization: `Token ${lb.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(8000) });
+  if (!r.ok) console.error('listenbrainz', r.status, (await r.text()).slice(0, 120));
+}
+async function maybeScrobble(self, np) {
+  if (!np || !np.itemId || !np.playing) return;
+  let st = lbSeen.get(self.id);
+  if (!st || st.itemId !== np.itemId) { st = { itemId: np.itemId, startedAt: Date.now(), sent: false }; lbSeen.set(self.id, st); }
+  if (st.sent) return;
+  const pos = np.position || 0, dur = np.duration || 0;
+  if (dur < 30) return;
+  if (pos >= Math.min(240, dur / 2)) {
+    st.sent = true;
+    const lb = await lbTokenFor(self);
+    if (lb) submitListen(lb, np).catch((e) => console.error('listenbrainz', e.message));
+  }
+}
+
 // --- search ---------------------------------------------------------------
 // Meilisearch sits on the docker network with no public port; this endpoint
 // is the only way in. It checks the caller's Jellyfin token (cached), runs one
@@ -439,6 +478,7 @@ wss.on('connection', (ws, req) => {
       // A client reports what it is playing, for the shared now-playing view.
       case 'nowplaying':
         self.nowPlaying = msg.nowPlaying || null;
+        maybeScrobble(self, self.nowPlaying);
         // Safety net: if nobody currently holds the active claim (e.g. the relay
         // just restarted and forgot) and this client is actually playing, adopt
         // it as active. Only a genuinely-playing client reports this -- clients
@@ -457,6 +497,7 @@ wss.on('connection', (ws, req) => {
       // user's other clients so they repaint right away. Jellyfin holds the
       // persistent copy; this is only the live nudge.
       case 'prefs':
+        if (msg.prefs && 'listenbrainz' in msg.prefs) lbTokens.set(self.uid, msg.prefs.listenbrainz && msg.prefs.listenbrainz.token ? msg.prefs.listenbrainz : null);
         for (const c of userMap(self.uid).values()) {
           if (c.id !== self.id) send(c.ws, { type: 'prefs', prefs: msg.prefs || {} });
         }

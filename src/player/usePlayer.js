@@ -1258,6 +1258,7 @@ export function usePlayer(jf) {
       itemId: current.Id,
       title: current.Name,
       artist: current.Artists?.join(', ') || current.AlbumArtist || '',
+      album: current.Album || null,
       artUrl: `${npBaseUrl}/Items/${current.AlbumId || current.Id}/Images/Primary?maxHeight=128`,
       albumId: current.AlbumId || null,
       artistId: current.ArtistItems?.[0]?.Id || current.AlbumArtists?.[0]?.Id || null,

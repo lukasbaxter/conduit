@@ -124,6 +124,16 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
   }, [recent, playlists, albums]);
 
   const mixSeeds = artists.slice(0, 6);
+  // Explo (ListenBrainz) playlists land in Jellyfin as Weekly-Exploration-…,
+  // Weekly-Jams-…, Daily-Jams-…; the newest of each becomes a tile here.
+  const explo = useMemo(() => {
+    const pick = (re) => [...playlists].filter((p) => re.test(p.Name)).sort((a, b) => b.Name.localeCompare(a.Name))[0] || null;
+    return [
+      { key: 'dw', label: 'Discover Weekly', sub: 'New music picked from your listening, every Monday.', color: '#1e3264', pl: pick(/^Weekly.?Exploration/i) },
+      { key: 'wj', label: 'Weekly Jams', sub: 'Songs you love, refreshed weekly.', color: '#8d67ab', pl: pick(/^Weekly.?Jams/i) },
+      { key: 'dj', label: 'Daily Jams', sub: 'A fresh mix every day.', color: '#e8115b', pl: pick(/^Daily.?Jams/i) },
+    ];
+  }, [playlists]);
   const jump = useMemo(() => [...albums].sort(() => Math.random() - 0.5).slice(0, 8), [albums.length]); // eslint-disable-line
 
   return (
@@ -151,7 +161,12 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
               image={jf.imageUrl(a.Id, { maxHeight: 320 })} color={MIX_COLORS[i % MIX_COLORS.length]}
               onOpen={() => playMix(a)} onPlay={() => playMix(a)} />
           ))}
-          <MixTile label="Discover Weekly" sub="Your weekly mixtape of fresh music. Needs listening history." color="#1e3264" placeholder />
+          {explo.map((e) => e.pl ? (
+            <MixTile key={e.key} label={e.label} sub={e.sub} color={e.color} image={jf.imageUrl(e.pl.Id, { maxHeight: 320 })}
+              onOpen={() => onOpenPlaylist(e.pl)} onPlay={() => playPlaylist(e.pl)} />
+          ) : e.key === 'dw' ? (
+            <MixTile key={e.key} label={e.label} sub="Arrives once ListenBrainz has your listening history (Settings → Scrobbling)." color={e.color} placeholder />
+          ) : null)}
           <MixTile label="Release Radar" sub="New releases from artists you follow. Needs a release feed." color="#8d67ab" placeholder />
         </Shelf>
 

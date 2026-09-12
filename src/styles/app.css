@@ -750,3 +750,7 @@ input[type="range"]:disabled { opacity: .4; }
 .tile .tile-heart { position: absolute; right: 8%; bottom: 8%; color: #fff; transform: rotate(25deg); opacity: .9; }
 .tile:hover { filter: brightness(1.08); }
 .browse-hero { min-height: 220px; }
+
+.settings-input { background: var(--bg-elevated-hi); color: var(--fg); border: 1px solid transparent; border-radius: 4px; padding: 10px 12px; font-size: 14px; min-width: 320px; }
+.settings-input:focus { outline: none; border-color: var(--fg-dim); }
+.settings-hint a { color: var(--fg); text-decoration: underline; }
