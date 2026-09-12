@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Lyrics } from './RightPanel.jsx';
-import Visualizer from './Visualizer.jsx';
+import Visualizer, { EQ_STYLES, GRADIENTS, loadVizSettings } from './Visualizer.jsx';
+import ContextMenu from './ContextMenu.jsx';
 import { ArtistLinks, PlayGlyph, PauseGlyph, ShuffleGlyph } from './TrackRow.jsx';
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -11,6 +12,25 @@ const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(
  */
 export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike }) {
   const [tab, setTab] = useState(() => localStorage.getItem('conduit.fsTab') || 'album');
+  // Visualizer settings (engine, style, gradient, preset cycling) behind the
+  // tab's ⋯ menu; persisted per device.
+  const [viz, setViz] = useState(loadVizSettings);
+  const [vizMenu, setVizMenu] = useState(null);
+  const [nextPreset, setNextPreset] = useState(0);
+  const setV = (patch) => setViz((v) => { const n = { ...v, ...patch }; try { localStorage.setItem('conduit.viz', JSON.stringify(n)); } catch {} return n; });
+  const vizItems = [
+    { label: 'Engine' },
+    { label: `Graphic EQ${viz.engine === 'eq' ? '  ✓' : ''}`, onClick: () => setV({ engine: 'eq' }) },
+    { label: `Milkdrop${viz.engine === 'milkdrop' ? '  ✓' : ''}`, onClick: () => setV({ engine: 'milkdrop' }) },
+    { sep: true },
+    ...(viz.engine === 'eq' ? [
+      { label: 'Style', sub: EQ_STYLES.map((s2) => ({ key: s2.id, label: `${s2.name}${viz.style === s2.id ? '  ✓' : ''}`, onClick: () => setV({ style: s2.id }) })) },
+      { label: 'Colours', sub: GRADIENTS.map((g) => ({ key: g, label: `${g[0].toUpperCase()}${g.slice(1)}${viz.gradient === g ? '  ✓' : ''}`, onClick: () => setV({ gradient: g }) })) },
+    ] : [
+      { label: 'Next preset', onClick: () => setNextPreset((n) => n + 1) },
+      { label: `Cycle presets${viz.cycle ? '  ✓' : ''}`, onClick: () => setV({ cycle: !viz.cycle }) },
+    ]),
+  ];
   const { nowPlaying, playing, position, duration, shuffle, repeat } = player;
   const art = nowPlaying?.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: 1000 }) : nowPlaying?.artUrl || null;
   useEffect(() => { try { localStorage.setItem('conduit.fsTab', tab); } catch {} }, [tab]);
@@ -29,6 +49,12 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike }
           {[['album', 'Album'], ['viz', 'Visualizer'], ['lyrics', 'Lyrics']].map(([k, label]) => (
             <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>
           ))}
+          {tab === 'viz' && (
+            <button className="fs-tabmore" title="Visualizer settings" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setVizMenu({ x: r.left, y: r.bottom + 6 }); }}>
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M3 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm6.5 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM16 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" /></svg>
+            </button>
+          )}
+          {vizMenu && <ContextMenu x={vizMenu.x} y={vizMenu.y} items={vizItems} onClose={() => setVizMenu(null)} />}
         </div>
         <button className="fs-close" onClick={onClose} title="Exit full screen">
           <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M6.53 9.47a.75.75 0 0 1 0 1.06l-2.72 2.72h1.018a.75.75 0 0 1 0 1.5H1.25v-3.579a.75.75 0 0 1 1.5 0v1.018l2.72-2.72a.75.75 0 0 1 1.06 0zm2.94-2.94a.75.75 0 0 1 0-1.06l2.72-2.72h-1.018a.75.75 0 1 1 0-1.5h3.578v3.579a.75.75 0 0 1-1.5 0V3.81l-2.72 2.72a.75.75 0 0 1-1.06 0z" /></svg>
@@ -37,7 +63,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike }
 
       <div className="fs-stage">
         {tab === 'album' && (art ? <img className="fs-art" src={art} alt="" /> : <div className="fs-art ph" />)}
-        {tab === 'viz' && <Visualizer player={player} jf={jf} active={tab === 'viz'} />}
+        {tab === 'viz' && <Visualizer player={player} jf={jf} active={tab === 'viz'} settings={viz} nextPresetSignal={nextPreset} />}
         {tab === 'lyrics' && <div className="fs-lyrics"><Lyrics player={player} jf={jf} /></div>}
       </div>
 
