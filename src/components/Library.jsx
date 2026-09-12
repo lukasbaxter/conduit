@@ -3,7 +3,7 @@ import TrackRow, { PlayGlyph, PauseGlyph, Heart, ShuffleGlyph } from './TrackRow
 import ContextMenu from './ContextMenu.jsx';
 import { vibrantColor } from '../api/colors.js';
 import { QUALITIES, THEME_PRESETS, DEFAULT_THEME, themeEquals } from '../api/prefs.js';
-import { search as relaySearch } from '../api/search.js';
+import { search as relaySearch, browse as relayBrowse } from '../api/search.js';
 import Home from './Home.jsx';
 import FittedTitle from './FittedTitle.jsx';
 import VirtualList from './VirtualList.jsx';
@@ -126,6 +126,20 @@ export default function Library({
   const [within, setWithin] = useState('');
   const [withinRes, setWithinRes] = useState(null);
   const recents = Array.isArray(prefs?.recentSearches) ? prefs.recentSearches : [];
+  // Browse tiles (genre buckets) for the empty search page.
+  const [tiles, setTiles] = useState(() => { try { return JSON.parse(localStorage.getItem('conduit.browse') || 'null'); } catch { return null; } });
+  useEffect(() => {
+    if (!jf) return;
+    relayBrowse(jf).then((t) => { setTiles(t); try { localStorage.setItem('conduit.browse', JSON.stringify(t)); } catch {} }).catch(() => {});
+  }, [jf]);
+  const openBrowse = async (tile) => {
+    setDetail({ item: { Id: `browse:${tile.id}`, Name: tile.name, Type: 'Browse', _color: tile.color, _filter: tile.filter }, tracks: [], kind: 'Browse', loading: true });
+    try {
+      const r = await relaySearch(jf, '', { filter: tile.filter, limit: 50 });
+      setDetail((d) => (d && d.item?.Id === `browse:${tile.id}` ? { ...d, tracks: r.tracks, loading: false } : d));
+    } catch { setDetail((d) => (d && d.item?.Id === `browse:${tile.id}` ? { ...d, loading: false } : d)); }
+  };
+  const TILE_COLORS = ['#e13300', '#1e3264', '#8d67ab', '#e8115b', '#148a08', '#0d73ec', '#7d4b32', '#ba5d07', '#477d95', '#503750', '#27856a', '#d84000', '#e1118c', '#a56752', '#4b7d9b', '#e61e32'];
   const remember = (q) => {
     const t = (q || '').trim(); if (!t || !onUpdatePrefs) return;
     onUpdatePrefs({ recentSearches: [t, ...recents.filter((x) => x.toLowerCase() !== t.toLowerCase())].slice(0, 10) });
@@ -303,6 +317,47 @@ export default function Library({
         setDragIdx(null); setOverIdx(null);
       },
     } : {});
+
+    if (kind === 'Browse') {
+      const byAlbum = new Map();
+      for (const t of tracks) if (t.AlbumId && !byAlbum.has(t.AlbumId)) byAlbum.set(t.AlbumId, { Id: t.AlbumId, Name: t.Album, AlbumArtist: t.AlbumArtist || (t.Artists || [])[0] });
+      return (
+        <div className="content" style={{ '--hero': item._color || '#3d3c3c' }}>
+          <div className="contentbar" />
+          <header className="hero tinted browse-hero">
+            <div style={{ minWidth: 0 }}>
+              <div className="kind">Genre</div>
+              <FittedTitle text={item.Name} maxLines={2} />
+              <p className="hero-meta">{tracks.length ? `${tracks.length} most played` : detail.loading ? 'Loading…' : 'Nothing here yet'}</p>
+            </div>
+          </header>
+          <div className="actions">
+            <button className="bigplay" onClick={() => tracks.length && player.playQueue(tracks, 0, item.Id)} title="Play"><PlayGlyph size={24} /></button>
+            <button className="iconbtn" onClick={() => tracks.length && player.setShuffle('on') & player.playQueue(tracks, Math.floor(Math.random() * tracks.length), item.Id)} title="Shuffle"><Shuffle /></button>
+          </div>
+          <div className="pad">
+            {byAlbum.size > 0 && (
+              <section>
+                <div className="shelf-head"><h2>Albums</h2></div>
+                <div className="shelf">
+                  {[...byAlbum.values()].slice(0, 12).map((a) => (
+                    <Card key={a.Id} title={a.Name} subtitle={a.AlbumArtist} image={jf.imageUrl(a.Id, { maxHeight: 320 })} onOpen={() => openAlbum(a)} onPlay={() => playItem(a)} />
+                  ))}
+                </div>
+              </section>
+            )}
+            {tracks.length > 0 && (
+              <section>
+                <div className="shelf-head"><h2>Popular</h2></div>
+                <div className="tracklist" style={{ padding: 0 }}>
+                  {tracks.map((t, i) => <TrackRow key={t.Id} {...rowProps(tracks, i, { showArt: true }, item.Id)} />)}
+                </div>
+              </section>
+            )}
+          </div>
+        </div>
+      );
+    }
 
     if (kind === 'Settings') {
       const theme = { ...DEFAULT_THEME, ...(prefs?.theme || {}) };
@@ -736,6 +791,30 @@ export default function Library({
               <div className="shelf-head"><h2>Recent searches</h2><button onClick={() => onUpdatePrefs?.({ recentSearches: [] })}>Clear</button></div>
               <div className="pills recents">
                 {recents.map((q2) => <button key={q2} className="pill" onClick={() => setQuery(q2)}>{q2}</button>)}
+              </div>
+            </section>
+          )}
+          {!query.trim() && (
+            <section>
+              <div className="shelf-head"><h2>Browse all</h2></div>
+              <div className="tilegrid">
+                <button className="tile" style={{ '--tile': '#1e3264' }} onClick={() => onView('home')}>
+                  <span>Made For You</span>{artists[0] && <img src={jf.imageUrl(artists[0].Id, { maxHeight: 200 })} alt="" />}
+                </button>
+                <button className="tile" style={{ '--tile': '#e13300' }} onClick={() => setSeeAll('albums')}>
+                  <span>New Releases</span>{albums[0] && <img src={jf.imageUrl(albums[0].Id, { maxHeight: 200 })} alt="" />}
+                </button>
+                <button className="tile" style={{ '--tile': '#8d67ab' }} onClick={() => openBrowse({ id: 'charts', name: 'Charts', color: '#8d67ab', filter: 'plays > 0' })}>
+                  <span>Charts</span>{albums[1] && <img src={jf.imageUrl(albums[1].Id, { maxHeight: 200 })} alt="" />}
+                </button>
+                <button className="tile" style={{ '--tile': '#5038a0' }} onClick={onOpenLiked}>
+                  <span>Liked Songs</span><i className="tile-heart"><Heart on={false} size={40} /></i>
+                </button>
+                {(tiles || []).map((t, i) => (
+                  <button key={t.id} className="tile" style={{ '--tile': t.color || TILE_COLORS[i % TILE_COLORS.length] }} onClick={() => openBrowse(t)}>
+                    <span>{t.name}</span>{t.coverId && <img src={jf.imageUrl(t.coverId, { maxHeight: 200 })} alt="" />}
+                  </button>
+                ))}
               </div>
             </section>
           )}

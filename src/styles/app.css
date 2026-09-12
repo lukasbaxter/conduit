@@ -740,3 +740,13 @@ input[type="range"]:disabled { opacity: .4; }
 .pills.chips { margin-bottom: 12px; }
 .pills.recents { flex-wrap: wrap; }
 .placeholder-note code { background: var(--tint); padding: 1px 5px; border-radius: 3px; color: var(--fg); font-size: 12px; }
+
+/* Browse tiles (Spotify's "Browse all"): colour block, name top-left, cover
+   tilted out of the bottom-right corner. */
+.tilegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 24px; }
+.tile { position: relative; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: var(--tile, #3d3c3c); text-align: left; padding: 16px; color: #fff; isolation: isolate; }
+.tile span { position: relative; z-index: 1; font-size: 24px; font-weight: 700; letter-spacing: -.3px; max-width: 70%; display: block; line-height: 1.15; }
+.tile img { position: absolute; right: -8%; bottom: -12%; width: 55%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; transform: rotate(25deg); box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.tile .tile-heart { position: absolute; right: 8%; bottom: 8%; color: #fff; transform: rotate(25deg); opacity: .9; }
+.tile:hover { filter: brightness(1.08); }
+.browse-hero { min-height: 220px; }

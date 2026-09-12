@@ -233,10 +233,65 @@ async function search(rawQ, { limit = 10, filter: extraFilter = null, userId = n
   return { top, artists: strong(artists), albums: strong(albums), tracks: tracks.slice(0, limit * 2), playlists: strong(playlists), chips, scoped };
 }
 
+// --- browse ---------------------------------------------------------------
+// The tiles on the empty search page. Raw genre tags are a mess (100s of
+// spellings, "R&B" split into "R" and "B" by the tag delimiter), so they are
+// folded into a fixed set of buckets by keyword; each bucket gets its track
+// count and the cover of its most-played album. Cached for 10 minutes.
+const BUCKETS = [
+  { id: 'hiphop', name: 'Hip-Hop', color: '#4b7d9b', re: /hip.?hop|\brap\b|trap|drill|grime|boom bap/i },
+  { id: 'pop', name: 'Pop', color: '#8d67ab', re: /\bpop\b(?!.*punk)|k-?pop|j-?pop|synthpop|electropop|dance pop/i },
+  { id: 'electronic', name: 'Electronic', color: '#e13300', re: /electro|house|techno|trance|edm|dubstep|drum|bass|dnb|garage|future|hardstyle|breakbeat|big beat|2-step|bassline|uk funky|jungle|club|dance/i },
+  { id: 'rock', name: 'Rock', color: '#e61e32', re: /\brock\b|grunge|punk|emo|post-hardcore|shoegaze|britpop/i },
+  { id: 'indie', name: 'Indie & Alternative', color: '#1e3264', re: /indie|alternat|alt\.|bedroom|lo-?fi|dream pop|art pop|art rock/i },
+  { id: 'rnb', name: 'R&B & Soul', color: '#ba5d07', re: /r&b|rnb|\br\b|\bb\b|soul|neo.?soul|funk|motown|disco/i },
+  { id: 'kpop', name: 'K-Pop', color: '#e8115b', re: /k-?pop|korean|asian music/i },
+  { id: 'metal', name: 'Metal', color: '#503750', re: /metal|hardcore|deathcore|metalcore/i },
+  { id: 'country', name: 'Country', color: '#d84000', re: /country|americana|bluegrass/i },
+  { id: 'jazz', name: 'Jazz & Blues', color: '#477d95', re: /jazz|blues|swing|bebop/i },
+  { id: 'classical', name: 'Classical', color: '#7d4b32', re: /classical|orchestr|symphon|baroque|piano|opera|ballet|concerto|art song/i },
+  { id: 'latin', name: 'Latin', color: '#e1118c', re: /latin|reggaeton|salsa|bachata|cumbia|latino|español|espanol/i },
+  { id: 'reggae', name: 'Reggae & Dancehall', color: '#148a08', re: /reggae|dancehall|dub\b|ska|afrobeat|afro/i },
+  { id: 'folk', name: 'Folk & Acoustic', color: '#a56752', re: /folk|acoustic|singer.?songwriter|bardcore/i },
+  { id: 'chill', name: 'Chill & Ambient', color: '#0d73ec', re: /ambient|chill|downtempo|lounge|sleep|meditat|new age/i },
+  { id: 'soundtrack', name: 'Soundtracks', color: '#27856a', re: /soundtrack|score|film|bandes originales|anime|game|video game|ost/i },
+];
+let browseCache = { at: 0, tiles: null };
+async function browse() {
+  if (browseCache.tiles && Date.now() - browseCache.at < 10 * 60 * 1000) return browseCache.tiles;
+  const facets = await meiliOne('tracks', { q: '', limit: 0, facets: ['genres'] });
+  const dist = facets.facetDistribution?.genres || {};
+  const tiles = [];
+  for (const b of BUCKETS) {
+    const genres = Object.keys(dist).filter((g) => b.re.test(g));
+    const count = genres.reduce((n, g) => n + dist[g], 0);
+    if (count < 15) continue;
+    const filter = `genres IN [${genres.map((g) => JSON.stringify(g)).join(', ')}]`;
+    const top = await meiliOne('tracks', { q: '', limit: 1, filter, sort: ['plays:desc'], attributesToRetrieve: ['albumId', 'name'] }).catch(() => ({ hits: [] }));
+    tiles.push({ id: b.id, name: b.name, color: b.color, count, filter, coverId: top.hits[0]?.albumId || null });
+  }
+  tiles.sort((a, b) => b.count - a.count);
+  browseCache = { at: Date.now(), tiles };
+  return tiles;
+}
+
 const server = http.createServer(async (req, res) => {
   // Health check for Docker.
   if (req.url === '/healthz') { res.writeHead(200); res.end('ok'); return; }
   const url = new URL(req.url, 'http://x');
+  if (url.pathname === '/browse' || url.pathname === '/relay/browse') {
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, X-Emby-Token, Content-Type', 'Access-Control-Allow-Methods': 'GET, OPTIONS' };
+    if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }
+    try {
+      const token = tokenOf(req);
+      if (!token || !(await whoIs(token))) { res.writeHead(401, cors); res.end('{"error":"unauthorized"}'); return; }
+      res.writeHead(200, { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ tiles: await browse() }));
+    } catch (e) {
+      res.writeHead(503, { ...cors, 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: String(e.message || e) }));
+    }
+    return;
+  }
   if (url.pathname === '/search' || url.pathname === '/relay/search') {
     // The desktop calls this cross-origin (file:// or localhost:5173).
     const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, X-Emby-Token, Content-Type', 'Access-Control-Allow-Methods': 'GET, OPTIONS' };
@@ -249,7 +304,7 @@ const server = http.createServer(async (req, res) => {
       const q = (url.searchParams.get('q') || '').slice(0, 200);
       const limit = Math.min(50, Number(url.searchParams.get('limit')) || 10);
       const filter = url.searchParams.get('filter') || null;
-      const out = q.trim() ? await search(q, { limit, filter, userId: who.id }) : { top: null, artists: [], albums: [], tracks: [], playlists: [], chips: [] };
+      const out = (q.trim() || filter) ? await search(q, { limit, filter, userId: who.id }) : { top: null, artists: [], albums: [], tracks: [], playlists: [], chips: [] };
       out.tookMs = Date.now() - t0;
       res.writeHead(200, { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(out));

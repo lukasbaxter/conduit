@@ -60,3 +60,10 @@ export async function search(jf, q, { limit = 10, filter = null, signal } = {}) 
     return { engine: 'jellyfin', top, chips: [], scoped: false, ...r };
   }
 }
+
+// Tiles for the empty search page (genre buckets from the index, with a cover).
+export async function browse(jf) {
+  const res = await fetch(`${relayBase()}/browse`, { headers: { 'X-Emby-Token': jf.token }, signal: AbortSignal.timeout(4000) });
+  if (!res.ok) throw new Error(`browse ${res.status}`);
+  return (await res.json()).tiles || [];
+}
