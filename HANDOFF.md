@@ -1,7 +1,33 @@
-# Conduit — session handoff (2026-09-11)
+# Conduit — session handoff (2026-09-11, evening)
 
-Pick-up notes for the next session. Two open items: an HTTPS/DNS fix (blocking),
-and a Liked Songs bug audit (in progress).
+Pick-up notes for the next session. Open: the HTTPS/DNS fix (still blocking the
+phone PWA), the rest of the Liked Songs audit (#2.2-2.5), and a few library
+leftovers listed at the bottom.
+
+## Shipped 2026-09-11 evening (deployed to :8748 + relay redeployed, tested)
+- Library hygiene pipeline (`tools/library-hygiene/`, mirrored to
+  `.85:~/conduit-hygiene`, nightly cron 04:30): 2,869 files retagged (1,272
+  collab credits split, ~100 spelling variants unified), 18 split albums folded
+  into one folder each, 3,421 artist portraits + ~490 album covers added.
+  Remaining blanks: ~76 albums with no art anywhere (DJ-pool packs, "Unknown
+  Album" folders) now fall back to the artist portrait; 16 artists with no
+  match anywhere. Whole story + gotchas in the README there and in memory.
+- Row context menu (Spotify order, right-click + dots), downloads (original /
+  flac / wav / mp3 / aac / ogg), taste-profile exclusion, release types on the
+  artist page, in-app playlist-name dialog, pause bars on hover.
+- Relay session memory: a client opening with nothing active gets the
+  account's last playback (paused at its playhead). `test/session.test.mjs`.
+- Tests run off-LAN through an ssh tunnel with `CONDUIT_HOST=localhost`.
+
+## Library leftovers (not done)
+- Folder-backed artist items with the OLD spelling (`/music/USHER` next to the
+  tag "Usher", 46 of them) cannot be deleted through the API (it deletes the
+  folder) and Jellyfin never considers them dead; the client dedupes them.
+  Renaming the folders would change every track id under them (favourites
+  lost) — only worth it with the merge tool's snapshot/restore approach.
+- Two duplicate single folders left in place after the merge (collisions):
+  `DNMO & Wolfy Lights & Blooom/Bombalaya`, `Kesha;3OH!3/Animal`.
+
 
 ---
 
