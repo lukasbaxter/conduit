@@ -447,7 +447,7 @@ export default function App() {
           e.n += w; score.set(a.Id, e);
         }
       }
-      const topArtists = [...score.values()].sort((a, b) => b.n - a.n).slice(0, 10);
+      const topArtists = [...score.values()].sort((a, b) => b.n - a.n).slice(0, 16);
       setDetail((d) => (d && d.item?.Id === 'profile' ? { ...d, tracks: top.slice(0, 10), topArtists, loading: false } : d));
     } catch { setDetail((d) => (d && d.item?.Id === 'profile' ? { ...d, loading: false } : d)); }
   };

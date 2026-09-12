@@ -97,8 +97,8 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
   // played dates), nothing sampled from the library.
   useEffect(() => {
     if (!jf) return;
-    jf.recentlyPlayedAlbums({ limit: 8 }).then((r) => { setRecent(r.items); jf._persist('home.recent', r.items); }).catch(() => {});
-    jf.recentlyAddedAlbums({ limit: 8 }).then((r) => { setAdded(r.items); jf._persist('home.added', r.items); }).catch(() => {});
+    jf.recentlyPlayedAlbums({ limit: 16 }).then((r) => { setRecent(r.items); jf._persist('home.recent', r.items); }).catch(() => {});
+    jf.recentlyAddedAlbums({ limit: 16 }).then((r) => { setAdded(r.items); jf._persist('home.added', r.items); }).catch(() => {});
     jf.topTracks({ limit: 200 }).then((top) => {
       const score = new Map(), last = new Map();
       for (const t of top) {
@@ -108,8 +108,8 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
           if (lp > (last.get(a.Id)?.lp || '')) last.set(a.Id, { Id: a.Id, Name: a.Name, lp });
         }
       }
-      const ta = [...score.values()].sort((a, b) => b.n - a.n).slice(0, 12);
-      const ra = [...last.values()].sort((a, b) => b.lp.localeCompare(a.lp)).slice(0, 8);
+      const ta = [...score.values()].sort((a, b) => b.n - a.n).slice(0, 16);
+      const ra = [...last.values()].sort((a, b) => b.lp.localeCompare(a.lp)).slice(0, 16);
       setTopArtists(ta); jf._persist('home.topArtists', ta);
       setRecentArtists(ra); jf._persist('home.recentArtists', ra);
     }).catch(() => {});
@@ -216,7 +216,7 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
 
         {topArtists.length > 0 && (
           <Shelf title="Your top artists" onSeeAll={() => onSeeAll('artists')}>
-            {topArtists.slice(0, 8).map((a) => (
+            {topArtists.map((a) => (
               <Card key={a.Id} title={a.Name} subtitle="Artist" round image={jf.imageUrl(a.Id, { maxHeight: 320 })}
                 onOpen={() => onOpenArtist(a.Id)} onPlay={() => playMix(a)} />
             ))}

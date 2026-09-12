@@ -178,7 +178,9 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .shelf-head button:hover { text-decoration: underline; color: var(--fg); }
 
 .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
-.shelf { display: grid; gap: 16px; grid-auto-flow: column; grid-auto-columns: minmax(190px, 1fr); overflow: hidden; min-height: 290px; }
+.shelf { display: grid; gap: 16px; grid-auto-flow: column; grid-auto-columns: 190px; overflow-x: auto; overflow-y: hidden; min-height: 290px; scroll-snap-type: x proximity; padding-bottom: 6px; scrollbar-width: thin; scrollbar-color: #4d4d4d transparent; }
+.shelf > * { scroll-snap-align: start; }
+.shelf::-webkit-scrollbar { height: 8px; }
 
 /* Spotify's current cards: no tile behind them, just the art with a soft hover. */
 .card {
