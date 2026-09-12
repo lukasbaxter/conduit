@@ -652,12 +652,12 @@ input[type="range"]:disabled { opacity: .4; }
 /* Daily Mix tiles: photo, then a solid colour band carrying the label. */
 .mixart img { object-position: top; }
 .mixband {
-  position: absolute; left: 0; right: 0; bottom: 0; padding: 12px;
-  background: var(--mix, #1e3264); color: #fff; font-size: 16px; font-weight: 700;
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 12px;
+  background: var(--mix, #1e3264); color: #fff; font-size: 15px; font-weight: 700;
   letter-spacing: -.2px; border-radius: 0 0 var(--r-art) var(--r-art);
 }
 .mixart .ph { background: linear-gradient(160deg, color-mix(in srgb, var(--mix) 55%, #000), var(--mix)); }
-.mixcard .card-play { bottom: 56px; }
+.mixcard .card-play { bottom: 46px; }
 
 /* now-playing bars in the index column */
 .npbars { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; width: 14px; }
@@ -802,3 +802,7 @@ input[type="range"]:disabled { opacity: .4; }
 .dots i:nth-child(3) { animation-delay: .32s; }
 @keyframes dotbounce { 0%, 80%, 100% { transform: scale(.6); opacity: .5; } 40% { transform: scale(1); opacity: 1; } }
 .settings-actions button { height: 40px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
+
+/* Anything that reacts to a click says so. */
+button:not(:disabled), [role=button], a, .card, .tile, .shortcut, .libitem, .trackrow-art.link, .pill, .hero-title-edit, .topresult, .mixcard, .qrow-title[role=button], label.settings-avatar, label.editdetails-cover, .hero-cover.editable, .lyric-snippet.playable { cursor: pointer; }
+button:disabled { cursor: default; }
