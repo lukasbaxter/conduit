@@ -180,7 +180,7 @@ export default function Library({
   useEffect(() => {
     const el = headSentinelRef.current;
     if (!el) { setHeadStuck(false); return undefined; }
-    const io = new IntersectionObserver(([e]) => setHeadStuck(!e.isIntersecting), { root: el.closest('.content'), rootMargin: '-70px 0px 0px 0px' });
+    const io = new IntersectionObserver(([e]) => setHeadStuck(!e.isIntersecting), { root: el.closest('.content'), rootMargin: '-6px 0px 0px 0px' });
     io.observe(el);
     return () => io.disconnect();
   }, [detail?.item?.Id, detail?.tracks?.length]);
@@ -323,7 +323,7 @@ export default function Library({
       for (const t of tracks) if (t.AlbumId && !byAlbum.has(t.AlbumId)) byAlbum.set(t.AlbumId, { Id: t.AlbumId, Name: t.Album, AlbumArtist: t.AlbumArtist || (t.Artists || [])[0] });
       return (
         <div className="content" style={{ '--hero': item._color || '#3d3c3c' }}>
-          <div className="contentbar" />
+
           <header className="hero tinted browse-hero">
             <div style={{ minWidth: 0 }}>
               <div className="kind">Genre</div>
@@ -364,7 +364,7 @@ export default function Library({
       const setColor = (k, v) => onUpdatePrefs({ theme: { ...theme, [k]: v } });
       return (
         <div className="content">
-          <div className="contentbar" />
+
           <div className="pad settings">
             <h1 className="greeting">Settings</h1>
 
@@ -442,7 +442,7 @@ export default function Library({
       const avatar = jf.userImageUrl({ maxHeight: 464 });
       return (
         <div className="content" style={{ '--hero': '#4a4a4a' }}>
-          <div className="contentbar" />
+
           <header className="hero profile">
             <label className="hero-cover profile-avatar editable" title="Choose photo">
               <img key={avatarV} src={avatar} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'grid'; }} />
@@ -498,7 +498,7 @@ export default function Library({
 
     return (
       <div className="content" style={heroStyle}>
-        <div className="contentbar" />
+
 
         {(() => {
           const canEdit = isPlaylist && !isLiked;

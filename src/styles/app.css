@@ -246,7 +246,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .trackhead {
   display: grid; grid-template-columns: 36px minmax(0, 4fr) minmax(0, 3fr) 32px 5ch 32px; gap: 12px; align-items: center;
   padding: 0 16px; height: 36px; margin-bottom: 16px; color: var(--fg-dim); font-size: 14px;
-  border-bottom: 1px solid rgba(255,255,255,.1); position: sticky; top: 64px; background: transparent; z-index: 2;
+  border-bottom: 1px solid rgba(255,255,255,.1); position: sticky; top: 0; background: transparent; z-index: 2;
 }
 .trackhead.stuck { background: var(--bg-base); }
 .trackhead.with-art { grid-template-columns: 36px auto minmax(0, 4fr) minmax(0, 3fr) 32px 5ch 32px; }
