@@ -101,16 +101,16 @@ export default function App() {
   // "New playlist" dialog: {track} while open. window.prompt() does not exist
   // in Electron, which is why creating a playlist from a row did nothing there.
   const [namePrompt, setNamePrompt] = useState(null);
-  // Full-screen player (Spotify's expand button). Uses the Fullscreen API when
-  // the platform allows; the overlay works either way.
+  // Now-playing view (Spotify's expand button): Album / Visualizer / Lyrics
+  // filling the app window. It never asks the OS for full screen itself; if
+  // the window is already full screen it fills that.
   const [fullScreen, setFullScreen] = useState(false);
-  const openFullScreen = () => { setFullScreen(true); document.documentElement.requestFullscreen?.().catch(() => {}); };
-  const closeFullScreen = () => { setFullScreen(false); if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); };
-  useEffect(() => {
-    const h = () => { if (!document.fullscreenElement) setFullScreen(false); };
-    document.addEventListener('fullscreenchange', h);
-    return () => document.removeEventListener('fullscreenchange', h);
-  }, []);
+  // The Milkdrop preset the account is showing right now, shared over the relay
+  // so every open visualizer is on the same picture.
+  const [sharedViz, setSharedViz] = useState(null);
+  const shareViz = (preset) => player.relay?.sendViz?.(preset); // the relay echoes it back, ordered
+  const openFullScreen = () => setFullScreen(true);
+  const closeFullScreen = () => setFullScreen(false);
   // Account settings: theme + playback quality. Loaded from Jellyfin, applied
   // to the CSS variables, kept in sync across clients over the relay.
   const [prefs, setPrefs] = useState({ theme: DEFAULT_THEME, quality: 'original' });
@@ -317,6 +317,7 @@ export default function App() {
       onCommand: (cmd) => player.executeCommand(cmd),
       onQueue: (from, q) => player.applyRemoteQueue(from, q),
       onSession: (s) => player.applySession(s),
+      onViz: (v) => setSharedViz(v),
       onPrefs: (p) => {
         const next = { ...p, theme: { ...DEFAULT_THEME, ...(p.theme || {}) }, quality: p.quality || 'original' };
         delete next._libraryChanged;
@@ -361,17 +362,27 @@ export default function App() {
 
   const goView = (v) => { setDetailRaw(null); setSeeAllRaw(null); setView(v); pushEntry({ view: v, detail: null, seeAll: null }); };
 
-  // Space anywhere = play/pause, unless you are typing.
+  // Space anywhere = play/pause, unless you are typing. Only text fields
+  // swallow it; a focused slider/button/link (the last thing you clicked)
+  // must not eat the key, and a focused button must not fire its own click
+  // on keyup as well (that would toggle twice and look like nothing happened).
   useEffect(() => {
+    const typing = (t) => {
+      if (!t) return false;
+      if (t.isContentEditable || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return true;
+      if (t.tagName === 'INPUT') return !['range', 'checkbox', 'radio', 'button', 'submit', 'color', 'file'].includes((t.type || 'text').toLowerCase());
+      return false;
+    };
     const onKey = (e) => {
-      if (e.code !== 'Space' || e.metaKey || e.ctrlKey || e.altKey) return;
-      const t = e.target;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.code !== 'Space' || e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return;
       e.preventDefault();
+      if (e.repeat) return;
       player.toggle();
     };
+    const onUp = (e) => { if (e.code === 'Space' && !typing(e.target)) e.preventDefault(); };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keyup', onUp);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onUp); };
   }, [player.toggle]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Playlist "Edit details": rename and/or a new cover.
@@ -775,7 +786,7 @@ pos=${Math.round(player.position)} playing=${player.playing} vol=${player.volume
         onFullScreen={openFullScreen}
       />
       <PlayingElsewhereBar player={player} />
-      {fullScreen && <FullScreen player={player} jf={jf} onClose={closeFullScreen} onOpenArtist={openArtistById} onLike={onLike} />}
+      {fullScreen && <FullScreen player={player} jf={jf} onClose={closeFullScreen} onOpenArtist={openArtistById} onLike={onLike} prefs={prefs} onUpdatePrefs={updatePrefs} sharedViz={sharedViz} onShareViz={shareViz} />}
     </div>
   );
 }

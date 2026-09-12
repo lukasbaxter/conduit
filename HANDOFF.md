@@ -1,8 +1,46 @@
-# Conduit — session handoff (2026-09-11, evening)
+# Conduit — session handoff (2026-09-12)
 
 Pick-up notes for the next session. Open: the HTTPS/DNS fix (still blocking the
 phone PWA), the rest of the Liked Songs audit (#2.2-2.5), and a few library
 leftovers listed at the bottom.
+
+## Shipped 2026-09-12 (now-playing view + visualizer; deployed, relay redeployed)
+- Now-playing view (`src/components/FullScreen.jsx`) no longer asks the OS for
+  full screen: the expand button fills the app window; if the window is
+  already full screen it fills that. Tabs: Album · Lyrics · Visualizer (chevron
+  on the right of Visualizer opens the settings menu). In Electron the top
+  strip still drags the window (buttons opt out).
+- LAYOUT GOTCHA fixed: `.fs > * { position: relative }` outranked
+  `.fs-bg { position: absolute }`, so the blurred art became a 4th grid row.
+  That pushed the album art down, gave the visualizer box zero height (black
+  screen) and let the Milkdrop canvas size feed back into the layout (the slow
+  downward creep). Rule is now `.fs > *:not(.fs-bg):not(.fs-vizfull)`.
+- Visualizer (`src/components/Visualizer.jsx`): engines Graphic EQ
+  (audiomotion-analyzer, Line/Area/LED/Bars/Mirror/Radial, gradients) and
+  Milkdrop (butterchurn). Milkdrop fills the whole window behind tabs and
+  transport (`.fs-vizfull`, scrims top/bottom); the EQ keeps its box 7vh down;
+  the viz tab never shows the album art. Only audio-reactive presets are
+  offered (`isReactivePreset`: ≥3 reads of bass/mid/treb/vol in the preset
+  JSON, or ≥1 plus a visible base waveform; 89 of 100 pass).
+- Favourite presets: settings menu → Save preset / Favourites only /
+  Favourites › list. ALL viz settings (engine, style, gradient, cycle,
+  favourites, favOnly) live in account prefs (`prefs.viz`, Jellyfin
+  DisplayPreferences + relay `prefs` fan-out); localStorage `conduit.viz` is
+  only the first-paint cache.
+- Preset sync: relay message `viz` (`sendViz`/`onViz` in `src/relay.js`);
+  the server stamps, remembers per user (in-memory `vizState`) and echoes to
+  EVERY client incl. the sender, so simultaneous changes settle on one
+  server-ordered preset; new clients get it on hello. Cycling is a resettable
+  25–28 s timer restarted by any incoming preset, so N screens advance once.
+- Viz while another client plays: `local` now also requires
+  `!player.mirroring` (exported from usePlayer). `current` stays set on a
+  mirroring desktop with a paused local queue, which made it analyse the
+  silent local element. Remote playback is analysed via the silent shadow
+  `<audio>` synced to the session playhead.
+- Space bar: only text fields swallow it (range/button/link focus no longer
+  eats it; keyup is cancelled so a focused button does not double-toggle;
+  repeats ignored).
+- Headless probes: `window.__vizAm` (audioMotion instance) when `?debug`.
 
 ## Shipped 2026-09-11 evening (deployed to :8748 + relay redeployed, tested)
 - Library hygiene pipeline (`tools/library-hygiene/`, mirrored to

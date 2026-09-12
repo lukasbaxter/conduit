@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Lyrics } from './RightPanel.jsx';
-import Visualizer, { EQ_STYLES, GRADIENTS, loadVizSettings } from './Visualizer.jsx';
+import Visualizer, { EQ_STYLES, GRADIENTS, DEFAULT_VIZ, loadVizSettings } from './Visualizer.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import { ArtistLinks, PlayGlyph, PauseGlyph, ShuffleGlyph } from './TrackRow.jsx';
 
@@ -10,14 +10,21 @@ const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(
  * Spotify's full-screen player: blurred cover behind, tabs up top (Album /
  * Visualizer / Lyrics), the track and transport along the bottom.
  */
-export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike }) {
+export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, prefs, onUpdatePrefs, sharedViz, onShareViz }) {
   const [tab, setTab] = useState(() => localStorage.getItem('conduit.fsTab') || 'album');
-  // Visualizer settings (engine, style, gradient, preset cycling) behind the
-  // tab's ⋯ menu; persisted per device.
-  const [viz, setViz] = useState(loadVizSettings);
+  // Visualizer settings (engine, style, gradient, preset cycling, favourite
+  // presets) behind the tab's ⋯ menu. They live in the account's prefs, so a
+  // change here shows up on every signed-in client and survives a fresh
+  // machine; localStorage only carries a copy for the first paint.
+  const viz = { ...DEFAULT_VIZ, ...(prefs?.viz || loadVizSettings()) };
   const [vizMenu, setVizMenu] = useState(null);
   const [nextPreset, setNextPreset] = useState(0);
-  const setV = (patch) => setViz((v) => { const n = { ...v, ...patch }; try { localStorage.setItem('conduit.viz', JSON.stringify(n)); } catch {} return n; });
+  const [preset, setPreset] = useState('');
+  const vizCtl = useRef(null);
+  const favs = viz.favorites || [];
+  const isFav = !!preset && favs.includes(preset);
+  const toggleFav = (name) => { if (!name) return; setV({ favorites: favs.includes(name) ? favs.filter((n) => n !== name) : [...favs, name] }); };
+  const setV = (patch) => { const n = { ...viz, ...patch }; try { localStorage.setItem('conduit.viz', JSON.stringify(n)); } catch {} onUpdatePrefs?.({ viz: n }); };
   const vizItems = [
     { label: 'Engine' },
     { label: `Graphic EQ${viz.engine === 'eq' ? '  ✓' : ''}`, onClick: () => setV({ engine: 'eq' }) },
@@ -29,11 +36,18 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike }
     ] : [
       { label: 'Next preset', onClick: () => setNextPreset((n) => n + 1) },
       { label: `Cycle presets${viz.cycle ? '  ✓' : ''}`, onClick: () => setV({ cycle: !viz.cycle }) },
+      { sep: true },
+      { label: isFav ? 'Remove from favourites' : 'Save preset to favourites', disabled: !preset, onClick: () => toggleFav(preset) },
+      { label: `Favourites only${viz.favOnly ? '  ✓' : ''}`, disabled: !favs.length, onClick: () => setV({ favOnly: !viz.favOnly }) },
+      ...(favs.length ? [{ label: `Favourites (${favs.length})`, sub: favs.map((n) => ({ key: n, label: `${n}${n === preset ? '  ✓' : ''}`, onClick: () => vizCtl.current?.load(n) })) }] : []),
     ]),
   ];
   const { nowPlaying, playing, position, duration, shuffle, repeat } = player;
   const art = nowPlaying?.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: 1000 }) : nowPlaying?.artUrl || null;
   useEffect(() => { try { localStorage.setItem('conduit.fsTab', tab); } catch {} }, [tab]);
+  // Milkdrop takes the whole window (behind the tabs and transport); the EQ stays in its box.
+  const mdFull = tab === 'viz' && viz.engine === 'milkdrop';
+  const vizEl = <Visualizer player={player} jf={jf} active={tab === 'viz'} settings={viz} nextPresetSignal={nextPreset} onPreset={setPreset} controls={vizCtl} sharedViz={sharedViz} onShareViz={onShareViz} />;
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -41,31 +55,32 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike }
   }, [onClose]);
 
   return (
-    <div className="fs">
-      {art && <div className="fs-bg" style={{ backgroundImage: `url("${art}")` }} />}
+    <div className={`fs ${mdFull ? 'md-full' : ''}`}>
+      {art && tab !== 'viz' && <div className="fs-bg" style={{ backgroundImage: `url("${art}")` }} />}
+      {mdFull && <div className="fs-vizfull">{vizEl}</div>}
       <div className="fs-top">
         <div className="fs-from">{nowPlaying?.device?.name ? `Playing on ${nowPlaying.device.name}` : ''}</div>
         <div className="fs-tabs">
-          {[['album', 'Album'], ['viz', 'Visualizer'], ['lyrics', 'Lyrics']].map(([k, label]) => (
+          {[['album', 'Album'], ['lyrics', 'Lyrics'], ['viz', 'Visualizer']].map(([k, label]) => (
             <span key={k} className={`fs-tab ${tab === k ? 'on' : ''}`}>
               <button onClick={() => setTab(k)}>{label}</button>
               {k === 'viz' && tab === 'viz' && (
                 <button className="fs-kebab" title="Visualizer settings" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setVizMenu({ x: r.left - 8, y: r.bottom + 8 }); }}>
-                  <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 3a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm0 6.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM8 16a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" /></svg>
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 6l4.5 4.5L12.5 6" /></svg>
                 </button>
               )}
             </span>
           ))}
           {vizMenu && <ContextMenu x={vizMenu.x} y={vizMenu.y} items={vizItems} onClose={() => setVizMenu(null)} />}
         </div>
-        <button className="fs-close" onClick={onClose} title="Exit full screen">
+        <button className="fs-close" onClick={onClose} title="Close">
           <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M6.53 9.47a.75.75 0 0 1 0 1.06l-2.72 2.72h1.018a.75.75 0 0 1 0 1.5H1.25v-3.579a.75.75 0 0 1 1.5 0v1.018l2.72-2.72a.75.75 0 0 1 1.06 0zm2.94-2.94a.75.75 0 0 1 0-1.06l2.72-2.72h-1.018a.75.75 0 1 1 0-1.5h3.578v3.579a.75.75 0 0 1-1.5 0V3.81l-2.72 2.72a.75.75 0 0 1-1.06 0z" /></svg>
         </button>
       </div>
 
       <div className="fs-stage">
         {tab === 'album' && (art ? <img className="fs-art" src={art} alt="" /> : <div className="fs-art ph" />)}
-        {tab === 'viz' && <Visualizer player={player} jf={jf} active={tab === 'viz'} settings={viz} nextPresetSignal={nextPreset} />}
+        {tab === 'viz' && !mdFull && vizEl}
         {tab === 'lyrics' && <div className="fs-lyrics"><Lyrics player={player} jf={jf} /></div>}
       </div>
 

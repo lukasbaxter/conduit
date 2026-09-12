@@ -122,6 +122,7 @@ function networkOf(req) {
 // the account's ListenBrainz (token kept in the user's Conduit settings). That
 // history is what feeds Explo's Weekly Exploration / Daily Jams.
 const lbTokens = new Map();   // uid -> { user, token } | null
+const vizState = new Map();   // uid -> { preset, at }: the Milkdrop preset every client shows
 const lbSeen = new Map();     // clientId -> { itemId, startedAt, sent }
 async function lbTokenFor(self) {
   if (lbTokens.has(self.uid)) return lbTokens.get(self.uid);
@@ -565,6 +566,8 @@ wss.on('connection', (ws, req) => {
       }
       // Nobody is playing right now: hand over what the account played last.
       if (!active.has(self.uid)) { const sm = sessionMsg(self.uid); if (sm) send(ws, sm); }
+      // The visualizer preset the account is on, so this client joins in step.
+      if (vizState.has(self.uid)) send(ws, { type: 'viz', viz: vizState.get(self.uid) });
       // Now replay what arrived during verification, in order.
       for (const b of backlog.splice(0)) await onMessage(b);
       return;
@@ -615,6 +618,16 @@ wss.on('connection', (ws, req) => {
           if (c.id !== self.id) send(c.ws, { type: 'prefs', prefs: msg.prefs || {} });
         }
         break;
+
+      // The visualizer moved to another preset on one client: every client,
+      // sender included, gets the server-ordered state so two clients that
+      // change at the same moment settle on the same picture. Not persisted.
+      case 'viz': {
+        const v = { preset: String(msg.preset || '').slice(0, 200), at: Date.now() };
+        vizState.set(self.uid, v);
+        for (const c of userMap(self.uid).values()) send(c.ws, { type: 'viz', viz: v });
+        break;
+      }
 
       // Route a command to another of the user's clients (play/pause/seek/etc.).
       // { type:'command', to:<clientId>, command:{...} }

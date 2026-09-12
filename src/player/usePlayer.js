@@ -1376,7 +1376,7 @@ export function usePlayer(jf) {
     () => ({
       device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId, addToQueue, removeFromQueue, moveInQueue, clearQueued, webAudio,
       relayDevices, lanDevices, registerDevices, attachRelay, applyRoster, executeCommand, roster, relay: relayInstance,
-      queue: shownQueue, index: shownIndex, current, applyRemoteQueue, applySession,
+      queue: shownQueue, index: shownIndex, current, applyRemoteQueue, applySession, mirroring: !!relayTarget,
       playing: shownPlaying, position: shownPosition, duration: shownDuration, volume: shownVolume, error,
       repeat: shownRepeat, shuffle: shownShuffle, cycleRepeat, cycleShuffle, setShuffle: setShuffleRouted,
       playQueue, toggle, next, previous, seek, setVolume, skipTo,
@@ -1384,7 +1384,7 @@ export function usePlayer(jf) {
     }),
     // eslint-disable-next-line
     [device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId, addToQueue, removeFromQueue, moveInQueue, clearQueued, webAudio,
-     relayDevices, lanDevices, registerDevices, attachRelay, applyRoster, executeCommand, roster, relayInstance, shownQueue, shownIndex, current, applyRemoteQueue, applySession,
+     relayDevices, lanDevices, registerDevices, attachRelay, applyRoster, executeCommand, roster, relayInstance, shownQueue, shownIndex, current, applyRemoteQueue, applySession, relayTarget,
      shownPlaying, shownPosition, shownDuration, shownVolume, error, shownRepeat, shownShuffle,
      cycleRepeat, cycleShuffle, setShuffleRouted, playQueue, toggle, next,
      previous, seek, setVolume, skipTo]
