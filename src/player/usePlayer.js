@@ -44,6 +44,7 @@ function slimTrack(t) {
     ArtistItems: (t.ArtistItems || []).map((a) => ({ Id: a.Id, Name: a.Name })),
     AlbumArtists: (t.AlbumArtists || []).map((a) => ({ Id: a.Id, Name: a.Name })),
     UserData: { IsFavorite: Boolean(t.UserData?.IsFavorite) },
+    _queued: Boolean(t._queued),
   };
 }
 
@@ -406,12 +407,48 @@ export function usePlayer(jf) {
       anchorAt(0, false); setPlaying(false);
       return;
     }
-    const next = [...q, ...tracks];
+    // Spotify puts "Add to queue" tracks right after what is playing (behind
+    // anything already queued that way), ahead of the rest of the context.
+    const i = indexRef.current;
+    let at = i + 1;
+    while (at < q.length && q[at]?._queued) at += 1;
+    const flagged = tracks.map((t) => ({ ...t, _queued: true }));
+    const next = [...q.slice(0, at), ...flagged, ...q.slice(at)];
     setQueue(next); queueRef.current = next;
-    originalQueueRef.current = [...originalQueueRef.current, ...tracks];
+    originalQueueRef.current = [...originalQueueRef.current, ...flagged];
   }, [anchorAt]);
   const addToQueueRef = useRef(addToQueue);
   useEffect(() => { addToQueueRef.current = addToQueue; }, [addToQueue]);
+
+  // Queue editing from the panel. Both route to the active player while
+  // mirroring, since the queue lives there.
+  const removeFromQueue = useCallback((pos) => {
+    const act = activePlayerRef.current;
+    if (act && relayRef.current) { relayRef.current.command(act, { action: 'queueRemove', index: pos }); return; }
+    const q = queueRef.current;
+    if (pos < 0 || pos >= q.length || pos === indexRef.current) return;
+    const next = q.filter((_, k) => k !== pos);
+    setQueue(next); queueRef.current = next;
+    if (pos < indexRef.current) { const ni = indexRef.current - 1; setIndex(ni); indexRef.current = ni; }
+  }, []);
+  const moveInQueue = useCallback((from, to) => {
+    const act = activePlayerRef.current;
+    if (act && relayRef.current) { relayRef.current.command(act, { action: 'queueMove', from, to }); return; }
+    const q = [...queueRef.current];
+    const cur = indexRef.current;
+    if (from === to || from <= cur || to <= cur || from >= q.length || to >= q.length) return; // only the upcoming part moves
+    const [it] = q.splice(from, 1); q.splice(to, 0, it);
+    setQueue(q); queueRef.current = q;
+  }, []);
+  const clearQueued = useCallback(() => {
+    const act = activePlayerRef.current;
+    if (act && relayRef.current) { relayRef.current.command(act, { action: 'queueClear' }); return; }
+    const q = queueRef.current, cur = indexRef.current;
+    const next = q.filter((t, k) => k <= cur || !t._queued);
+    setQueue(next); queueRef.current = next;
+  }, []);
+  const removeFromQueueRef = useRef(removeFromQueue), moveInQueueRef = useRef(moveInQueue), clearQueuedRef = useRef(clearQueued);
+  useEffect(() => { removeFromQueueRef.current = removeFromQueue; moveInQueueRef.current = moveInQueue; clearQueuedRef.current = clearQueued; }, [removeFromQueue, moveInQueue, clearQueued]);
 
   const skipTo = useCallback(
     async (nextIndex) => {
@@ -1197,7 +1234,10 @@ export function usePlayer(jf) {
         const tracks = await fetchByIds(jf, cmd.trackIds, 'ArtistItems,AlbumArtists,UserData');
         if (tracks.length) addToQueueRef.current(tracks);
       })().catch(() => {});
-    } else if (cmd.action === 'skipTo') { skipToRef.current(cmd.index | 0); }
+    } else if (cmd.action === 'queueRemove') { removeFromQueueRef.current(cmd.index | 0); }
+    else if (cmd.action === 'queueMove') { moveInQueueRef.current(cmd.from | 0, cmd.to | 0); }
+    else if (cmd.action === 'queueClear') { clearQueuedRef.current(); }
+    else if (cmd.action === 'skipTo') { skipToRef.current(cmd.index | 0); }
     else if (cmd.action === 'toggle') { toggleRef.current(); }
     else if (cmd.action === 'seek') { seekRef.current(cmd.pos || 0); }
     else if (cmd.action === 'setVolume') { setVolumeRef.current(cmd.level ?? 100); }
@@ -1315,7 +1355,7 @@ export function usePlayer(jf) {
 
   return useMemo(
     () => ({
-      device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId, addToQueue,
+      device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId, addToQueue, removeFromQueue, moveInQueue, clearQueued,
       relayDevices, lanDevices, registerDevices, attachRelay, applyRoster, executeCommand, roster, relay: relayInstance,
       queue: shownQueue, index: shownIndex, current, applyRemoteQueue, applySession,
       playing: shownPlaying, position: shownPosition, duration: shownDuration, volume: shownVolume, error,
@@ -1324,7 +1364,7 @@ export function usePlayer(jf) {
       clearError: () => setError(null),
     }),
     // eslint-disable-next-line
-    [device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId, addToQueue,
+    [device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId, addToQueue, removeFromQueue, moveInQueue, clearQueued,
      relayDevices, lanDevices, registerDevices, attachRelay, applyRoster, executeCommand, roster, relayInstance, shownQueue, shownIndex, current, applyRemoteQueue, applySession,
      shownPlaying, shownPosition, shownDuration, shownVolume, error, shownRepeat, shownShuffle,
      cycleRepeat, cycleShuffle, setShuffleRouted, playQueue, toggle, next,

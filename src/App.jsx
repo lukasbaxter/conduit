@@ -704,6 +704,9 @@ export default function App() {
             jf={jf}
             onOpenArtist={openArtistById}
             onOpenAlbum={openAlbumById}
+            onLike={onLike}
+            onAddTo={onAddTo}
+            playlists={playlists}
           />
         )}
       </div>

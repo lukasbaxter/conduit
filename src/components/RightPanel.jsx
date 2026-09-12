@@ -1,5 +1,6 @@
-import { ArtistLinks } from './TrackRow.jsx';
 import React, { useEffect, useRef, useState } from 'react';
+import { ArtistLinks, PlayGlyph } from './TrackRow.jsx';
+import ContextMenu from './ContextMenu.jsx';
 
 const Close = () => (
   <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
@@ -11,16 +12,33 @@ function secs(ticks) {
   return ticks ? ticks / 10_000_000 : 0;
 }
 
-function QueueRow({ track, jf, active, onPlay }) {
+function QueueRow({ track, jf, active, onPlay, onOpenArtist, onOpenAlbum, menuItems, draggable, onDragStart, onDragOver, onDrop, onDragEnd, over, dragging }) {
+  const [menu, setMenu] = useState(null);
   const art = jf.imageUrl(track.AlbumId || track.Id, { maxHeight: 80 });
+  const artists = track.ArtistItems?.length ? track.ArtistItems : (track.Artists || []).map((n) => ({ Name: n }));
   return (
-    <button className={`qrow ${active ? 'active' : ''}`} onClick={onPlay}>
-      {art ? <img src={art} alt="" loading="lazy" /> : <div className="ph" />}
+    <div
+      className={`qrow ${active ? 'active' : ''} ${over ? 'dropbefore' : ''} ${dragging ? 'dragging' : ''}`}
+      draggable={draggable}
+      onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
+      onContextMenu={menuItems ? (e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); } : undefined}
+      onDoubleClick={onPlay}
+    >
+      <button className="qrow-art" onClick={onPlay} title="Play">
+        {art ? <img src={art} alt="" loading="lazy" draggable={false} /> : <div className="ph" />}
+        <span className="qrow-play"><PlayGlyph size={14} /></span>
+      </button>
       <span className="qrow-text">
-        <span className="qrow-title">{track.Name}</span>
-        <span className="qrow-sub">{track.Artists?.join(', ') || track.AlbumArtist}</span>
+        <span className="qrow-title" role="button" onClick={() => track.AlbumId && onOpenAlbum?.(track.AlbumId)}>{track.Name}</span>
+        <span className="qrow-sub"><ArtistLinks artists={artists} fallback={track.AlbumArtist || ''} onOpen={onOpenArtist} className="rowlink" /></span>
       </span>
-    </button>
+      {menuItems && (
+        <button className="qrow-more" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setMenu({ x: r.right, y: r.bottom + 4, fromButton: true }); }} title="More options">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M3 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm6.5 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM16 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" /></svg>
+        </button>
+      )}
+      {menu && <ContextMenu x={menu.x} y={menu.y} anchorRight={Boolean(menu.fromButton)} items={menuItems} onClose={() => setMenu(null)} />}
+    </div>
   );
 }
 
@@ -88,43 +106,79 @@ function NowPlaying({ player, jf, onOpenArtist, onOpenAlbum, onShowQueue }) {
 }
 
 /** Queue: Now playing / Next in queue, matching Spotify's sectioning. */
-function Queue({ player, jf }) {
+function Queue({ player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlists = [] }) {
   // `queue`/`index` are the SESSION's (the active player's, mirrored) so the
-  // panel is the same on every client; skipTo routes to whoever is playing.
-  const { queue, index } = player;
+  // panel is the same on every client; every edit routes to whoever is playing.
+  const { queue, index, contextId } = player;
   const current = index >= 0 ? queue[index] || null : null;
-  const rest = index >= 0 ? queue.slice(index + 1) : queue;
+  const upcoming = index >= 0 ? queue.slice(index + 1) : queue;
+  const base = index >= 0 ? index + 1 : 0;
+  // Spotify splits what you queued by hand from the rest of the context.
+  let split = 0;
+  while (split < upcoming.length && upcoming[split]?._queued) split += 1;
+  const queued = upcoming.slice(0, split), fromCtx = upcoming.slice(split);
+  const [ctxName, setCtxName] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    if (!contextId || contextId === 'liked') { setCtxName(contextId === 'liked' ? 'Liked Songs' : null); return undefined; }
+    if (String(contextId).startsWith('browse:')) { setCtxName(null); return undefined; }
+    jf.itemById(contextId).then((it) => { if (alive) setCtxName(it?.Name || null); }).catch(() => { if (alive) setCtxName(null); });
+    return () => { alive = false; };
+  }, [contextId, jf]);
+  const [drag, setDrag] = useState(null); // absolute queue index being dragged
+  const [over, setOver] = useState(null);
 
   if (!queue.length) {
     return (
       <div style={{ padding: '32px 0', textAlign: 'center' }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 8px' }}>Add to your queue</h2>
-        <p className="qrow-sub" style={{ margin: 0 }}>
-          Play an album or playlist to see it here.
-        </p>
+        <p className="qrow-sub" style={{ margin: 0 }}>Play an album or playlist, or use “Add to queue” on any song.</p>
       </div>
     );
   }
-
+  const items = (t, pos) => [
+    { label: 'Remove from queue', onClick: () => player.removeFromQueue(pos) },
+    { label: t.UserData?.IsFavorite ? 'Remove from your Liked Songs' : 'Save to your Liked Songs', onClick: () => onLike?.(t, !t.UserData?.IsFavorite) },
+    playlists.length ? { label: 'Add to playlist', sub: playlists.map((p) => ({ key: p.Id, label: p.Name, onClick: () => onAddTo?.(p, t) })) } : null,
+    { sep: true },
+    t.ArtistItems?.[0]?.Id ? { label: 'Go to artist', onClick: () => onOpenArtist?.(t.ArtistItems[0].Id) } : null,
+    t.AlbumId ? { label: 'Go to album', onClick: () => onOpenAlbum?.(t.AlbumId) } : null,
+  ];
+  const row = (t, pos, key) => (
+    <QueueRow key={key} track={t} jf={jf} onPlay={() => player.skipTo(pos)} onOpenArtist={onOpenArtist} onOpenAlbum={onOpenAlbum}
+      menuItems={items(t, pos)} draggable
+      onDragStart={() => setDrag(pos)} onDragOver={(e) => { e.preventDefault(); setOver(pos); }}
+      onDrop={(e) => { e.preventDefault(); if (drag != null && drag !== pos) player.moveInQueue(drag, pos); setDrag(null); setOver(null); }}
+      onDragEnd={() => { setDrag(null); setOver(null); }} over={over === pos && drag != null && drag !== pos} dragging={drag === pos} />
+  );
   return (
     <>
       {current && (
         <section>
           <div className="section-head" style={{ marginBottom: 8 }}><h2>Now playing</h2></div>
-          <QueueRow track={current} jf={jf} active onPlay={() => player.skipTo(index)} />
+          <QueueRow track={current} jf={jf} active onPlay={() => player.skipTo(index)} onOpenArtist={onOpenArtist} onOpenAlbum={onOpenAlbum}
+            menuItems={items(current, index).filter((x) => x && x.label !== 'Remove from queue')} />
         </section>
       )}
-      {rest.length > 0 && (
+      {queued.length > 0 && (
         <section>
           <div className="section-head" style={{ marginBottom: 8 }}>
             <h2>Next in queue</h2>
-            <span className="qrow-sub">{rest.length}</span>
+            <button className="linkish" onClick={() => player.clearQueued()}>Clear queue</button>
           </div>
-          {rest.slice(0, 60).map((t, i) => (
-            <QueueRow key={`${t.Id}-${i}`} track={t} jf={jf} onPlay={() => player.skipTo(index + 1 + i)} />
-          ))}
+          {queued.map((t, i) => row(t, base + i, `q-${t.Id}-${i}`))}
         </section>
       )}
+      {fromCtx.length > 0 && (
+        <section>
+          <div className="section-head" style={{ marginBottom: 8 }}>
+            <h2>{ctxName ? `Next from: ${ctxName}` : 'Next up'}</h2>
+            <span className="qrow-sub">{fromCtx.length}</span>
+          </div>
+          {fromCtx.slice(0, 80).map((t, i) => row(t, base + split + i, `c-${t.Id}-${i}`))}
+        </section>
+      )}
+      {!queued.length && !fromCtx.length && <p className="qrow-sub" style={{ padding: '12px 0' }}>End of the queue.</p>}
     </>
   );
 }
@@ -217,7 +271,7 @@ function Lyrics({ player, jf }) {
   );
 }
 
-export default function RightPanel({ mode, onClose, onMode, player, jf, onOpenArtist, onOpenAlbum }) {
+export default function RightPanel({ mode, onClose, onMode, player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlists }) {
   const titles = { npv: 'Now playing', queue: 'Queue', lyrics: 'Lyrics' };
   return (
     <aside className="rightpanel">
@@ -239,7 +293,7 @@ export default function RightPanel({ mode, onClose, onMode, player, jf, onOpenAr
             onShowQueue={() => onMode('queue')}
           />
         )}
-        {mode === 'queue' && <Queue player={player} jf={jf} />}
+        {mode === 'queue' && <Queue player={player} jf={jf} onOpenArtist={onOpenArtist} onOpenAlbum={onOpenAlbum} onLike={onLike} onAddTo={onAddTo} playlists={playlists} />}
         {mode === 'lyrics' && <Lyrics player={player} jf={jf} />}
       </div>
     </aside>

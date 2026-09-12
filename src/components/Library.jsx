@@ -758,14 +758,14 @@ export default function Library({
                 counts.Compilation ? ['compilation', 'Compilations'] : null,
                 all.some((x) => !x.inLib) ? ['missing', 'Not in library'] : null,
               ].filter(Boolean);
-              // What you own comes first (newest first), then the requestable rest.
+              // Newest first, one timeline; library releases stand out, the rest are dimmed with Request.
               const shown = all.filter((x) =>
                 discoFilter === 'all' ? true
                   : discoFilter === 'album' ? x.type === 'Album'
                   : discoFilter === 'single' ? (x.type === 'Single' || x.type === 'EP')
                   : discoFilter === 'missing' ? !x.inLib
                   : x.type === 'Compilation')
-                .sort((a, b) => (Boolean(b.inLib) - Boolean(a.inLib)) || String(b.r.date || b.year || '').localeCompare(String(a.r.date || a.year || '')));
+                .sort((a, b) => String(b.r.date || b.year || '').localeCompare(String(a.r.date || a.year || '')));
               const have = all.filter((x) => x.inLib).length;
               return (
                 <section>

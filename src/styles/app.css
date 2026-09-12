@@ -439,6 +439,18 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 }
 .panel-body section { display: flex; flex-direction: column; gap: 2px; }
 .qrow:hover { background: var(--tint-hi); }
+.qrow { position: relative; }
+.qrow-art { position: relative; padding: 0; flex: none; width: 40px; height: 40px; }
+.qrow-play { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; background: rgba(0,0,0,.55); border-radius: 4px; opacity: 0; transition: opacity .12s; }
+.qrow:hover .qrow-play { opacity: 1; }
+.qrow-more { margin-left: auto; color: var(--fg-dim); opacity: 0; width: 28px; height: 28px; display: grid; place-items: center; flex: none; }
+.qrow:hover .qrow-more { opacity: 1; }
+.qrow-more:hover { color: var(--fg); }
+.qrow.dropbefore { box-shadow: inset 0 2px 0 var(--accent); }
+.qrow.dragging { opacity: .4; }
+.qrow-title[role=button]:hover { text-decoration: underline; cursor: pointer; }
+.section-head .linkish { color: var(--fg-dim); font-size: 13px; font-weight: 700; }
+.section-head .linkish:hover { color: var(--fg); text-decoration: underline; }
 .qrow img, .qrow .ph { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; background: var(--card-hover); flex: none; }
 .qrow-text { min-width: 0; display: flex; flex-direction: column; }
 .qrow-title { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
