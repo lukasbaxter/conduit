@@ -812,9 +812,9 @@ button:disabled { cursor: default; }
 .fs { position: fixed; inset: 0; z-index: 200; background: #000; color: #fff; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
 .fs-bg { position: absolute; inset: -60px; background-size: cover; background-position: center; filter: blur(60px) brightness(.35) saturate(1.2); transform: scale(1.1); }
 .fs > * { position: relative; }
-.fs-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 20px 32px; }
+.fs-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 32px; height: 76px; box-sizing: border-box; }
 .fs-from { font-size: 13px; color: #ffffffb3; }
-.fs-tabs { display: flex; gap: 6px; background: rgba(0,0,0,.35); border-radius: 500px; padding: 4px; }
+.fs-tabs { display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.35); border-radius: 500px; padding: 4px; height: 44px; box-sizing: border-box; }
 .fs-tabs button { padding: 8px 18px; border-radius: 500px; color: #ffffffb3; font-weight: 700; font-size: 14px; }
 .fs-tabs button.on { background: rgba(255,255,255,.14); color: #fff; }
 .fs-close { justify-self: end; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #ffffffb3; background: rgba(0,0,0,.35); }
