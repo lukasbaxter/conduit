@@ -177,15 +177,16 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .shelf-head button { color: var(--fg-dim); font-size: 14px; font-weight: 700; }
 .shelf-head button:hover { text-decoration: underline; color: var(--fg); }
 
-.grid { display: grid; gap: 24px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
-.shelf { display: grid; gap: 24px; grid-auto-flow: column; grid-auto-columns: minmax(160px, 1fr); overflow: hidden; min-height: 260px; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.shelf { display: grid; gap: 16px; grid-auto-flow: column; grid-auto-columns: minmax(190px, 1fr); overflow: hidden; min-height: 290px; }
 
+/* Spotify's current cards: no tile behind them, just the art with a soft hover. */
 .card {
-  background: var(--card); padding: 16px; border-radius: var(--r-panel);
+  background: transparent; padding: 12px; border-radius: var(--r-panel);
   text-align: left; display: flex; flex-direction: column; gap: 8px;
   transition: background-color .3s; isolation: isolate; position: relative;
 }
-.card:hover { background: var(--card-hover); }
+.card:hover { background: var(--tint); }
 .card-art { position: relative; aspect-ratio: 1; width: 100%; }
 .card-art img, .card-art .ph {
   width: 100%; height: 100%; object-fit: cover; display: block;
