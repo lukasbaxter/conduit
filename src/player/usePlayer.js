@@ -857,7 +857,7 @@ export function usePlayer(jf) {
         // one across; they are independent hardware levels.
         if (nextDevice.kind !== 'local') {
           remote.status(nextDevice)
-            .then((s) => { if (typeof s?.volume === 'number') setVolumeState(s.volume); })
+            .then((s) => { if (typeof s?.volume === 'number' && !s.muted && s.volume > 0) setVolumeState(s.volume); })
             .catch(() => {});
         } else {
           setVolumeState(Math.round((audioRef.current?.volume ?? 0.8) * 100));
@@ -975,7 +975,9 @@ export function usePlayer(jf) {
         if (!s.playing) setPosition(debiased);
         // Mirror the speaker's own volume, including changes made from the
         // BluOS app or a physical dial -- but never while the user is dragging.
-        if (typeof s.volume === 'number' && Date.now() > volumeHeldRef.current) {
+        // A muted speaker (the resume dance mutes for a moment) must not drag
+        // the slider to 0 and back.
+        if (typeof s.volume === 'number' && !s.muted && Date.now() > volumeHeldRef.current) {
           setVolumeState((v) => (Math.abs(v - s.volume) > 1 ? s.volume : v));
         }
       } catch {

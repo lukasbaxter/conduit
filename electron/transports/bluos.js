@@ -255,6 +255,12 @@ class BluOSTransport {
   async status() {
     const xml = await this._get('/Status');
     const state = tag(xml, 'state');
+    // While muted (our own resume-at-offset dance, or the user's mute) BluOS
+    // reports <volume>0</volume> with <mute>1</mute>. That 0 is not a level the
+    // slider should adopt; keep reporting the last real level instead.
+    const rawVol = Number(tag(xml, 'volume') ?? 0);
+    const muted = tag(xml, 'mute') === '1';
+    if (!muted && Number.isFinite(rawVol)) this._lastVolume = rawVol;
     return {
       // BluOS reports "stream"/"play" while playing, "pause"/"stop" otherwise.
       playing: state === 'play' || state === 'stream',
@@ -262,7 +268,8 @@ class BluOSTransport {
       title: tag(xml, 'title1'),
       artist: tag(xml, 'title2'),
       album: tag(xml, 'title3'),
-      volume: Number(tag(xml, 'volume') ?? 0),
+      volume: muted ? (this._lastVolume ?? rawVol) : rawVol,
+      muted,
       position: Number(tag(xml, 'secs') ?? 0),
       duration: Number(tag(xml, 'totlen') ?? 0),
       canSeek: tag(xml, 'canSeek') === '1',
