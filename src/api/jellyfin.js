@@ -92,19 +92,41 @@ export class Jellyfin {
   }
 
   async _fetch(path, options = {}) {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: authHeader(this.token),
-        ...(options.headers || {}),
-      },
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`Jellyfin ${res.status} on ${path}${body ? `: ${body.slice(0, 180)}` : ''}`);
+    const { retries = 0, timeoutMs = 45_000, ...opts } = options;
+    let attempt = 0;
+    for (;;) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const res = await fetch(`${this.baseUrl}${path}`, {
+          ...opts,
+          signal: ctrl.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authHeader(this.token),
+            ...(opts.headers || {}),
+          },
+        });
+        if (!res.ok) {
+          const body = await res.text().catch(() => '');
+          const err = new Error(`Jellyfin ${res.status} on ${path}${body ? `: ${body.slice(0, 180)}` : ''}`);
+          err.status = res.status;
+          // 5xx / 502-504 from the proxy while the server is busy: worth another go.
+          if (res.status >= 500 && attempt < retries) throw Object.assign(err, { retry: true });
+          throw err;
+        }
+        return res.status === 204 ? null : res.json();
+      } catch (e) {
+        // Network failure or timeout (a scan/refresh can make Jellyfin crawl):
+        // retry the idempotent writes instead of reverting the user's action.
+        const transient = e.retry || e.name === 'AbortError' || e instanceof TypeError;
+        if (!transient || attempt >= retries) throw e;
+        attempt += 1;
+        await new Promise((r) => setTimeout(r, 800 * attempt));
+      } finally {
+        clearTimeout(timer);
+      }
     }
-    return res.status === 204 ? null : res.json();
   }
 
   static async login(baseUrl, username, password) {
@@ -362,7 +384,31 @@ export class Jellyfin {
   async setDislike(itemId, disliked) {
     this._evict('tracks:'); this._evict('playlist:'); this._evict('favorites:');
     const path = `/UserItems/${itemId}/Rating`;
-    return this._fetch(disliked ? `${path}?likes=false` : path, { method: disliked ? 'POST' : 'DELETE' });
+    return this._fetch(disliked ? `${path}?likes=false` : path, { method: disliked ? 'POST' : 'DELETE', retries: 2 });
+  }
+
+  // Rename a playlist. The generic item update needs admin; the playlist
+  // endpoint lets the owner do it.
+  async renameItem(itemId, name) {
+    this._evict(`item:${itemId}`);
+    return this._fetch(`/Playlists/${itemId}`, { method: 'POST', body: JSON.stringify({ Name: name }) });
+  }
+
+  // New primary image from a File/Blob (playlist cover). Body is base64.
+  async uploadPrimaryImage(itemId, file) {
+    const buf = await file.arrayBuffer();
+    let bin = ''; const bytes = new Uint8Array(buf);
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    const res = await fetch(`${this.baseUrl}/Items/${itemId}/Images/Primary`, {
+      method: 'POST', body: btoa(bin),
+      headers: { 'Content-Type': file.type || 'image/jpeg', Authorization: authHeader(this.token) },
+    });
+    if (!res.ok) throw new Error(`Jellyfin ${res.status} uploading image`);
+  }
+
+  async deleteItem(itemId) {
+    this._evict(`item:${itemId}`); this._evict(`playlist:${itemId}`);
+    return this._fetch(`/Items/${itemId}`, { method: 'DELETE' });
   }
 
   // Download URLs. 'original' is the file as stored (with its real filename);
@@ -387,7 +433,7 @@ export class Jellyfin {
     // The track's UserData is embedded in every cached list that contains it.
     this._evict('tracks:'); this._evict('playlist:');
     return this._fetch(`/Users/${this.userId}/FavoriteItems/${itemId}`, {
-      method: liked ? 'POST' : 'DELETE',
+      method: liked ? 'POST' : 'DELETE', retries: 2,
     });
   }
 
@@ -443,7 +489,7 @@ export class Jellyfin {
   async addToPlaylist(playlistId, itemIds) {
     this._evict(`playlist:${playlistId}`);
     const q = new URLSearchParams({ ids: itemIds.join(','), userId: this.userId });
-    return this._fetch(`/Playlists/${playlistId}/Items?${q}`, { method: 'POST' });
+    return this._fetch(`/Playlists/${playlistId}/Items?${q}`, { method: 'POST', retries: 2 });
   }
 
   // Jellyfin removes by the playlist ENTRY id (PlaylistItemId), not the track id,
@@ -451,7 +497,7 @@ export class Jellyfin {
   async removeFromPlaylist(playlistId, entryIds) {
     this._evict(`playlist:${playlistId}`);
     const q = new URLSearchParams({ entryIds: entryIds.join(',') });
-    return this._fetch(`/Playlists/${playlistId}/Items?${q}`, { method: 'DELETE' });
+    return this._fetch(`/Playlists/${playlistId}/Items?${q}`, { method: 'DELETE', retries: 2 });
   }
 
   async movePlaylistItem(playlistId, entryId, newIndex) {

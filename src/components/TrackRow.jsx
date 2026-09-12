@@ -66,7 +66,7 @@ export default function TrackRow({
   track, n, active, isPlaying = false, onPlay, onToggle, onLike, playlists = [], onAddTo, onNewPlaylist,
   onRemove, draggable = false, onDragStart, onDragOver, onDrop, showArt = false, jf,
   onOpenArtist, onOpenAlbum, hideArtists = false,
-  onAddToQueue, onExclude, onRadio, onDownload,
+  onAddToQueue, onExclude, onRadio, onDownload, hideAlbum = false,
 }) {
   // {x, y} while the context menu is open (from the dots button or a right-click).
   const [menu, setMenu] = useState(null);
@@ -139,7 +139,9 @@ export default function TrackRow({
         </small>}
       </span>
 
-      {track.AlbumId && onOpenAlbum ? (
+      {hideAlbum ? (
+        <span className="trackrow-album" />
+      ) : track.AlbumId && onOpenAlbum ? (
         <button className="trackrow-album rowlink" onClick={(e) => { e.stopPropagation(); onOpenAlbum(track.AlbumId); }}>{track.Album || ''}</button>
       ) : (
         <span className="trackrow-album">{track.Album || ''}</span>

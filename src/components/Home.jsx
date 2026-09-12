@@ -87,7 +87,7 @@ function Card({ title, subtitle, image, round, onOpen, onPlay }) {
  * mixes are. Discover Weekly and Release Radar need listening data we do not
  * have and are labelled placeholders.
  */
-export default function Home({ jf, player, albums, artists, playlists, onOpen, onOpenLiked, onOpenPlaylist, onSeeAll, likedCount }) {
+export default function Home({ jf, player, albums, artists, playlists, onOpen, onOpenLiked, onOpenPlaylist, onSeeAll, likedCount, bar }) {
   const [recent, setRecent] = useState([]);
   const [added, setAdded] = useState([]);
 
@@ -128,13 +128,7 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
 
   return (
     <div className="content">
-      <div className="contentbar">
-        <div className="pills">
-          <button className="pill on">All</button>
-          <button className="pill" onClick={() => onSeeAll('albums')}>Music</button>
-          <button className="pill" onClick={() => onSeeAll('artists')}>Artists</button>
-        </div>
-      </div>
+      <div className="contentbar">{bar}</div>
 
       <div className="pad home">
         <h1 className="greeting">{greeting()}</h1>

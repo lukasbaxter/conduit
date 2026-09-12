@@ -629,6 +629,12 @@ export function usePlayer(jf) {
     setShuffleMode(nextMode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setShuffleMode]);
+  // Direct set (the hero's shuffle toggle), routed like the cycles are.
+  const setShuffleRouted = useCallback((mode) => {
+    const act = activePlayerRef.current;
+    if (act && relayRef.current) { relayRef.current.command(act, { action: 'setShuffle', mode }); return; }
+    setShuffleMode(mode);
+  }, [setShuffleMode]);
   const cycleRepeat = useCallback(() => {
     const nextMode = { off: 'all', all: 'one', one: 'off' }[activeMode('repeat')] || 'all';
     const act = activePlayerRef.current;
@@ -1308,7 +1314,7 @@ export function usePlayer(jf) {
       relayDevices, lanDevices, registerDevices, attachRelay, applyRoster, executeCommand, roster, relay: relayInstance,
       queue: shownQueue, index: shownIndex, current, applyRemoteQueue, applySession,
       playing: shownPlaying, position: shownPosition, duration: shownDuration, volume: shownVolume, error,
-      repeat: shownRepeat, shuffle: shownShuffle, cycleRepeat, cycleShuffle,
+      repeat: shownRepeat, shuffle: shownShuffle, cycleRepeat, cycleShuffle, setShuffle: setShuffleRouted,
       playQueue, toggle, next, previous, seek, setVolume, skipTo,
       clearError: () => setError(null),
     }),
@@ -1316,7 +1322,7 @@ export function usePlayer(jf) {
     [device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId, addToQueue,
      relayDevices, lanDevices, registerDevices, attachRelay, applyRoster, executeCommand, roster, relayInstance, shownQueue, shownIndex, current, applyRemoteQueue, applySession,
      shownPlaying, shownPosition, shownDuration, shownVolume, error, shownRepeat, shownShuffle,
-     cycleRepeat, cycleShuffle, playQueue, toggle, next,
+     cycleRepeat, cycleShuffle, setShuffleRouted, playQueue, toggle, next,
      previous, seek, setVolume, skipTo]
   );
 }

@@ -126,8 +126,40 @@ export default function App() {
   const [libLoading, setLibLoading] = useState(true);
   const [albums, setAlbums] = useState([]);
   const [artists, setArtists] = useState([]);
-  const [detail, setDetail] = useState(null);
+  const [detail, setDetailRaw] = useState(null);
+  const [seeAll, setSeeAllRaw] = useState(null); // 'albums' | 'artists' | null
   const [query, setQuery] = useState('');
+
+  // Back / forward like Spotify's header arrows. One entry per place you can
+  // be: {view, detail, seeAll}. A detail that merely refreshes (a playlist
+  // streaming its tracks in) updates the current entry instead of pushing.
+  const histRef = useRef({ stack: [{ view: 'home', detail: null, seeAll: null }], idx: 0 });
+  const [histTick, setHistTick] = useState(0);
+  const applyEntry = (e) => { setView(e.view); setDetailRaw(e.detail); setSeeAllRaw(e.seeAll); };
+  const pushEntry = (e) => {
+    const h = histRef.current;
+    h.stack = h.stack.slice(0, h.idx + 1); h.stack.push(e); h.idx = h.stack.length - 1;
+    setHistTick((t) => t + 1);
+  };
+  const currentEntry = () => histRef.current.stack[histRef.current.idx];
+  const setDetail = (next) => {
+    setDetailRaw((prev) => {
+      const d = typeof next === 'function' ? next(prev) : next;
+      const cur = currentEntry();
+      if ((d?.item?.Id || null) === (cur.detail?.item?.Id || null)) {
+        histRef.current.stack[histRef.current.idx] = { ...cur, detail: d };
+      } else {
+        pushEntry({ view: cur.view, detail: d, seeAll: d ? null : cur.seeAll });
+        if (d) setSeeAllRaw(null);
+      }
+      return d;
+    });
+  };
+  const setSeeAll = (v) => { setSeeAllRaw(v); setDetailRaw(null); pushEntry({ view: 'home', detail: null, seeAll: v }); setView('home'); };
+  const goBack = () => { const h = histRef.current; if (h.idx > 0) { h.idx -= 1; applyEntry(h.stack[h.idx]); setHistTick((t) => t + 1); } };
+  const goForward = () => { const h = histRef.current; if (h.idx < h.stack.length - 1) { h.idx += 1; applyEntry(h.stack[h.idx]); setHistTick((t) => t + 1); } };
+  const canBack = histRef.current.idx > 0;
+  const canForward = histRef.current.idx < histRef.current.stack.length - 1;
   // null | 'npv' | 'queue' | 'lyrics'
   const [panel, setPanel] = useState(null);
   const player = usePlayer(jf);
@@ -241,7 +273,39 @@ export default function App() {
 
   const signOut = () => { clearSession(); setJf(null); };
 
-  const goView = (v) => { setDetail(null); setView(v); };
+  const goView = (v) => { setDetailRaw(null); setSeeAllRaw(null); setView(v); pushEntry({ view: v, detail: null, seeAll: null }); };
+
+  // Space anywhere = play/pause, unless you are typing.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.code !== 'Space' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      e.preventDefault();
+      player.toggle();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [player.toggle]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Playlist "Edit details": rename and/or a new cover.
+  const onEditPlaylist = async (pl, { name, imageFile }) => {
+    try {
+      if (name && name !== pl.Name) await jf.renameItem(pl.Id, name);
+      if (imageFile) await jf.uploadPrimaryImage(pl.Id, imageFile);
+      await refreshPlaylists();
+      setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, item: { ...d.item, Name: name || d.item.Name, _imgBust: Date.now() } } : d));
+      notify('Playlist updated');
+    } catch (e) { notify(`Could not update playlist: ${e.message}`); }
+  };
+  const onDeletePlaylist = async (pl) => {
+    try {
+      await jf.deleteItem(pl.Id);
+      await refreshPlaylists();
+      setDetail(null);
+      notify(`Deleted ${pl.Name}`);
+    } catch (e) { notify(`Could not delete: ${e.message}`); }
+  };
 
   // Footer links: art -> album, artist name -> artist page.
   const openAlbumById = async (albumId) => {
@@ -318,7 +382,7 @@ export default function App() {
       });
     } catch (e) {
       patchLiked(track.Id, !liked);
-      notify(`Could not update: ${e.message}`);
+      notify(`Not saved: Jellyfin did not accept the change (${e.message.slice(0, 60)}). Try again.`);
     }
   };
 
@@ -414,6 +478,14 @@ export default function App() {
     <div className="app">
       <header className="navbar">
         <div className="brand">Conduit</div>
+        <div className="navarrows">
+          <button className="navarrow" onClick={goBack} disabled={!canBack} title="Go back">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M11.03.47a.75.75 0 0 1 0 1.06L4.56 8l6.47 6.47a.75.75 0 1 1-1.06 1.06L2.44 8 9.97.47a.75.75 0 0 1 1.06 0z" /></svg>
+          </button>
+          <button className="navarrow" onClick={goForward} disabled={!canForward} title="Go forward">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M4.97.47a.75.75 0 0 0 0 1.06L11.44 8l-6.47 6.47a.75.75 0 1 0 1.06 1.06L13.56 8 6.03.47a.75.75 0 0 0-1.06 0z" /></svg>
+          </button>
+        </div>
         <div className="navbar-right">
           <div className="avatarwrap">
             <button className="avatar" onClick={() => setUserMenu((v) => !v)} title={me?.Name || 'Account'}>
@@ -481,6 +553,11 @@ export default function App() {
           onOpenAlbumById={openAlbumById}
           onExclude={onExclude}
           onDownload={onDownload}
+          seeAll={seeAll}
+          setSeeAll={setSeeAll}
+          onEditPlaylist={onEditPlaylist}
+          onDeletePlaylist={onDeletePlaylist}
+          me={me}
         />
         {panel && <div className="panel-spacer" />}
         {panel && (

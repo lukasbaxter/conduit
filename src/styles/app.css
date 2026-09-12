@@ -71,12 +71,12 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 }
 
 .navbar {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center;
   height: 56px; padding-left: 78px; -webkit-app-region: drag;
 }
 .navbar button, .navbar input { -webkit-app-region: no-drag; }
 .brand { font-size: 15px; font-weight: 700; letter-spacing: -.2px; }
-.navbar-right { display: flex; align-items: center; gap: 10px; }
+.navbar-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 
 /* The resizer occupies the gap column between rail and content, so the gap
    itself is the drag target exactly as in Spotify. */
@@ -211,15 +211,56 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 /* ---------- entity header (album / artist / playlist) ---------- */
 
 .hero {
+  --hero: #3d3c3c;
   display: flex; gap: 24px; align-items: flex-end; padding: 32px 24px 24px;
-  background: linear-gradient(180deg, #3d3c3c 0%, var(--bg-base) 100%);
+  background: linear-gradient(180deg, var(--hero) 0%, color-mix(in srgb, var(--hero) 55%, var(--bg-base)) 100%);
 }
+/* Spotify carries the extracted colour a little way behind the action row. */
+.hero.tinted + .actions { background: linear-gradient(180deg, color-mix(in srgb, var(--hero, #3d3c3c) 35%, var(--bg-base)) 0%, var(--bg-base) 100%); margin-top: 0; }
+.hero-cover { position: relative; padding: 0; flex: none; border-radius: var(--r-art); }
+.hero-cover:disabled { cursor: default; }
+.hero-cover img { display: block; }
+.hero-cover-edit { position: absolute; inset: 0; display: grid; place-items: center; color: var(--fg); font-size: 16px; font-weight: 700; background: rgba(0,0,0,.6); border-radius: var(--r-art); opacity: 0; transition: opacity .15s; }
+.hero-cover.editable:hover .hero-cover-edit { opacity: 1; }
+.hero-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.hero-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; margin-right: 4px; }
+.rowlink.strong { color: var(--fg); font-weight: 700; font-size: 14px; }
+.rowlink.strong:hover { text-decoration: underline; }
+.iconbtn { width: 40px; height: 40px; display: grid; place-items: center; color: var(--fg-dim); border-radius: 50%; }
+.iconbtn:hover { color: var(--fg); transform: scale(1.04); }
+.iconbtn.on { color: var(--accent); }
+.iconbtn.on::after { content: ''; display: block; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); margin-top: -4px; }
+
+/* Column header above the rows: same grid as .trackrow, rule underneath. */
+.trackhead {
+  display: grid; grid-template-columns: 36px minmax(0, 4fr) minmax(0, 3fr) 32px 5ch 32px; gap: 12px; align-items: center;
+  padding: 0 16px; height: 36px; margin-bottom: 16px; color: var(--fg-dim); font-size: 14px;
+  border-bottom: 1px solid rgba(255,255,255,.1); position: sticky; top: 64px; background: var(--bg-base); z-index: 2;
+}
+.trackhead.with-art { grid-template-columns: 36px auto minmax(0, 4fr) minmax(0, 3fr) 32px 5ch 32px; }
+.trackhead .th-n { text-align: center; font-size: 16px; }
+.trackhead .th-dur { display: grid; place-items: end; padding-right: 2px; }
+
+/* Header arrows (Spotify's < > next to the brand). */
+.navarrows { display: flex; gap: 8px; margin-left: 16px; }
+.navarrow { width: 32px; height: 32px; border-radius: 50%; background: rgba(0,0,0,.7); color: var(--fg); display: grid; place-items: center; }
+.navarrow:disabled { color: var(--fg-dim); opacity: .5; }
+.navarrow:not(:disabled):hover { background: rgba(0,0,0,.9); }
+
+/* Edit details dialog (playlist). */
+.editdetails { width: min(524px, calc(100vw - 32px)); }
+.editdetails-body { display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: start; }
+.editdetails-cover { position: relative; width: 180px; height: 180px; border-radius: var(--r-art); overflow: hidden; background: #282828; cursor: pointer; display: block; box-shadow: 0 4px 60px rgba(0,0,0,.5); }
+.editdetails-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.editdetails-cover span { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.7); color: var(--fg); font-weight: 700; opacity: 0; transition: opacity .15s; }
+.editdetails-cover:hover span { opacity: 1; }
+@media (max-width: 600px) { .editdetails-body { grid-template-columns: 1fr; } }
 .hero.artist { align-items: flex-end; min-height: 340px; background-position: 50% 15%; background-size: cover; }
-.hero img, .hero .liked-art {
+.hero .hero-cover img, .hero > img, .hero .liked-art {
   width: 232px; height: 232px; aspect-ratio: 1; flex: none;
   border-radius: var(--r-art); object-fit: cover; box-shadow: 0 16px 40px rgba(0,0,0,.6);
 }
-.hero.artist img { border-radius: 50%; width: 192px; height: 192px; }
+.hero.artist .hero-cover, .hero.artist .hero-cover img { border-radius: 50%; width: 192px; height: 192px; }
 .hero .kind { font-size: 14px; font-weight: 700; }
 /* Spotify's classic ladder: 96 -> 72 -> 48 -> 32, weight 800 */
 .hero h1 { margin: 8px 0 16px; font-weight: 800; line-height: 1.05; letter-spacing: -2px; overflow-wrap: anywhere; }
@@ -610,3 +651,6 @@ input[type="range"]:disabled { opacity: .4; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .modal-actions .primary { background: var(--fg); color: #000; border-radius: 500px; padding: 10px 24px; font-weight: 700; }
 .modal-actions .primary:disabled { opacity: .4; }
+
+.trackhead.with-art > span:nth-child(2) { width: 40px; }
+.hero.liked { --hero: #5038a0; }
