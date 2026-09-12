@@ -186,9 +186,11 @@ export default function TrackRow({
             onClick={snippetAt != null && onPlayAt ? (e) => { e.stopPropagation(); onPlayAt(track, snippetAt); } : undefined}
           >
             <span className="lyric-tag">Lyrics</span>
-            {snippet.split(/(\u0001[^\u0002]*\u0002)/g).map((part, i) => (
-              part.startsWith('\u0001') ? <mark key={i}>{part.slice(1, -1)}</mark> : <React.Fragment key={i}>{part}</React.Fragment>
-            ))}
+            <span>
+              {snippet.split(/(\u0001[^\u0002]*\u0002)/g).map((part, i) => (
+                part.startsWith('\u0001') ? <mark key={i}>{part.slice(1, -1)}</mark> : <React.Fragment key={i}>{part}</React.Fragment>
+              ))}
+            </span>
           </small>
         )}
       </span>

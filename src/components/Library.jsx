@@ -850,7 +850,7 @@ export default function Library({
             {tracks.length > 0 && (() => { const shown = within.trim() && withinRes ? withinRes : tracks; const filtered = shown !== tracks; return (
               <VirtualList
                 items={shown}
-                rowHeight={56}
+                rowHeight={filtered && shown.some((t) => t._snippet) ? 76 : 56}
                 getKey={(t, i) => t.PlaylistItemId || `${t.Id}-${i}`}
                 renderRow={(t, i) => (
                   <div className={overIdx === i && dragIdx != null && !filtered ? 'dropbefore' : ''}>
