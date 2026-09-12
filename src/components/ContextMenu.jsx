@@ -37,6 +37,7 @@ function Panel({ x, y, items, onClose, depth = 0, anchorRight = false, onEnter, 
 
   const openSub = (i, target) => {
     clearTimeout(closeTimer.current);
+    if (open === i) return; // already open: do not re-measure and jump
     const r = target.getBoundingClientRect();
     const menu = ref.current.getBoundingClientRect();
     // Open to the right of the panel; Panel() flips it left when there is no room.
@@ -44,7 +45,7 @@ function Panel({ x, y, items, onClose, depth = 0, anchorRight = false, onEnter, 
     setSubAt({ x: spaceRight > 240 ? menu.right + 2 : menu.left - 2, y: r.top - 4, left: spaceRight <= 240 });
     setOpen(i);
   };
-  const scheduleClose = () => { closeTimer.current = setTimeout(() => setOpen(null), 250); };
+  const scheduleClose = () => { closeTimer.current = setTimeout(() => setOpen(null), 400); };
 
   return (
     <>
@@ -101,15 +102,18 @@ export default function ContextMenu({ x, y, items, onClose, anchorRight = false 
     const down = (e) => { if (!e.target.closest?.('.ctxmenu')) onClose(); };
     const key = (e) => { if (e.key === 'Escape') onClose(); };
     const bye = () => onClose();
+    // Scrolling the page under the menu closes it; scrolling INSIDE a long
+    // submenu (the playlist list) must not.
+    const scrolled = (e) => { if (!e.target?.closest?.('.ctxmenu')) onClose(); };
     document.addEventListener('mousedown', down, true);
     document.addEventListener('keydown', key);
     window.addEventListener('resize', bye);
-    document.addEventListener('scroll', bye, true);
+    document.addEventListener('scroll', scrolled, true);
     return () => {
       document.removeEventListener('mousedown', down, true);
       document.removeEventListener('keydown', key);
       window.removeEventListener('resize', bye);
-      document.removeEventListener('scroll', bye, true);
+      document.removeEventListener('scroll', scrolled, true);
     };
   }, [onClose]);
   return createPortal(<Panel x={x} y={y} items={items} onClose={onClose} anchorRight={anchorRight} />, document.body);

@@ -151,8 +151,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .contentbar {
   position: sticky; top: 0; z-index: 8;
   display: flex; align-items: center; gap: 12px;
-  padding: 16px 24px; background: linear-gradient(var(--bg-base), rgba(18,18,18,.86));
-  backdrop-filter: blur(12px);
+  padding: 16px 24px; background: var(--bg-base);
 }
 .search {
   flex: 1; max-width: 364px; background: var(--card-hover); color: var(--fg);
@@ -210,8 +209,11 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 
 /* ---------- entity header (album / artist / playlist) ---------- */
 
+/* The header colour is set on .content (inline, per item) so the header AND
+   the band below it share it. Never redefine --hero on .hero itself: a local
+   value beats the inherited one and the header goes grey. */
+.content { --hero: #3d3c3c; }
 .hero {
-  --hero: #3d3c3c;
   display: flex; gap: 24px; align-items: flex-end; padding: 32px 24px 24px;
   /* Spotify: flat extracted colour with a light-to-dark wash over it... */
   background: linear-gradient(transparent 0, rgba(0,0,0,.35) 100%), var(--hero);
