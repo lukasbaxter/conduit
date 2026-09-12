@@ -158,10 +158,13 @@ export default function Library({
 
   useEffect(() => {
     if (view !== 'search' || !query.trim()) { setResults(null); return undefined; }
+    // Jellyfin's search takes ~1s; an older query's reply must never overwrite
+    // a newer one (typing "daft" showed the "daf" results, or vice versa).
+    let alive = true;
     const t = setTimeout(() => {
-      jf.search(query.trim()).then(setResults).catch((e) => setErr(e.message));
+      jf.search(query.trim()).then((r) => { if (alive) setResults(r); }).catch((e) => { if (alive) setErr(e.message); });
     }, 250);
-    return () => clearTimeout(t);
+    return () => { alive = false; clearTimeout(t); };
   }, [query, jf, view]);
 
   const openAlbum = async (album) => {
