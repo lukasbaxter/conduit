@@ -12,7 +12,8 @@
 
 import puppeteer from 'puppeteer';
 
-const APP = 'http://192.168.1.85:8748';
+const HOST = process.env.CONDUIT_HOST || '192.168.1.85';
+const APP = `http://${HOST}:8748`;
 const USER = 'conduittest'; // dedicated test account: never the real session
 const PASS = 'Conduit-Test-9921';
 const X = { id: '48202c7882093a3cb6637bd61ac61bd4', title: 'Feeling Like I' };

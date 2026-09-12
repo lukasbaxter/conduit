@@ -8,8 +8,9 @@
 import puppeteer from 'puppeteer';
 import WebSocket from 'ws';
 
-const APP = 'http://192.168.1.85:8748';
-const JELLYFIN = 'http://192.168.1.85:2101';
+const HOST = process.env.CONDUIT_HOST || '192.168.1.85';
+const APP = `http://${HOST}:8748`;
+const JELLYFIN = `http://${HOST}:2101`;
 const USER = 'conduittest'; // dedicated test account: never the real session
 const PASS = 'Conduit-Test-9921';
 const X = { id: '48202c7882093a3cb6637bd61ac61bd4', title: 'Feeling Like I' };
@@ -31,7 +32,7 @@ async function token() {
 // Fake desktop that sees a Node. Records commands it receives.
 function desktop(tok) {
   return new Promise((resolve) => {
-    const ws = new WebSocket('ws://192.168.1.85:8788/relay');
+    const ws = new WebSocket(`ws://${HOST}:8788/relay`);
     const got = [];
     ws.on('open', () => {
       ws.send(JSON.stringify({ type: 'hello', token: tok, clientId: 'c_fakedesk', kind: 'desktop', name: 'FAKE DESKTOP' }));

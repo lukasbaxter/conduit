@@ -10,8 +10,9 @@
 import puppeteer from 'puppeteer';
 import WebSocket from 'ws';
 
-const APP = 'http://192.168.1.85:8748';
-const JELLYFIN = 'http://192.168.1.85:2101';
+const HOST = process.env.CONDUIT_HOST || '192.168.1.85';
+const APP = `http://${HOST}:8748`;
+const JELLYFIN = `http://${HOST}:2101`;
 const USER = 'conduittest'; // dedicated test account: never the real session
 const PASS = 'Conduit-Test-9921';
 
@@ -32,7 +33,7 @@ async function token() {
 // Client A: raw active player.
 function activePlayer(tok) {
   return new Promise((resolve) => {
-    const ws = new WebSocket('ws://192.168.1.85:8788/relay');
+    const ws = new WebSocket(`ws://${HOST}:8788/relay`);
     let pos = 20;
     ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', token: tok, kind: 'desktop', name: 'PLAYER A' })));
     ws.on('message', (raw) => {
