@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import DevicePicker from './DevicePicker.jsx';
-import { Heart } from './TrackRow.jsx';
+import { Heart, ShuffleGlyph } from './TrackRow.jsx';
 
 function fmt(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -128,14 +128,7 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
               onClick={player.cycleShuffle}
               title={shuffle === 'smart' ? 'Smart shuffle' : shuffle === 'on' ? 'Shuffle' : 'Enable shuffle'}
             >
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
-                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 3h5v5" />
-                <path d="M4 20 21 3" />
-                <path d="M21 16v5h-5" />
-                <path d="m15 15 6 6" />
-                <path d="M4 4l5 5" />
-              </svg>
+              <ShuffleGlyph size={16} />
               {shuffle === 'smart' && (
                 <svg className="ctl-spark" viewBox="0 0 24 24" width="9" height="9" fill="currentColor" aria-hidden="true">
                   <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z" />
