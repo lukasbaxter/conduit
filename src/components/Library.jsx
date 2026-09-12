@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import TrackRow, { PlayGlyph, PauseGlyph, Heart, ShuffleGlyph } from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import { vibrantColor } from '../api/colors.js';
+import { QUALITIES, THEME_PRESETS, DEFAULT_THEME, themeEquals } from '../api/prefs.js';
 import Home from './Home.jsx';
 import FittedTitle from './FittedTitle.jsx';
 import VirtualList from './VirtualList.jsx';
@@ -115,6 +116,7 @@ export default function Library({
   onLike, onAddTo, onNewPlaylist, onRemoveFromPlaylist, onReorder, onOpenPlaylist, onOpenLiked, likedCount,
   onOpenArtistById, onOpenAlbumById, onExclude, onDownload,
   seeAll, setSeeAll, onEditPlaylist, onDeletePlaylist, me, onView, onOpenProfile,
+  prefs, onUpdatePrefs, onUploadAvatar, avatarV,
 }) {
   const [results, setResults] = useState(null);
   const [searchType, setSearchType] = useState('All');
@@ -251,16 +253,80 @@ export default function Library({
       },
     } : {});
 
+    if (kind === 'Settings') {
+      const theme = { ...DEFAULT_THEME, ...(prefs?.theme || {}) };
+      const setColor = (k, v) => onUpdatePrefs({ theme: { ...theme, [k]: v } });
+      return (
+        <div className="content">
+          <div className="contentbar" />
+          <div className="pad settings">
+            <h1 className="greeting">Settings</h1>
+
+            <section className="settings-section">
+              <h2>Profile</h2>
+              <div className="settings-row">
+                <label className="settings-avatar" title="Choose photo">
+                  <img key={avatarV} src={jf.userImageUrl({ maxHeight: 256 })} alt="" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
+                  <span>Choose photo</span>
+                  <input type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadAvatar(f); e.target.value = ''; }} />
+                </label>
+                <div>
+                  <div className="settings-name">{me?.Name}</div>
+                  <div className="settings-hint">Profile picture is stored on your Jellyfin account and shows on every device.</div>
+                </div>
+              </div>
+            </section>
+
+            <section className="settings-section">
+              <h2>Playback</h2>
+              <div className="settings-field">
+                <label>Streaming quality</label>
+                <select value={prefs?.quality || 'original'} onChange={(e) => onUpdatePrefs({ quality: e.target.value })}>
+                  {QUALITIES.map((q) => <option key={q.id} value={q.id}>{q.label}</option>)}
+                </select>
+                <div className="settings-hint">{QUALITIES.find((q) => q.id === (prefs?.quality || 'original'))?.hint || 'Applies from the next track. Speakers always get the original file.'}</div>
+              </div>
+            </section>
+
+            <section className="settings-section">
+              <h2>Appearance</h2>
+              <div className="settings-hint" style={{ marginBottom: 12 }}>Saved to your account and applied to every Conduit you have open, instantly.</div>
+              <div className="theme-presets">
+                {THEME_PRESETS.map((p) => (
+                  <button key={p.name} className={`theme-preset ${themeEquals(p.theme, theme) ? 'on' : ''}`} onClick={() => onUpdatePrefs({ theme: p.theme })} style={{ '--p-bg': p.theme.bg, '--p-surface': p.theme.surface, '--p-accent': p.theme.accent, '--p-fg': p.theme.fg }}>
+                    <span className="theme-swatch"><i /><i /><i /></span>
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+              <div className="theme-colors">
+                {[['accent', 'Accent', 'Play button, likes, the active track'], ['bg', 'Background', 'The page behind everything'], ['surface', 'Surface', 'Cards, menus, the queue panel'], ['fg', 'Text', 'Titles and icons']].map(([k, label, hint]) => (
+                  <label key={k} className="theme-color">
+                    <input type="color" value={theme[k]} onChange={(e) => setColor(k, e.target.value)} />
+                    <span className="theme-color-body"><b>{label}</b><small>{hint}</small></span>
+                    <code>{theme[k]}</code>
+                  </label>
+                ))}
+              </div>
+              <button className="btn-secondary" style={{ marginTop: 16 }} onClick={() => onUpdatePrefs({ theme: DEFAULT_THEME })} disabled={themeEquals(theme, DEFAULT_THEME)}>Reset to default</button>
+            </section>
+          </div>
+        </div>
+      );
+    }
+
     if (kind === 'Profile') {
-      const avatar = jf.userImageUrl();
+      const avatar = jf.userImageUrl({ maxHeight: 464 });
       return (
         <div className="content" style={{ '--hero': '#4a4a4a' }}>
           <div className="contentbar" />
           <header className="hero profile">
-            <div className="hero-cover profile-avatar">
-              <img src={avatar} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'grid'; }} />
+            <label className="hero-cover profile-avatar editable" title="Choose photo">
+              <img key={avatarV} src={avatar} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'grid'; }} />
               <span className="profile-initial" style={{ display: 'none' }}>{(item.Name || '?').slice(0, 1).toUpperCase()}</span>
-            </div>
+              <span className="hero-cover-edit">Choose photo</span>
+              <input type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadAvatar(f); e.target.value = ''; }} />
+            </label>
             <div style={{ minWidth: 0 }}>
               <div className="kind">Profile</div>
               <FittedTitle text={item.Name} maxLines={2} />

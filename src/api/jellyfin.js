@@ -141,9 +141,54 @@ export class Jellyfin {
   }
 
   // The signed-in user's profile picture, if they set one in Jellyfin.
-  userImageUrl() {
-    const q = new URLSearchParams({ maxHeight: '96', api_key: this.token });
+  userImageUrl({ maxHeight = 96 } = {}) {
+    const q = new URLSearchParams({ maxHeight: String(maxHeight), api_key: this.token });
+    if (this._bust?.user) q.set('v', String(this._bust.user));
     return `${this.baseUrl}/Users/${this.userId}/Images/Primary?${q}`;
+  }
+
+  // Profile picture. A user may set their own; the body is base64.
+  async uploadUserImage(file) {
+    const buf = await file.arrayBuffer();
+    let bin = ''; const bytes = new Uint8Array(buf);
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    const res = await fetch(`${this.baseUrl}/Users/${this.userId}/Images/Primary`, {
+      method: 'POST', body: btoa(bin),
+      headers: { 'Content-Type': file.type || 'image/jpeg', Authorization: authHeader(this.token) },
+    });
+    if (!res.ok) throw new Error(`Jellyfin ${res.status} uploading profile picture`);
+    (this._bust ||= {}).user = Date.now();
+  }
+
+  // --- account settings (Jellyfin DisplayPreferences, client "conduit") ----
+  // CustomPrefs is a string->string map; structured values are JSON inside.
+  async getPrefs() {
+    const q = new URLSearchParams({ userId: this.userId, client: 'conduit' });
+    const dp = await this._fetch(`/DisplayPreferences/conduit?${q}`);
+    this._dp = dp;
+    const out = {};
+    for (const [k, v] of Object.entries(dp.CustomPrefs || {})) {
+      try { out[k] = JSON.parse(v); } catch { out[k] = v; }
+    }
+    return out;
+  }
+
+  async setPrefs(patch) {
+    if (!this._dp) await this.getPrefs();
+    const dp = { ...this._dp, Client: 'conduit', CustomPrefs: { ...(this._dp.CustomPrefs || {}) } };
+    for (const [k, v] of Object.entries(patch)) dp.CustomPrefs[k] = typeof v === 'string' ? v : JSON.stringify(v);
+    const q = new URLSearchParams({ userId: this.userId, client: 'conduit' });
+    await this._fetch(`/DisplayPreferences/conduit?${q}`, { method: 'POST', body: JSON.stringify(dp), retries: 2 });
+    this._dp = dp;
+  }
+
+  // What the local player streams: the original file unless the account asked
+  // for a smaller transcode. Speakers always get the original (the transcoded
+  // stream is unseekable on BluOS, see streamUrl).
+  quality = 'original';
+  playbackUrl(itemId) {
+    const q = { high: 320000, normal: 160000, low: 96000 }[this.quality];
+    return q ? this.transcodeUrl(itemId, { codec: 'mp3', bitrate: q }) : this.streamUrl(itemId);
   }
 
   async me() {

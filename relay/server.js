@@ -258,6 +258,15 @@ wss.on('connection', (ws, req) => {
         broadcastRoster(self.uid);
         break;
 
+      // Account settings changed on one client (theme, quality): tell the
+      // user's other clients so they repaint right away. Jellyfin holds the
+      // persistent copy; this is only the live nudge.
+      case 'prefs':
+        for (const c of userMap(self.uid).values()) {
+          if (c.id !== self.id) send(c.ws, { type: 'prefs', prefs: msg.prefs || {} });
+        }
+        break;
+
       // Route a command to another of the user's clients (play/pause/seek/etc.).
       // { type:'command', to:<clientId>, command:{...} }
       case 'command': {

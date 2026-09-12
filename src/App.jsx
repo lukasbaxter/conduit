@@ -7,6 +7,7 @@ import Library, { LIKED_ID } from './components/Library.jsx';
 import Player, { PlayingElsewhereBar } from './components/Player.jsx';
 import RightPanel from './components/RightPanel.jsx';
 import { downloadTrack } from './api/download.js';
+import { applyTheme, DEFAULT_THEME } from './api/prefs.js';
 
 // In Electron (desktop) we talk to Jellyfin on the LAN directly. In a browser
 // (the PWA at music.baxtergroup.io) we go same-origin through the nginx proxy,
@@ -87,6 +88,10 @@ export default function App() {
   // "New playlist" dialog: {track} while open. window.prompt() does not exist
   // in Electron, which is why creating a playlist from a row did nothing there.
   const [namePrompt, setNamePrompt] = useState(null);
+  // Account settings: theme + playback quality. Loaded from Jellyfin, applied
+  // to the CSS variables, kept in sync across clients over the relay.
+  const [prefs, setPrefs] = useState({ theme: DEFAULT_THEME, quality: 'original' });
+  const [avatarV, setAvatarV] = useState(0);
   const [nameDraft, setNameDraft] = useState('');
 
   // Left rail width. Spotify: drag the gap; below a threshold it snaps to an
@@ -185,7 +190,30 @@ export default function App() {
     if (!jf) return;
     jf.me().then(setMe).catch(() => {});
     setAvatarOk(true);
+    // Paint the last known theme instantly, then the account's saved one.
+    const cached = jf.persisted('prefs');
+    if (cached) { setPrefs((p) => ({ ...p, ...cached })); applyTheme(cached.theme); jf.quality = cached.quality || 'original'; }
+    jf.getPrefs().then((p) => {
+      const next = { theme: { ...DEFAULT_THEME, ...(p.theme || {}) }, quality: p.quality || 'original' };
+      setPrefs(next); applyTheme(next.theme); jf.quality = next.quality; jf._persist('prefs', next);
+    }).catch(() => {});
   }, [jf]);
+
+  // Change a setting: apply here, save to the account, nudge the other clients.
+  const updatePrefs = async (patch) => {
+    const next = { ...prefs, ...patch };
+    setPrefs(next); applyTheme(next.theme); jf.quality = next.quality; jf._persist('prefs', next);
+    player.relay?.sendPrefs?.(next);
+    try { await jf.setPrefs(patch); } catch (e) { notify(`Could not save settings: ${e.message}`); }
+  };
+  const onUploadAvatar = async (file) => {
+    try { await jf.uploadUserImage(file); setAvatarOk(true); setAvatarV(Date.now()); notify('Profile picture updated'); }
+    catch (e) { notify(`Could not upload: ${e.message}`); }
+  };
+  const openSettings = () => {
+    setView('home');
+    setDetail({ item: { Id: 'settings', Name: 'Settings', Type: 'Settings' }, tracks: [], kind: 'Settings' });
+  };
 
   // Load the library once connected. Albums/artists feed Home and Search;
   // playlists are what "Your Library" shows.
@@ -257,6 +285,7 @@ export default function App() {
       onCommand: (cmd) => player.executeCommand(cmd),
       onQueue: (from, q) => player.applyRemoteQueue(from, q),
       onSession: (s) => player.applySession(s),
+      onPrefs: (p) => { const next = { theme: { ...DEFAULT_THEME, ...(p.theme || {}) }, quality: p.quality || 'original' }; setPrefs(next); applyTheme(next.theme); jf.quality = next.quality; jf._persist('prefs', next); },
     });
     player.attachRelay(relay);
     return () => { relay.close(); player.attachRelay(null); };
@@ -540,7 +569,7 @@ export default function App() {
           <div className="avatarwrap">
             <button className="avatar" onClick={() => setUserMenu((v) => !v)} title={me?.Name || 'Account'}>
               {avatarOk ? (
-                <img src={jf.userImageUrl()} alt="" onError={() => setAvatarOk(false)} />
+                <img key={avatarV} src={jf.userImageUrl()} alt="" onError={() => setAvatarOk(false)} />
               ) : (
                 (me?.Name || '?').slice(0, 1).toUpperCase()
               )}
@@ -549,6 +578,8 @@ export default function App() {
               <div className="avatarmenu" onMouseLeave={() => setUserMenu(false)}>
                 <button className="who" onClick={() => { setUserMenu(false); openProfile(); }}>{me?.Name || 'Signed in'}</button>
                 <div className="sub">{jf.baseUrl.replace(/^https?:\/\//, '')}</div>
+                <button onClick={() => { setUserMenu(false); openProfile(); }}>Profile</button>
+                <button onClick={() => { setUserMenu(false); openSettings(); }}>Settings</button>
                 <button onClick={signOut}>Log out</button>
               </div>
             )}
@@ -609,6 +640,10 @@ export default function App() {
           onDeletePlaylist={onDeletePlaylist}
           me={me}
           onOpenProfile={openProfile}
+          prefs={prefs}
+          onUpdatePrefs={updatePrefs}
+          onUploadAvatar={onUploadAvatar}
+          avatarV={avatarV}
         />
         {panel && <div className="panel-spacer" />}
         {panel && (

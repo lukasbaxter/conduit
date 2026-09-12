@@ -269,7 +269,7 @@ export function usePlayer(jf) {
       if (!jf || !track) return;
       if (dev.kind === 'local') {
         const el = audioRef.current;
-        el.src = jf.streamUrl(track.Id);
+        el.src = jf.playbackUrl(track.Id);
         el.volume = volume / 100;
         if (seekSeconds > 0) {
           // The seek has to land BEFORE play(), otherwise playback audibly
