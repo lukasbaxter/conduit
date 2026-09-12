@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { PlayGlyph, Heart } from './TrackRow.jsx';
+import { PlayGlyph, Heart, LikedCover } from './TrackRow.jsx';
 
 function greeting() {
   const h = new Date().getHours();
@@ -36,7 +36,7 @@ function Shortcut({ title, image, onOpen, onPlay, liked }) {
     <div className="shortcut" onClick={onOpen} role="button" tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && onOpen?.()}>
       {liked ? (
-        <div className="liked-art shortcut-art"><Heart on={false} size={22} /></div>
+        <LikedCover className="shortcut-art" />
       ) : image ? (
         <img className="shortcut-art" src={image} alt="" loading="lazy" />
       ) : (

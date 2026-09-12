@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import TrackRow, { PlayGlyph, PauseGlyph, Heart, ShuffleGlyph } from './TrackRow.jsx';
+import TrackRow, { PlayGlyph, PauseGlyph, Heart, ShuffleGlyph, LikedCover } from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import { vibrantColor } from '../api/colors.js';
 import { QUALITIES, THEME_PRESETS, DEFAULT_THEME, themeEquals } from '../api/prefs.js';
@@ -597,9 +597,7 @@ export default function Library({
           return (
             <header className={`hero ${isArtist ? 'artist' : ''} ${banner ? 'with-banner' : ''} ${tint || isLiked ? 'tinted' : ''}`} style={banner ? { '--banner': `url("${banner}")` } : undefined}>
               {isLiked ? (
-                <div className="liked-art">
-                  <Heart on={false} size={100} />
-                </div>
+                <LikedCover />
               ) : banner ? null : (
                 <button
                   className={`hero-cover ${canEdit ? 'editable' : ''}`}
@@ -962,7 +960,7 @@ export default function Library({
                   <span>Charts</span>{albums[1] && <img src={jf.imageUrl(albums[1].Id, { maxHeight: 200 })} alt="" />}
                 </button>
                 <button className="tile" style={{ '--tile': '#5038a0' }} onClick={onOpenLiked}>
-                  <span>Liked Songs</span><i className="tile-heart"><Heart on={false} size={40} /></i>
+                  <span>Liked Songs</span><LikedCover className="tile-liked" heart={50} />
                 </button>
                 {(tiles || []).map((t, i) => (
                   <button key={t.id} className="tile" style={{ '--tile': t.color || TILE_COLORS[i % TILE_COLORS.length] }} onClick={() => openBrowse(t)}>

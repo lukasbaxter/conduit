@@ -37,6 +37,17 @@ export function ArtistLinks({ artists, fallback = '', onOpen, className = 'rowli
     </>
   );
 }
+// The Liked Songs cover: Spotify's purple-to-mint gradient with a white filled
+// heart. One component so the hero, sidebar, home shortcut and browse tile match.
+export function LikedCover({ className = '', heart = 45 }) {
+  return (
+    <div className={`liked-art ${className}`} style={{ '--heart': `${heart}%` }}>
+      <svg viewBox="0 0 16 16" fill="#fff" aria-hidden="true">
+        <path d="M15.724 4.22A4.313 4.313 0 0 0 12.192.814a4.269 4.269 0 0 0-3.622 1.13.837.837 0 0 1-1.14 0 4.272 4.272 0 0 0-6.21 5.855l5.916 7.05a1.128 1.128 0 0 0 1.727 0l5.916-7.05a4.228 4.228 0 0 0 .945-3.577z" />
+      </svg>
+    </div>
+  );
+}
 // Spotify's subtle "now playing" mark: three animated bars in the index column.
 export const NowPlayingBars = () => (
   <span className="npbars" aria-label="Now playing"><i /><i /><i /></span>

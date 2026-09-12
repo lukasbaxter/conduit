@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import ContextMenu from './ContextMenu.jsx';
-import { Heart } from './TrackRow.jsx';
+import { Heart, LikedCover } from './TrackRow.jsx';
 
 const ICONS = {
   home: 'M12 3 3 10v11h6v-6h6v6h6V10z',
@@ -123,9 +123,7 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
           )}
 
           <button className="libitem" onClick={onOpenLiked} onContextMenu={(ev) => openMenu(ev, { id: 'liked', kind: 'liked' })} title="Liked Songs">
-            <div className="liked-art" style={{ width: 48, height: 48, borderRadius: 4, flex: 'none' }}>
-              <Heart on={false} size={20} />
-            </div>
+            <LikedCover />
             <span className="libitem-text">
               <span className="libitem-name">Liked Songs</span>
               <span className="libitem-sub">Playlist{likedCount != null ? ` · ${likedCount} songs` : ''}</span>

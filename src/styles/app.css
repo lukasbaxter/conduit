@@ -374,10 +374,12 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .ctxmenu-sep { height: 1px; background: #3d3c3c; margin: 4px 0; }
 
 /* Liked Songs: Spotify's purple-to-blue gradient tile with a white heart. */
-.liked-art {
-  background: linear-gradient(135deg, #450af5, #c4efd9); display: grid; place-items: center; color: #fff;
+.liked-art, .libitem .liked-art, .hero .liked-art {
+  background: linear-gradient(135deg, #450af5, #c4efd9) !important; display: grid; place-items: center; color: #fff;
 }
-.liked-art svg { width: 45%; height: 45%; }
+.liked-art svg { width: var(--heart, 45%); height: var(--heart, 45%); }
+.libitem .liked-art { width: 48px; height: 48px; border-radius: 4px; flex: none; }
+.tile .tile-liked { position: absolute; right: -8%; bottom: -12%; width: 55%; aspect-ratio: 1; border-radius: 6px; transform: rotate(25deg); box-shadow: 0 8px 24px rgba(0,0,0,.5); }
 
 /* Search type chips */
 .searchtypes { display: flex; gap: 8px; padding: 0 24px 8px; flex-wrap: wrap; }
