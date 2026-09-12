@@ -226,6 +226,16 @@ export class Jellyfin {
     return (data.Items || [])[0] || null;
   }
 
+  // Most-played tracks (Spotify's "Top tracks this month" on the profile page).
+  async topTracks({ limit = 50 } = {}) {
+    const q = new URLSearchParams({
+      IncludeItemTypes: 'Audio', Recursive: 'true', Filters: 'IsPlayed', SortBy: 'PlayCount,DatePlayed', SortOrder: 'Descending',
+      Fields: 'ParentId,ArtistItems,AlbumArtists,UserData', Limit: String(limit), userId: this.userId,
+    });
+    const data = await this._fetch(`/Items?${q}`);
+    return data.Items || [];
+  }
+
   async recentlyAddedAlbums({ limit = 8 } = {}) {
     const q = new URLSearchParams({
       IncludeItemTypes: 'MusicAlbum',
@@ -547,10 +557,15 @@ export class Jellyfin {
     return `${this.baseUrl}/Audio/${itemId}/universal?${q}`;
   }
 
+  // After a cover upload every <img> for that item must refetch: bumping a
+  // per-item version in the URL beats any cache header.
+  bustImage(itemId) { (this._bust ||= {})[itemId] = Date.now(); }
+
   imageUrl(itemId, { maxHeight = 480, tag = null } = {}) {
     if (!itemId) return null;
     const q = new URLSearchParams({ maxHeight: String(maxHeight), api_key: this.token });
     if (tag) q.set('tag', tag);
+    if (this._bust?.[itemId]) q.set('v', String(this._bust[itemId]));
     return `${this.baseUrl}/Items/${itemId}/Images/Primary?${q}`;
   }
 

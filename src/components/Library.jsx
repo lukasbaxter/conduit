@@ -112,7 +112,7 @@ export default function Library({
   jf, player, view, albums, artists, playlists, detail, setDetail, query, setQuery,
   onLike, onAddTo, onNewPlaylist, onRemoveFromPlaylist, onReorder, onOpenPlaylist, onOpenLiked, likedCount,
   onOpenArtistById, onOpenAlbumById, onExclude, onDownload,
-  seeAll, setSeeAll, onEditPlaylist, onDeletePlaylist, me, onView,
+  seeAll, setSeeAll, onEditPlaylist, onDeletePlaylist, me, onView, onOpenProfile,
 }) {
   const [results, setResults] = useState(null);
   const [searchType, setSearchType] = useState('All');
@@ -233,11 +233,65 @@ export default function Library({
       },
     } : {});
 
+    if (kind === 'Profile') {
+      const avatar = jf.userImageUrl();
+      return (
+        <div className="content" style={{ '--hero': '#4a4a4a' }}>
+          <div className="contentbar" />
+          <header className="hero profile">
+            <div className="hero-cover profile-avatar">
+              <img src={avatar} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'grid'; }} />
+              <span className="profile-initial" style={{ display: 'none' }}>{(item.Name || '?').slice(0, 1).toUpperCase()}</span>
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div className="kind">Profile</div>
+              <FittedTitle text={item.Name} maxLines={2} />
+              <p className="hero-meta"><b>{playlists.length} Public Playlist{playlists.length === 1 ? '' : 's'}</b></p>
+            </div>
+          </header>
+          <div className="actions slim" />
+          <div className="pad">
+            {detail.topArtists?.length > 0 && (
+              <section>
+                <div className="shelf-head"><h2>Top artists this month</h2></div>
+                <p className="shelf-sub">Only visible to you</p>
+                <div className="shelf">
+                  {detail.topArtists.map((a) => (
+                    <Card key={a.Id} title={a.Name} subtitle="Artist" round image={jf.imageUrl(a.Id, { maxHeight: 320 })}
+                      onOpen={() => onOpenArtistById(a.Id)} onPlay={() => startMix({ Id: a.Id })} />
+                  ))}
+                </div>
+              </section>
+            )}
+            {tracks.length > 0 && (
+              <section>
+                <div className="shelf-head"><h2>Top tracks this month</h2></div>
+                <p className="shelf-sub">Only visible to you</p>
+                <div className="tracklist" style={{ padding: 0 }}>
+                  {tracks.map((t, i) => <TrackRow key={t.Id} {...rowProps(tracks, i, { showArt: true }, 'profile')} />)}
+                </div>
+              </section>
+            )}
+            {playlists.length > 0 && (
+              <section>
+                <div className="shelf-head"><h2>Public Playlists</h2></div>
+                <div className="shelf">
+                  {playlists.map((p) => (
+                    <Card key={p.Id} title={p.Name} subtitle={`By ${item.Name}`} image={jf.imageUrl(p.Id, { maxHeight: 320 })}
+                      onOpen={() => onOpenPlaylist(p)} onPlay={() => playItem(p)} />
+                  ))}
+                </div>
+              </section>
+            )}
+            {detail.loading && <p className="placeholder-note">Loading...</p>}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="content" style={heroStyle}>
-        <div className="contentbar">
-          <FilterPills where="detail" setSeeAll={setSeeAll} goHome={() => onView('home')} />
-        </div>
+        <div className="contentbar" />
 
         {(() => {
           const canEdit = isPlaylist && !isLiked;
@@ -254,7 +308,7 @@ export default function Library({
                   title={canEdit ? 'Choose photo' : undefined}
                   disabled={!canEdit}
                 >
-                  <img src={`${jf.imageUrl(item.Id, { maxHeight: 464 })}${item._imgBust ? `&t=${item._imgBust}` : ''}`} alt="" />
+                  <img src={jf.imageUrl(item.Id, { maxHeight: 464 })} alt="" />
                   {canEdit && <span className="hero-cover-edit">Choose photo</span>}
                 </button>
               )}
@@ -288,7 +342,7 @@ export default function Library({
                       {' · '}
                     </>
                   )}
-                  {isPlaylist && <><b>{me?.Name || 'You'}</b>{' · '}</>}
+                  {isPlaylist && <><button className="rowlink strong" onClick={onOpenProfile}>{me?.Name || 'You'}</button>{' · '}</>}
                   {`${tracks.length} songs`}
                   {totalTicks ? `, ${fmtTotal(totalTicks)}` : ''}
                 </p>

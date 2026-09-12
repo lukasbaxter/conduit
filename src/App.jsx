@@ -205,6 +205,7 @@ export default function App() {
     try {
       const [p, n] = await Promise.all([jf.playlists(), jf.favoriteCount()]);
       setPlaylists(p.items); setLikedCount(n);
+      jf._persist('playlists', p.items); jf._persist('likedCount', n);
     } catch { /* ignore */ }
   };
 
@@ -292,9 +293,11 @@ export default function App() {
   const onEditPlaylist = async (pl, { name, imageFile }) => {
     try {
       if (name && name !== pl.Name) await jf.renameItem(pl.Id, name);
-      if (imageFile) await jf.uploadPrimaryImage(pl.Id, imageFile);
+      if (imageFile) { await jf.uploadPrimaryImage(pl.Id, imageFile); jf.bustImage(pl.Id); }
+      // New playlists array + new detail item => sidebar, home shortcuts and
+      // the hero all re-render with the busted image URL right away.
       await refreshPlaylists();
-      setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, item: { ...d.item, Name: name || d.item.Name, _imgBust: Date.now() } } : d));
+      setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, item: { ...d.item, Name: name || d.item.Name, _v: Date.now() } } : d));
       notify('Playlist updated');
     } catch (e) { notify(`Could not update playlist: ${e.message}`); }
   };
@@ -342,6 +345,26 @@ export default function App() {
         jf._persist(`pl.${pl.Id}`, rest.items);
       }
     } catch { /* keep the cached copy on screen */ }
+  };
+
+  // Spotify's profile page: avatar, top artists / tracks this month, playlists.
+  const openProfile = async () => {
+    const item = { Id: 'profile', Name: me?.Name || 'You', Type: 'Profile' };
+    setView('home');
+    setDetail({ item, tracks: [], kind: 'Profile', topArtists: [], loading: true });
+    try {
+      const top = await jf.topTracks({ limit: 60 });
+      const score = new Map();
+      for (const t of top) {
+        const w = 1 + (t.UserData?.PlayCount || 0);
+        for (const a of t.ArtistItems || []) {
+          const e = score.get(a.Id) || { Id: a.Id, Name: a.Name, n: 0 };
+          e.n += w; score.set(a.Id, e);
+        }
+      }
+      const topArtists = [...score.values()].sort((a, b) => b.n - a.n).slice(0, 10);
+      setDetail((d) => (d && d.item?.Id === 'profile' ? { ...d, tracks: top.slice(0, 10), topArtists, loading: false } : d));
+    } catch { setDetail((d) => (d && d.item?.Id === 'profile' ? { ...d, loading: false } : d)); }
   };
 
   const openLiked = async () => {
@@ -497,7 +520,7 @@ export default function App() {
             </button>
             {userMenu && (
               <div className="avatarmenu" onMouseLeave={() => setUserMenu(false)}>
-                <div className="who">{me?.Name || 'Signed in'}</div>
+                <button className="who" onClick={() => { setUserMenu(false); openProfile(); }}>{me?.Name || 'Signed in'}</button>
                 <div className="sub">{jf.baseUrl.replace(/^https?:\/\//, '')}</div>
                 <button onClick={signOut}>Log out</button>
               </div>
@@ -558,6 +581,7 @@ export default function App() {
           onEditPlaylist={onEditPlaylist}
           onDeletePlaylist={onDeletePlaylist}
           me={me}
+          onOpenProfile={openProfile}
         />
         {panel && <div className="panel-spacer" />}
         {panel && (

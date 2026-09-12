@@ -4,6 +4,9 @@
 set -u
 cd "$(dirname "$0")"
 echo "=== $(date -Is) hygiene start"
+# Rip leftovers: Jellyfin imports every .m3u as a "playlist" the user sees.
+find /mnt/wd_nvme1/music -type f \( -iname "*.m3u" -o -iname "*.m3u8" -o -iname "*.sfv" -o -iname "*.url" -o -iname "*.torrent" \) -delete
+find /mnt/wd_nvme1/music -maxdepth 1 -type f -size 0 -delete
 python3 scan_tags.py /mnt/wd_nvme1/music tags.json || exit 1
 python3 - <<'PY' || exit 1
 # oracle terms: every distinct artist string and every span between separators
