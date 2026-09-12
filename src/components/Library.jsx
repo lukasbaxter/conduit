@@ -120,6 +120,11 @@ export default function Library({
   const [heroMenu, setHeroMenu] = useState(null);
   // The column header is see-through over the hero's colour band and turns
   // solid once it sticks under the top bar (Spotify does the same).
+  // Every page change starts at the top; the scroller is the .content pane,
+  // which React reuses between views so its scroll position would carry over.
+  useEffect(() => {
+    document.querySelector('.content')?.scrollTo({ top: 0 });
+  }, [detail?.item?.Id, seeAll, view]);
   const headSentinelRef = useRef(null);
   const [headStuck, setHeadStuck] = useState(false);
   useEffect(() => {

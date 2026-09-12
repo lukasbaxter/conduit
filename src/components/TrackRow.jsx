@@ -127,7 +127,12 @@ export default function TrackRow({
       </button>
 
       {showArt && jf && (
-        <img className="trackrow-art" src={jf.imageUrl(track.AlbumId || track.Id, { maxHeight: 80 })} alt="" loading="lazy" />
+        <img
+          className={`trackrow-art ${track.AlbumId && onOpenAlbum ? 'link' : ''}`}
+          src={jf.imageUrl(track.AlbumId || track.Id, { maxHeight: 80 })} alt="" loading="lazy"
+          title={track.AlbumId && onOpenAlbum ? track.Album || 'Open album' : undefined}
+          onClick={track.AlbumId && onOpenAlbum ? (e) => { e.stopPropagation(); onOpenAlbum(track.AlbumId); } : undefined}
+        />
       )}
 
       <span className="trackrow-name">

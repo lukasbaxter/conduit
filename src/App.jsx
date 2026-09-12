@@ -217,6 +217,25 @@ export default function App() {
     player.syncLiked?.(trackId, liked);
   };
 
+  // Likes made while a list was still loading. A Liked Songs fetch takes a
+  // few seconds for 1,400 tracks; a heart tapped in that window used to be
+  // overwritten by the older server snapshot when it landed ("the song
+  // appeared, then vanished"). Fetched lists are reconciled against this log.
+  const likeLogRef = useRef([]);
+  const reconcile = (tracks, since, likedPage = false) => {
+    const recent = likeLogRef.current.filter((e) => e.at >= since);
+    if (!recent.length) return tracks;
+    let out = tracks;
+    for (const e of recent) {
+      if (likedPage) {
+        out = e.liked ? [e.row, ...out.filter((t) => t.Id !== e.id)] : out.filter((t) => t.Id !== e.id);
+      } else {
+        out = out.map((t) => (t.Id === e.id ? { ...t, UserData: { ...(t.UserData || {}), IsFavorite: e.liked } } : t));
+      }
+    }
+    return out;
+  };
+
   // Device list is pushed from the main process as mDNS finds things.
   useEffect(() => {
     const api = window.conduit?.devices;
@@ -332,16 +351,17 @@ export default function App() {
     setView('home');
     // Paint instantly from the last session's copy if we have one.
     const cached = jf.persisted(`pl.${pl.Id}`);
-    setDetail({ item: pl, tracks: cached || [], kind: 'Playlist', loading: !cached });
+    setDetail({ item: pl, tracks: reconcile(cached || [], 0), kind: 'Playlist', loading: !cached });
+    const since = Date.now();
     try {
       // First page renders fast; the rest streams in behind. Virtualized, so the
       // visible rows are ready at once. Every result is persisted for next time.
       const first = await jf.playlistTracks(pl.Id, { startIndex: 0, limit: 100 });
-      setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, tracks: first.items, loading: false } : d));
+      setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, tracks: reconcile(first.items, since), loading: false } : d));
       jf._persist(`pl.${pl.Id}`, first.items);
       if (first.total > first.items.length) {
         const rest = await jf.playlistTracks(pl.Id);
-        setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, tracks: rest.items } : d));
+        setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, tracks: reconcile(rest.items, since) } : d));
         jf._persist(`pl.${pl.Id}`, rest.items);
       }
     } catch { /* keep the cached copy on screen */ }
@@ -373,8 +393,10 @@ export default function App() {
     // make the click wait on.
     setView('home');
     setDetail({ item, tracks: likedCacheRef.current || [], kind: 'Playlist', loading: !likedCacheRef.current });
+    const since = Date.now();
     try {
-      const { items } = await jf.favoriteTracks();
+      const fetched = (await jf.favoriteTracks()).items;
+      const items = reconcile(fetched, since, true);
       likedCacheRef.current = items;
       jf._persist('liked', items);
       setDetail((d) => (d && d.item?.Id === LIKED_ID ? { ...d, tracks: items, loading: false } : d));
@@ -383,6 +405,9 @@ export default function App() {
 
   const onLike = async (track, liked) => {
     patchLiked(track.Id, liked);
+    // Logged optimistically so a list fetch that lands mid-flight keeps it.
+    likeLogRef.current = [...likeLogRef.current.filter((e) => e.id !== track.Id).slice(-50),
+      { id: track.Id, liked, at: Date.now(), row: { ...track, UserData: { ...(track.UserData || {}), IsFavorite: true } } }];
     try {
       await jf.setFavorite(track.Id, liked);
       // The footer heart on a mirroring client only knows the session track's
@@ -396,6 +421,7 @@ export default function App() {
       // now-playing track from the footer) prepends it, newest first like
       // Spotify. No re-opening the page.
       const row = { ...track, UserData: { ...(track.UserData || {}), IsFavorite: true } };
+      likeLogRef.current = likeLogRef.current.map((e) => (e.id === track.Id ? { ...e, row } : e));
       const cache = likedCacheRef.current || [];
       likedCacheRef.current = liked ? [row, ...cache.filter((t) => t.Id !== track.Id)] : cache.filter((t) => t.Id !== track.Id);
       setDetail((d) => {
@@ -405,6 +431,7 @@ export default function App() {
       });
     } catch (e) {
       patchLiked(track.Id, !liked);
+      likeLogRef.current = likeLogRef.current.filter((x) => x.id !== track.Id);
       notify(`Not saved: Jellyfin did not accept the change (${e.message.slice(0, 60)}). Try again.`);
     }
   };
