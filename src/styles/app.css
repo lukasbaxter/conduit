@@ -856,3 +856,8 @@ button:disabled { cursor: default; }
 .fs-tabmore { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #ffffffb3; }
 .fs-tabmore:hover { color: #fff; background: rgba(255,255,255,.1); }
 .fs .ctxmenu { z-index: 300; }
+
+/* Electron: the top bar is a window-drag region, and drag regions swallow
+   clicks from anything overlapping them -- including overlays rendered on
+   top. Everything that can sit up there opts out. */
+.fs, .fs *, .ctxmenu, .ctxmenu *, .modal-back, .modal-back *, .loading-screen { -webkit-app-region: no-drag; }
