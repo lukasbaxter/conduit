@@ -228,6 +228,8 @@ export default function App() {
     }).catch(() => {});
   }, [jf]);
 
+  useEffect(() => { if (jf) jf.likedAt = prefs.likedAt || {}; }, [jf, prefs.likedAt]);
+
   // Change a setting: apply here, save to the account, nudge the other clients.
   const updatePrefs = async (patch) => {
     const next = { ...prefs, ...patch };
@@ -492,6 +494,10 @@ export default function App() {
         try { const full = await jf.itemById(track.Id); if (full) track = { ...full, ...track, _partial: false }; } catch { /* keep partial */ }
       }
       notify(liked ? 'Added to Liked Songs' : 'Removed from Liked Songs');
+      // Remember WHEN, so Liked Songs stays newest-first across every device.
+      const la = { ...(prefs.likedAt || {}) };
+      if (liked) la[track.Id] = Date.now(); else delete la[track.Id];
+      updatePrefs({ likedAt: la });
       setLikedCount((c) => (c == null ? c : Math.max(0, c + (liked ? 1 : -1))));
       // Liked Songs view stays live: unliking drops the row, liking (e.g. the
       // now-playing track from the footer) prepends it, newest first like

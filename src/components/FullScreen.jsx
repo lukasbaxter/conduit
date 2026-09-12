@@ -37,7 +37,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike }
 
       <div className="fs-stage">
         {tab === 'album' && (art ? <img className="fs-art" src={art} alt="" /> : <div className="fs-art ph" />)}
-        {tab === 'viz' && <Visualizer player={player} active={tab === 'viz'} />}
+        {tab === 'viz' && <Visualizer player={player} jf={jf} active={tab === 'viz'} />}
         {tab === 'lyrics' && <div className="fs-lyrics"><Lyrics player={player} jf={jf} /></div>}
       </div>
 

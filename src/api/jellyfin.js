@@ -504,7 +504,7 @@ export class Jellyfin {
 
   // Newest likes first, which is how Spotify orders Liked Songs.
   favoriteTracks(opts = {}) {
-    return this._cached(`favorites:${opts.limit || 500}`, () => this._favoriteTracks(opts));
+    return this._cached('favorites:all', () => this._favoriteTracks(opts));
   }
 
   async favoriteCount() {
@@ -516,19 +516,36 @@ export class Jellyfin {
     return data.TotalRecordCount ?? 0;
   }
 
-  async _favoriteTracks({ limit = 500 } = {}) {
-    const q = new URLSearchParams({
-      IncludeItemTypes: 'Audio',
-      Recursive: 'true',
-      Filters: 'IsFavorite',
-      SortBy: 'DateCreated',
-      SortOrder: 'Descending',
-      Fields: 'ParentId,ArtistItems,AlbumArtists,UserData',
-      Limit: String(limit),
-      userId: this.userId,
-    });
-    const data = await this._fetch(`/Items?${q}`);
-    return { items: data.Items || [], total: data.TotalRecordCount ?? 0 };
+  // When each track was liked, kept by the app (Jellyfin has no such
+  // timestamp); set from account prefs. Anything unknown sorts behind, by the
+  // date the file was added -- the old order.
+  likedAt = {};
+  async _favoriteTracks({ limit = 5000 } = {}) {
+    // The whole list, not the first 500: a newly liked old track would land
+    // past the cutoff and "vanish" the moment the server list replaced the
+    // optimistic row.
+    const items = [];
+    let start = 0;
+    while (items.length < limit) {
+      const q = new URLSearchParams({
+        IncludeItemTypes: 'Audio', Recursive: 'true', Filters: 'IsFavorite',
+        SortBy: 'DateCreated', SortOrder: 'Descending',
+        Fields: 'ParentId,ArtistItems,AlbumArtists,UserData',
+        Limit: '1000', StartIndex: String(start), userId: this.userId,
+      });
+      const data = await this._fetch(`/Items?${q}`);
+      items.push(...(data.Items || []));
+      start += 1000;
+      if (start >= (data.TotalRecordCount ?? 0)) break;
+    }
+    return { items: this.orderLiked(items), total: items.length };
+  }
+
+  orderLiked(items) {
+    const at = this.likedAt || {};
+    const known = items.filter((t) => at[t.Id]).sort((a, b) => at[b.Id] - at[a.Id]);
+    const rest = items.filter((t) => !at[t.Id]);
+    return [...known, ...rest];
   }
 
   // Container for one track, fetched lazily at play time so list fetches can

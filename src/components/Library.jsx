@@ -238,6 +238,7 @@ export default function Library({
   const [popularExpanded, setPopularExpanded] = useState(false);
   // Discography filter on the artist page: 'all' | 'album' | 'single' | 'compilation'.
   const [discoFilter, setDiscoFilter] = useState('all');
+  const [discoLib, setDiscoLib] = useState('all'); // 'all' | 'have' | 'missing'
   const [overIdx, setOverIdx] = useState(null);
 
   useEffect(() => {
@@ -755,18 +756,21 @@ export default function Library({
               const pills = [
                 ['all', 'All'],
                 counts.Album ? ['album', 'Albums'] : null,
-                (counts.Single || counts.EP) ? ['single', 'Singles and EPs'] : null,
+                counts.Single ? ['single', 'Singles'] : null,
+                counts.EP ? ['ep', 'EPs'] : null,
                 counts.Compilation ? ['compilation', 'Compilations'] : null,
-                all.some((x) => !x.inLib) ? ['missing', 'Not in library'] : null,
               ].filter(Boolean);
+              const libPills = [['all', 'Everything'], ['have', 'In your library'], ['missing', 'Not in library']];
               // Newest first, one timeline; library releases stand out, the rest are dimmed with Request.
+              const yearOf = (x) => Number(String(x.r.date || x.year || '').slice(0, 4)) || 0;
               const shown = all.filter((x) =>
                 discoFilter === 'all' ? true
                   : discoFilter === 'album' ? x.type === 'Album'
-                  : discoFilter === 'single' ? (x.type === 'Single' || x.type === 'EP')
-                  : discoFilter === 'missing' ? !x.inLib
+                  : discoFilter === 'single' ? x.type === 'Single'
+                  : discoFilter === 'ep' ? x.type === 'EP'
                   : x.type === 'Compilation')
-                .sort((a, b) => String(b.r.date || b.year || '').localeCompare(String(a.r.date || a.year || '')));
+                .filter((x) => discoLib === 'all' ? true : discoLib === 'have' ? Boolean(x.inLib) : !x.inLib)
+                .sort((a, b) => (yearOf(b) - yearOf(a)) || String(b.r.date || '').localeCompare(String(a.r.date || '')));
               const have = all.filter((x) => x.inLib).length;
               return (
                 <section>
@@ -774,13 +778,20 @@ export default function Library({
                     <h2>Discography</h2>
                     {dg === null ? <span className="settings-hint">Loading…</span> : all.length ? <span className="settings-hint">{have} of {all.length} in your library</span> : null}
                   </div>
-                  {pills.length > 2 && (
-                    <div className="pills" style={{ marginBottom: 16 }}>
-                      {pills.map(([k, label]) => (
-                        <button key={k} className={`pill ${discoFilter === k ? 'on' : ''}`} onClick={() => setDiscoFilter(k)}>{label}</button>
+                  <div className="disco-filters">
+                    <div className="pills">
+                      {libPills.map(([k, label]) => (
+                        <button key={k} className={`pill ${discoLib === k ? 'on' : ''}`} onClick={() => setDiscoLib(k)}>{label}</button>
                       ))}
                     </div>
-                  )}
+                    {pills.length > 2 && (
+                      <div className="pills">
+                        {pills.map(([k, label]) => (
+                          <button key={k} className={`pill ${discoFilter === k ? 'on' : ''}`} onClick={() => setDiscoFilter(k)}>{label}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="grid">
                     {shown.map(({ key, r, type, year, inLib }) => inLib ? (
                       <Card key={key} title={r.localName || r.title} subtitle={year ? `${year} · ${type}` : type}
