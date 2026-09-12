@@ -14,7 +14,9 @@ from mutagen import File
 from mutagen.flac import FLAC
 from mutagen.mp3 import MP3
 from mutagen.mp4 import MP4
-from jf import req
+from jf import req, user_id, KEY
+from jf import JF as JF_URL
+UID = user_id()
 from namekey import key
 
 albums = json.load(open(sys.argv[1])); apply = '--apply' in sys.argv
@@ -113,6 +115,14 @@ for i, a in enumerate(albums):
                 if url: how = how2; break
             if not url:
                 try: url = deezer_track_cover(a.get('AlbumArtist') or '', folder); how = 'deezer-track'
+                except Exception: url = None
+            if not url:
+                # Nothing anywhere (DJ-pool packs, "Unknown Album" folders):
+                # the lead artist's portrait beats a blank tile.
+                try:
+                    aid = (a.get('AlbumArtists') or [{}])[0].get('Id')
+                    if aid and (req(f"/Items/{aid}?userId={UID}").get('ImageTags') or {}).get('Primary'):
+                        url = f"{JF_URL}/Items/{aid}/Images/Primary?maxWidth=1000&api_key={KEY}"; how = 'artist-portrait'
                 except Exception: url = None
             if url:
                 data = get(url); mime = 'image/jpeg'
