@@ -216,7 +216,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .hero {
   display: flex; gap: 24px; align-items: flex-end; padding: 32px 24px 24px;
   /* Spotify: flat extracted colour with a light-to-dark wash over it... */
-  background: linear-gradient(transparent 0, rgba(0,0,0,.35) 100%), var(--hero);
+  background: linear-gradient(rgba(0,0,0,.18) 0, rgba(0,0,0,.5) 100%), var(--hero);
 }
 /* ...then the same colour keeps going for 232px behind the action bar and
    the top of the list, fading into the page (main-actionBarBackground). */
@@ -225,8 +225,8 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .actions ~ .pad, .actions ~ .tracklist { position: relative; z-index: 1; }
 .actions.slim { padding: 8px 24px; min-height: 0; }
 .actions::before {
-  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 232px; z-index: -1;
-  background: linear-gradient(rgba(0,0,0,.45) 0, var(--bg-base) 100%), var(--hero, #3d3c3c);
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 168px; z-index: -1;
+  background: linear-gradient(rgba(0,0,0,.5) 0, var(--bg-base) 100%), var(--hero, #3d3c3c);
 }
 .hero-cover { position: relative; padding: 0; flex: none; border-radius: var(--r-art); }
 .hero-cover:disabled { cursor: default; }
@@ -516,18 +516,21 @@ input[type="range"]:hover::-webkit-slider-thumb { opacity: 1; }
 input[type="range"]:disabled { opacity: .4; }
 
 /* Spotify order: lyrics, queue, devices, volume, miniplayer, fullscreen */
-.player-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 180px; padding-right: 8px; }
-.player-volume { display: flex; align-items: center; gap: 6px; color: #ffffffb3; width: 118px; }
+.player-right { display: flex; align-items: center; justify-content: flex-end; gap: 4px; min-width: 180px; padding-right: 8px; }
+.player-right .icon-btn, .player-right .devicebtn { width: 32px; height: 32px; display: grid; place-items: center; padding: 0; color: #ffffffb3; }
+.player-right .icon-btn:hover, .player-right .devicebtn:hover { color: var(--fg); }
+.player-volume { display: flex; align-items: center; gap: 4px; color: #ffffffb3; width: 128px; }
+.player-volume .vol-ico { width: 32px; height: 32px; display: grid; place-items: center; padding: 0; color: inherit; }
 .player-volume input { width: 93px; }
 .player-volume:hover { color: var(--fg); }
 
 /* ---------- device picker ---------- */
 
 .devicepicker { position: relative; }
-.devicebtn { display: flex; align-items: center; gap: 6px; max-width: 170px; color: #ffffffb3; padding: 6px; border-radius: var(--r-art); }
+.devicebtn { display: flex; align-items: center; gap: 6px; color: #ffffffb3; padding: 6px; border-radius: var(--r-art); }
 .devicebtn:hover { color: var(--fg); }
 .devicebtn.casting { color: var(--accent); }
-.devicebtn-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 700; }
+.devicebtn-name { display: none; }
 
 .devicemenu {
   position: absolute; bottom: calc(100% + 12px); right: 0; width: 340px; max-height: 60vh; overflow-y: auto;

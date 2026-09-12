@@ -21,6 +21,14 @@ function DeviceIcon({ kind }) {
     </svg>
   );
 }
+// Spotify's "Connect to a device" glyph for the footer button: a speaker box
+// with a bracket for the laptop beside it (matches their 16px icon set).
+const ConnectIcon = () => (
+  <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+    <path d="M6 2.75C6 1.784 6.784 1 7.75 1h6.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15h-6.5A1.75 1.75 0 0 1 6 13.25V2.75zm1.75-.25a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h6.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25h-6.5zm3.25 2.5a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5zM11 12a2.25 2.25 0 1 1 0-4.5 2.25 2.25 0 0 1 0 4.5zm0-1.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
+    <path d="M1.5 4.5A.75.75 0 0 1 2.25 3.75H4.5v1.5H3v6h1.5v1.5H2.25a.75.75 0 0 1-.75-.75v-7.5z" />
+  </svg>
+);
 
 /**
  * The device selector. Groups discovered players by family so the Bluesound gear
@@ -81,7 +89,7 @@ export default function DevicePicker({ devices, active, onSelect }) {
         onClick={() => setOpen((v) => !v)}
         title={`Playing on ${active.name}`}
       >
-        <DeviceIcon kind={active.kind} />
+        <ConnectIcon />
         <span className="devicebtn-name">{labelFor(active)}</span>
       </button>
 
