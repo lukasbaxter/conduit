@@ -214,7 +214,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
   --hero: #3d3c3c;
   display: flex; gap: 24px; align-items: flex-end; padding: 32px 24px 24px;
   /* Spotify: flat extracted colour with a light-to-dark wash over it... */
-  background: linear-gradient(transparent 0, rgba(0,0,0,.5) 100%), var(--hero);
+  background: linear-gradient(transparent 0, rgba(0,0,0,.35) 100%), var(--hero);
 }
 /* ...then the same colour keeps going for 232px behind the action bar and
    the top of the list, fading into the page (main-actionBarBackground). */
@@ -224,7 +224,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .actions.slim { padding: 8px 24px; min-height: 0; }
 .actions::before {
   content: ''; position: absolute; left: 0; right: 0; top: 0; height: 232px; z-index: -1;
-  background: linear-gradient(rgba(0,0,0,.5) 0, var(--bg-base) 100%), var(--hero, #3d3c3c);
+  background: linear-gradient(rgba(0,0,0,.45) 0, var(--bg-base) 100%), var(--hero, #3d3c3c);
 }
 .hero-cover { position: relative; padding: 0; flex: none; border-radius: var(--r-art); }
 .hero-cover:disabled { cursor: default; }
@@ -260,7 +260,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 /* Edit details dialog (playlist). */
 .editdetails { width: min(524px, calc(100vw - 32px)); }
 .editdetails-body { display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: start; }
-.editdetails-cover { position: relative; width: 180px; height: 180px; border-radius: var(--r-art); overflow: hidden; background: #282828; cursor: pointer; display: block; box-shadow: 0 4px 60px rgba(0,0,0,.5); }
+.editdetails-cover { position: relative; width: 180px; height: 180px; border-radius: var(--r-art); overflow: hidden; background: #282828; cursor: pointer; display: block; box-shadow: 0 0 40px rgba(0,0,0,.55); }
 .editdetails-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .editdetails-cover span { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.7); color: var(--fg); font-weight: 700; opacity: 0; transition: opacity .15s; }
 .editdetails-cover:hover span { opacity: 1; }
@@ -276,7 +276,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .hero.artist.with-banner .hero-meta { color: var(--fg); font-size: 16px; }
 .hero .hero-cover img, .hero > img, .hero .liked-art {
   width: 232px; height: 232px; aspect-ratio: 1; flex: none;
-  border-radius: var(--r-art); object-fit: cover; box-shadow: 0 16px 40px rgba(0,0,0,.6);
+  border-radius: var(--r-art); object-fit: cover; box-shadow: 0 0 40px rgba(0,0,0,.55);
 }
 .hero.artist .hero-cover, .hero.artist .hero-cover img { border-radius: 50%; width: 192px; height: 192px; }
 .hero .kind { font-size: 14px; font-weight: 700; }
@@ -677,8 +677,8 @@ input[type="range"]:disabled { opacity: .4; }
 .hero-title-edit h1 { margin: 8px 0 16px; }
 
 /* Profile page (Spotify: round avatar, "Profile", name, playlist count). */
-.hero.profile { min-height: 340px; }
-.profile-avatar { width: 232px; height: 232px; border-radius: 50%; overflow: hidden; background: #282828; display: grid; place-items: center; box-shadow: 0 4px 60px rgba(0,0,0,.5); }
+.hero.profile { min-height: 340px; align-items: center; }
+.profile-avatar { width: 232px; height: 232px; border-radius: 50%; overflow: hidden; background: #282828; display: grid; place-items: center; box-shadow: 0 0 48px rgba(0,0,0,.6); }
 .profile-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .profile-initial { font-size: 96px; font-weight: 800; color: var(--fg); width: 100%; height: 100%; place-items: center; }
 .shelf-sub { margin: -12px 0 12px; color: var(--fg-dim); font-size: 14px; }

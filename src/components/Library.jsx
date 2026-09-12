@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import TrackRow, { PlayGlyph, PauseGlyph, Heart, ShuffleGlyph } from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
+import { vibrantColor } from '../api/colors.js';
 import Home from './Home.jsx';
 import FittedTitle from './FittedTitle.jsx';
 import VirtualList from './VirtualList.jsx';
@@ -68,7 +69,8 @@ export function heroTint(rgb) {
     const d = max - min; sat = l > .5 ? d / (2 - max - min) : d / (max + min);
     h = max === r ? ((g - b) / d + (g < b ? 6 : 0)) : max === g ? (b - r) / d + 2 : (r - g) / d + 4; h /= 6;
   }
-  sat = sat > .04 ? Math.min(1, Math.max(sat * 1.6, .35)) : sat; const L = Math.min(.42, Math.max(.24, l * .8));
+  // Spotify's header reads as a bold flat colour: saturated, mid-light.
+  sat = sat > .04 ? Math.min(1, Math.max(sat * 1.3, .5)) : sat; const L = Math.min(.55, Math.max(.4, l));
   return `hsl(${Math.round(h * 360)} ${Math.round(sat * 100)}% ${Math.round(L * 100)}%)`;
 }
 function fmtTotal(ticks) {
@@ -125,6 +127,16 @@ export default function Library({
   useEffect(() => {
     document.querySelector('.content')?.scrollTo({ top: 0 });
   }, [detail?.item?.Id, seeAll, view]);
+  // Header colour: blurhash average paints instantly, the vibrant pick from
+  // the cover replaces it as soon as the image is sampled.
+  const [vibrant, setVibrant] = useState({});
+  useEffect(() => {
+    const it = detail?.item;
+    if (!it || it.Id === LIKED_ID || it.Id === 'profile' || vibrant[it.Id] !== undefined) return;
+    let alive = true;
+    vibrantColor(jf.imageUrl(it.Id, { maxHeight: 120 })).then((rgb) => { if (alive) setVibrant((v) => ({ ...v, [it.Id]: rgb || null })); });
+    return () => { alive = false; };
+  }, [detail?.item?.Id]); // eslint-disable-line react-hooks/exhaustive-deps
   const headSentinelRef = useRef(null);
   const [headStuck, setHeadStuck] = useState(false);
   useEffect(() => {
@@ -220,7 +232,7 @@ export default function Library({
     const isPlaylist = kind === 'Playlist';
     const isLiked = item.Id === LIKED_ID;
     const totalTicks = tracks.reduce((s2, t) => s2 + (t.RunTimeTicks || 0), 0);
-    const tint = heroTint(blurhashAverage(item.ImageBlurHashes?.Primary?.[item.ImageTags?.Primary]));
+    const tint = heroTint(vibrant[item.Id] || blurhashAverage(item.ImageBlurHashes?.Primary?.[item.ImageTags?.Primary]));
     const lead = !isArtist && !isPlaylist ? (item.AlbumArtists?.[0] || null) : null;
     // The colour lives on the page wrapper so the band behind the action bar
     // (.actions::before) sees it too, not just the header.
