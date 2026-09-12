@@ -8,7 +8,7 @@ Jellyfin to re-scan the album's images. Runs on .85.
 
     python3 album_covers.py albums_noimg.json [--apply]
 """
-import json, os, sys, time, urllib.parse, urllib.request
+import json, os, re, sys, time, urllib.parse, urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mutagen import File
 from mutagen.flac import FLAC
@@ -55,6 +55,46 @@ def deezer_cover(artist, album):
         return d['data'][0].get('cover_xl')
     return None
 
+LIDARR = os.environ.get('LIDARR_URL', 'http://192.168.1.85:8686')
+LKEY = os.environ.get('LIDARR_KEY') or open(os.path.expanduser('~/.lidarr.key')).read().strip()
+
+def itunes_cover(artist, album):
+    """Apple's search API: no key, generous coverage of singles and remixes.
+    artworkUrl100 is a template; the size in the filename is arbitrary."""
+    time.sleep(0.4)
+    term = f'{artist} {album}' if artist and artist != 'Various Artists' else album
+    d = json.loads(get(f'https://itunes.apple.com/search?term={urllib.parse.quote(term)}&entity=album&limit=10'))
+    for r in d.get('results', []):
+        if key(r.get('collectionName', '')) == key(album) or key(re.sub(r'\s*[-(].*$', '', r.get('collectionName', ''))) == key(album):
+            return r.get('artworkUrl100', '').replace('100x100bb', '1200x1200bb') or None
+    return None
+
+def lidarr_cover(artist, album):
+    r = urllib.request.Request(f'{LIDARR}/api/v1/album/lookup?term={urllib.parse.quote(album)}', headers={'X-Api-Key': LKEY})
+    with urllib.request.urlopen(r, timeout=30) as resp: d = json.load(resp)
+    for a in d[:10]:
+        if key(a.get('title', '')) == key(album) and (not artist or artist == 'Various Artists' or key((a.get('artist') or {}).get('artistName', '')) == key(artist)):
+            for im in a.get('images', []):
+                if im.get('coverType') == 'cover' and (im.get('remoteUrl') or im.get('url')): return im.get('remoteUrl') or im.get('url')
+    return None
+
+def deezer_track_cover(artist, folder):
+    """Singles are usually named after their track; ask Deezer for the track."""
+    t = None
+    for f in sorted(os.listdir(folder)):
+        if os.path.splitext(f)[1].lower() in EXT:
+            try: t = (File(os.path.join(folder, f), easy=True) or {}).get('title', [None])[0]
+            except Exception: t = None
+            break
+    if not t: return None
+    time.sleep(0.15)
+    q = f'artist:"{artist}" track:"{t}"' if artist and artist != 'Various Artists' else t
+    d = json.loads(get(f'https://api.deezer.com/search/track?q={urllib.parse.quote(q)}&limit=5'))
+    for r in d.get('data', []):
+        if key(r.get('title', '')) == key(t):
+            return (r.get('album') or {}).get('cover_xl')
+    return None
+
 from collections import Counter
 stats = Counter(); log = {}
 for i, a in enumerate(albums):
@@ -66,12 +106,16 @@ for i, a in enumerate(albums):
     else:
         data, mime = embedded(folder); how = 'embedded'
         if not data:
-            try:
-                url = deezer_cover(a.get('AlbumArtist') or '', a['Name'])
-            except Exception as e:
-                url = None; stats['deezer-err'] += 1
+            url = None
+            for how2, fn in (('deezer', deezer_cover), ('itunes', itunes_cover), ('lidarr', lidarr_cover)):
+                try: url = fn(a.get('AlbumArtist') or '', a['Name'])
+                except Exception: url = None
+                if url: how = how2; break
+            if not url:
+                try: url = deezer_track_cover(a.get('AlbumArtist') or '', folder); how = 'deezer-track'
+                except Exception: url = None
             if url:
-                data = get(url); mime = 'image/jpeg'; how = 'deezer'
+                data = get(url); mime = 'image/jpeg'
         if not data:
             stats['none'] += 1; log[a['Id']] = 'none'; continue
         name = 'cover.png' if 'png' in (mime or '') else 'cover.jpg'

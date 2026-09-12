@@ -42,6 +42,19 @@ if [ "$(python3 -c "import json;print(len(json.load(open('applied-$STAMP.json'))
 else
   rm -f "applied-$STAMP.json" "applied-$STAMP.json.problems.json"
 fi
+# Albums ripped into several artist folders -> one folder. Needs a real scan
+# (paths change) before the favourites/played flags can be put back.
+MERGE=$(python3 merge_split_albums.py tags.json --apply 2>/dev/null | tail -1)
+if echo "$MERGE" | grep -q '"moved": [1-9]'; then
+  SNAP=$(echo "$MERGE" | python3 -c "import json,sys;print(json.load(sys.stdin)['snapshot'])")
+  python3 - <<'PY'
+from jf import req
+import time
+req('/Library/Refresh', 'POST'); time.sleep(30)
+while next(t for t in req('/ScheduledTasks') if t['Key'] == 'RefreshLibrary')['State'] != 'Idle': time.sleep(30)
+PY
+  python3 merge_split_albums.py --restore "$SNAP"
+fi
 python3 cleanup_artists.py --apply
 python3 artist_images.py oracle.json --apply
 python3 albums.py && python3 album_covers.py albums_noimg.json --apply

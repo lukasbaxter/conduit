@@ -24,11 +24,15 @@ Pipeline (`hygiene.sh` runs it nightly):
 5. `refresh_changed.py` — Jellyfin re-probes exactly the changed tracks with
    `ReplaceAllMetadata` (a plain scan never overwrites existing Artists), then
    their albums.
-6. `cleanup_artists.py` — delete MusicArtist items no track references any
+6. `merge_split_albums.py` — an album ripped into several artist folders
+   ("Tom Jones with Portishead/Reload", "Tom Jones with Space/Reload"...) is
+   19 albums to Jellyfin; fold them into "<Lead>/<Album>". Item ids follow the
+   path, so favourites/played flags are snapshotted and restored after the scan.
+7. `cleanup_artists.py` — delete MusicArtist items no track references any
    more (case variants are never "dead" to Jellyfin, so it will not do this).
-7. `artist_images.py` — Deezer/Lidarr portrait for every artist without one,
+8. `artist_images.py` — Deezer/Lidarr portrait for every artist without one,
    uploaded through the API.
-8. `album_covers.py` — `cover.jpg` in every album folder Jellyfin shows blank:
+9. `album_covers.py` — `cover.jpg` in every album folder Jellyfin shows blank:
    embedded picture first, Deezer's cover otherwise.
 
 Keys: `~/.jellyfin.key` (jellyseerr's Jellyfin admin key), `~/.lidarr.key`.
