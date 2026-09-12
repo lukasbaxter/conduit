@@ -7,12 +7,14 @@
 // Same-origin in the browser (wss via nginx); the desktop app points at the LAN
 // relay directly.
 function defaultUrl() {
-  if (typeof window !== 'undefined' && window.conduit) return 'ws://192.168.1.85:8788/relay';
+  // Desktop: the public host, same as the web (valid Let's Encrypt cert; LAN
+  // clients hairpin through the router). Overridable for a dev relay.
+  if (typeof window !== 'undefined' && window.conduit) return (localStorage.getItem('conduit.relayUrl') || 'wss://music.baxtergroup.io/relay');
   if (typeof window !== 'undefined') {
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${proto}//${window.location.host}/relay`;
   }
-  return 'ws://192.168.1.85:8788/relay';
+  return 'wss://music.baxtergroup.io/relay';
 }
 
 function clientId() {

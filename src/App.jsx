@@ -9,12 +9,13 @@ import RightPanel from './components/RightPanel.jsx';
 import { downloadTrack } from './api/download.js';
 import { applyTheme, DEFAULT_THEME } from './api/prefs.js';
 
-// In Electron (desktop) we talk to Jellyfin on the LAN directly. In a browser
-// (the PWA at music.baxtergroup.io) we go same-origin through the nginx proxy,
-// so it works over HTTPS and off-network without CORS or mixed content.
+// Everything goes through music.baxtergroup.io (Let's Encrypt on the origin,
+// Cloudflare proxy deliberately off -- it throttles the audio). The browser
+// build is same-origin; the desktop uses the same host, so it works off the
+// LAN, and speakers stream from a URL with a real certificate.
 const IS_DESKTOP = typeof window !== 'undefined' && !!window.conduit;
 const DEFAULT_SERVER = IS_DESKTOP
-  ? 'http://192.168.1.85:2101'
+  ? 'https://music.baxtergroup.io/jf'
   : `${window.location.origin}/jf`;
 
 function Login({ onConnected }) {
@@ -64,8 +65,8 @@ function Login({ onConnected }) {
         </button>
         {IS_DESKTOP && (
           <p className="login-hint">
-            Use a LAN address, not localhost. Speakers fetch audio themselves, so the
-            address has to be reachable from them too.
+            Default is the public address, which works at home and away. Speakers fetch
+            audio themselves, so whatever you enter must be reachable from them too.
           </p>
         )}
       </form>
@@ -183,6 +184,11 @@ export default function App() {
   useEffect(() => {
     const saved = loadSession();
     if (saved) {
+      // Sessions from before the switch to the public host still point at the
+      // LAN address; the token is not host-bound, so just move them over.
+      if (IS_DESKTOP && /^http:\/\/192\.168\.1\.85:2101/.test(saved.baseUrl || '')) {
+        saved.baseUrl = DEFAULT_SERVER; persistSession(saved);
+      }
       const client = new Jellyfin(saved);
       setJf(client);
       // Paint instantly from the last run's data; the fetch below refreshes it.

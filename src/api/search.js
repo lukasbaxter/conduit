@@ -6,7 +6,7 @@
 
 const IS_DESKTOP = typeof window !== 'undefined' && !!window.conduit;
 function relayBase() {
-  if (IS_DESKTOP) return 'http://192.168.1.85:8788';
+  if (IS_DESKTOP) return 'https://music.baxtergroup.io/relay';
   return `${window.location.origin}/relay`;
 }
 
