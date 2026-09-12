@@ -219,7 +219,8 @@ export default function Library({
     const lead = !isArtist && !isPlaylist ? (item.AlbumArtists?.[0] || null) : null;
     // The colour lives on the page wrapper so the band behind the action bar
     // (.actions::before) sees it too, not just the header.
-    const heroStyle = tint && !isArtist ? { '--hero': tint } : isLiked ? { '--hero': '#5038a0' } : undefined;
+    const banner = isArtist ? jf.bannerUrl(item) : null;
+    const heroStyle = tint && !isArtist ? { '--hero': tint } : isLiked ? { '--hero': '#5038a0' } : isArtist && tint ? { '--hero': tint } : undefined;
 
     // Drag-to-reorder for user playlists (Liked Songs is date-ordered, not reorderable).
     const dnd = (i) => (isPlaylist && !isLiked ? {
@@ -296,12 +297,12 @@ export default function Library({
         {(() => {
           const canEdit = isPlaylist && !isLiked;
           return (
-            <header className={`hero ${isArtist ? 'artist' : ''} ${tint || isLiked ? 'tinted' : ''}`}>
+            <header className={`hero ${isArtist ? 'artist' : ''} ${banner ? 'with-banner' : ''} ${tint || isLiked ? 'tinted' : ''}`} style={banner ? { '--banner': `url("${banner}")` } : undefined}>
               {isLiked ? (
                 <div className="liked-art">
                   <Heart on={false} size={100} />
                 </div>
-              ) : (
+              ) : banner ? null : (
                 <button
                   className={`hero-cover ${canEdit ? 'editable' : ''}`}
                   onClick={canEdit ? () => setEditPl({ name: item.Name, file: null, preview: null }) : undefined}
@@ -343,8 +344,8 @@ export default function Library({
                     </>
                   )}
                   {isPlaylist && <><button className="rowlink strong" onClick={onOpenProfile}>{me?.Name || 'You'}</button>{' · '}</>}
-                  {`${tracks.length} songs`}
-                  {totalTicks ? `, ${fmtTotal(totalTicks)}` : ''}
+                  {isArtist ? `${tracks.length} songs in your library` : `${tracks.length} songs`}
+                  {!isArtist && totalTicks ? `, ${fmtTotal(totalTicks)}` : ''}
                 </p>
               </div>
             </header>

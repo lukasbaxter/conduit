@@ -22,7 +22,7 @@ function fit(x, y, w, h, preferLeft = false) {
   return { x: nx, y: ny };
 }
 
-function Panel({ x, y, items, onClose, depth = 0, anchorRight = false }) {
+function Panel({ x, y, items, onClose, depth = 0, anchorRight = false, onEnter, onLeave }) {
   const ref = useRef(null);
   const [pos, setPos] = useState({ x, y, ready: false });
   const [open, setOpen] = useState(null); // index of the open submenu
@@ -52,8 +52,8 @@ function Panel({ x, y, items, onClose, depth = 0, anchorRight = false }) {
         ref={ref}
         className={`ctxmenu ctxmenu-fixed ${depth ? 'ctxmenu-sub' : ''}`}
         style={{ left: pos.x, top: pos.y, visibility: pos.ready ? 'visible' : 'hidden' }}
-        onMouseLeave={() => { if (open != null) scheduleClose(); }}
-        onMouseEnter={() => clearTimeout(closeTimer.current)}
+        onMouseLeave={() => { if (open != null) scheduleClose(); onLeave?.(); }}
+        onMouseEnter={() => { clearTimeout(closeTimer.current); onEnter?.(); }}
         onContextMenu={(e) => e.preventDefault()}
       >
         {items.map((it, i) => {
@@ -81,7 +81,10 @@ function Panel({ x, y, items, onClose, depth = 0, anchorRight = false }) {
         })}
       </div>
       {open != null && items[open]?.sub && subAt && (
-        <Panel x={subAt.x} y={subAt.y} items={items[open].sub} onClose={onClose} depth={depth + 1} anchorRight={subAt.left} />
+        // The submenu is a sibling, not a child: hovering it must cancel THIS
+        // panel's pending close, or it vanishes the moment the pointer arrives.
+        <Panel x={subAt.x} y={subAt.y} items={items[open].sub} onClose={onClose} depth={depth + 1} anchorRight={subAt.left}
+          onEnter={() => clearTimeout(closeTimer.current)} onLeave={() => scheduleClose()} />
       )}
     </>
   );

@@ -561,6 +561,14 @@ export class Jellyfin {
   // per-item version in the URL beats any cache header.
   bustImage(itemId) { (this._bust ||= {})[itemId] = Date.now(); }
 
+  // Wide artist banner: fanart backdrop when Jellyfin has one, else the portrait.
+  bannerUrl(item, { maxWidth = 1600 } = {}) {
+    const q = new URLSearchParams({ maxWidth: String(maxWidth), api_key: this.token });
+    if (item?.BackdropImageTags?.length) return `${this.baseUrl}/Items/${item.Id}/Images/Backdrop/0?${q}`;
+    if (item?.ImageTags?.Primary) return `${this.baseUrl}/Items/${item.Id}/Images/Primary?${q}`;
+    return null;
+  }
+
   imageUrl(itemId, { maxHeight = 480, tag = null } = {}) {
     if (!itemId) return null;
     const q = new URLSearchParams({ maxHeight: String(maxHeight), api_key: this.token });
