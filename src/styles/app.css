@@ -842,9 +842,9 @@ button:disabled { cursor: default; }
 .fs-play:hover { transform: scale(1.05); }
 .viz { position: relative; width: 100%; height: 100%; min-height: 0; border-radius: 12px; overflow: hidden; background: #000; cursor: pointer; }
 .viz-canvas { width: 100%; height: 100%; display: block; }
-.viz { display: flex; align-items: flex-end; }
-/* The spectrum sits in the lower part of the stage, not centred on it. */
-.viz-stage { width: 100%; height: 78%; }
+.viz-stage { width: 100%; height: 100%; }
+/* The whole visualizer box sits a little lower on the screen. */
+.viz { margin-top: 7vh; height: calc(100% - 7vh); }
 .viz-stage canvas { width: 100% !important; height: 100% !important; display: block; }
 .viz-msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 40px; color: #ffffffb3; font-size: 16px; }
 .viz-preset { position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: rgba(255,255,255,.45); pointer-events: none; }
