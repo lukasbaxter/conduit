@@ -85,6 +85,15 @@ export default function App() {
   const [me, setMe] = useState(null);
   const [avatarOk, setAvatarOk] = useState(true);
   const [userMenu, setUserMenu] = useState(false);
+  // Closes on a click anywhere outside (not on mouse-leave: the pointer
+  // crossing the gap between the avatar and the menu used to dismiss it).
+  useEffect(() => {
+    if (!userMenu) return undefined;
+    const down = (e) => { if (!e.target.closest?.('.avatarwrap')) setUserMenu(false); };
+    const key = (e) => { if (e.key === 'Escape') setUserMenu(false); };
+    document.addEventListener('mousedown', down); document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('mousedown', down); document.removeEventListener('keydown', key); };
+  }, [userMenu]);
   // "New playlist" dialog: {track} while open. window.prompt() does not exist
   // in Electron, which is why creating a playlist from a row did nothing there.
   const [namePrompt, setNamePrompt] = useState(null);
@@ -575,7 +584,7 @@ export default function App() {
               )}
             </button>
             {userMenu && (
-              <div className="avatarmenu" onMouseLeave={() => setUserMenu(false)}>
+              <div className="avatarmenu">
                 <button className="who" onClick={() => { setUserMenu(false); openProfile(); }}>{me?.Name || 'Signed in'}</button>
                 <div className="sub">{jf.baseUrl.replace(/^https?:\/\//, '')}</div>
                 <button onClick={() => { setUserMenu(false); openProfile(); }}>Profile</button>

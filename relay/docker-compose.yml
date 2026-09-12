@@ -9,6 +9,8 @@ services:
       - PORT=8788
       - JELLYFIN_URL=http://192.168.1.85:2101
       - SESSIONS_FILE=/data/sessions.json
+      - MEILI_URL=http://meilisearch:7700
+      - MEILI_KEY=${MEILI_KEY}
     volumes:
       - ./data:/data
     networks:

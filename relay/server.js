@@ -116,9 +116,102 @@ function networkOf(req) {
   return ip;
 }
 
-const server = http.createServer((req, res) => {
+// --- search ---------------------------------------------------------------
+// Meilisearch sits on the docker network with no public port; this endpoint
+// is the only way in. It checks the caller's Jellyfin token (cached), runs one
+// multi-search over the four indexes and picks the Top result. See
+// docs/search-plan.md.
+const MEILI = process.env.MEILI_URL || 'http://meilisearch:7700';
+const MEILI_KEY = process.env.MEILI_KEY || '';
+const tokenCache = new Map(); // token -> { who, at }
+async function whoIs(token) {
+  const c = tokenCache.get(token);
+  if (c && Date.now() - c.at < 10 * 60 * 1000) return c.who;
+  const who = await verify(token);
+  if (who) tokenCache.set(token, { who, at: Date.now() });
+  return who;
+}
+function tokenOf(req) {
+  const h = req.headers.authorization || '';
+  const m = /Token="([^"]+)"/.exec(h);
+  if (m) return m[1];
+  return req.headers['x-emby-token'] || new URL(req.url, 'http://x').searchParams.get('api_key') || null;
+}
+// Normalise for exact-match checks: case, accents, punctuation.
+const norm = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+async function search(q, { limit = 10, filter = null } = {}) {
+  const track = { indexUid: 'tracks', q, limit: limit * 2, attributesToRetrieve: ['id', 'name', 'artists', 'artistIds', 'album', 'albumId', 'albumArtist', 'year', 'durationTicks', 'plays', 'hasLyrics'],
+    attributesToCrop: ['lyrics'], cropLength: 12, attributesToHighlight: ['lyrics', 'name'], highlightPreTag: '\u0001', highlightPostTag: '\u0002', showRankingScore: true };
+  if (filter) track.filter = filter;
+  const body = { queries: [
+    { indexUid: 'artists', q, limit, showRankingScore: true },
+    { indexUid: 'albums', q, limit, showRankingScore: true },
+    track,
+    { indexUid: 'playlists', q, limit: 5, showRankingScore: true },
+  ] };
+  const r = await fetch(`${MEILI}/multi-search`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MEILI_KEY}` }, body: JSON.stringify(body), signal: AbortSignal.timeout(2500) });
+  if (!r.ok) throw new Error(`meili ${r.status}`);
+  const [artists, albums, tracks, playlists] = (await r.json()).results.map((x) => x.hits);
+  // A lyric-only hit carries the matched line as a snippet; name hits do not.
+  const nq = norm(q);
+  for (const t of tracks) {
+    const f = t._formatted || {};
+    const hits = (x) => ((x || '').match(/\u0001/g) || []).length;
+    // Show the lyric line when the lyrics matched more of the query than the title did.
+    t.snippet = f.lyrics && hits(f.lyrics) > hits(f.name) ? f.lyrics.replace(/\s+/g, ' ').trim() : null;
+    delete t._formatted;
+  }
+  // Top result: an exact artist wins, then an exact album, then the best
+  // track by Meili's score; otherwise whichever entity scores highest with a
+  // nudge towards artists (Spotify's behaviour).
+  const exactA = artists.find((a) => norm(a.name) === nq || (a.aliases || []).some((x) => norm(x) === nq));
+  const exactAl = albums.find((a) => norm(a.name) === nq);
+  let top = null;
+  if (exactA) top = { kind: 'Artist', item: exactA };
+  else if (exactAl) top = { kind: 'Album', item: exactAl };
+  else {
+    const cands = [
+      artists[0] && { kind: 'Artist', item: artists[0], s: (artists[0]._rankingScore || 0) + 0.05 },
+      albums[0] && { kind: 'Album', item: albums[0], s: (albums[0]._rankingScore || 0) },
+      tracks[0] && { kind: 'Song', item: tracks[0], s: (tracks[0]._rankingScore || 0) + (tracks[0].snippet ? -0.1 : 0.02) },
+      playlists[0] && { kind: 'Playlist', item: playlists[0], s: (playlists[0]._rankingScore || 0) - 0.05 },
+    ].filter(Boolean).sort((a, b) => b.s - a.s);
+    top = cands[0] ? { kind: cands[0].kind, item: cands[0].item } : null;
+  }
+  // Meili's 'words' rule keeps partial matches for multi-word queries ("sit"
+  // alone matches an artist for "sit next to me"); below this score they are
+  // noise for entities, so hide them unless nothing better exists.
+  const strong = (list) => { const s = list.filter((x) => (x._rankingScore || 0) >= 0.6); return s.length ? s : list.slice(0, 1); };
+  return { top, artists: strong(artists), albums: strong(albums), tracks: tracks.slice(0, limit * 2), playlists: strong(playlists) };
+}
+
+const server = http.createServer(async (req, res) => {
   // Health check for Docker.
   if (req.url === '/healthz') { res.writeHead(200); res.end('ok'); return; }
+  const url = new URL(req.url, 'http://x');
+  if (url.pathname === '/search' || url.pathname === '/relay/search') {
+    // The desktop calls this cross-origin (file:// or localhost:5173).
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, X-Emby-Token, Content-Type', 'Access-Control-Allow-Methods': 'GET, OPTIONS' };
+    if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }
+    const t0 = Date.now();
+    try {
+      const token = tokenOf(req);
+      const who = token && await whoIs(token);
+      if (!who) { res.writeHead(401, cors); res.end('{"error":"unauthorized"}'); return; }
+      const q = (url.searchParams.get('q') || '').slice(0, 200);
+      const limit = Math.min(50, Number(url.searchParams.get('limit')) || 10);
+      const filter = url.searchParams.get('filter') || null;
+      const out = q.trim() ? await search(q, { limit, filter }) : { top: null, artists: [], albums: [], tracks: [], playlists: [] };
+      out.tookMs = Date.now() - t0;
+      res.writeHead(200, { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify(out));
+    } catch (e) {
+      res.writeHead(503, { ...cors, 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: String(e.message || e) }));
+    }
+    return;
+  }
   res.writeHead(426); res.end('Upgrade Required');
 });
 

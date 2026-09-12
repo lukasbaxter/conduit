@@ -3,6 +3,7 @@ import TrackRow, { PlayGlyph, PauseGlyph, Heart, ShuffleGlyph } from './TrackRow
 import ContextMenu from './ContextMenu.jsx';
 import { vibrantColor } from '../api/colors.js';
 import { QUALITIES, THEME_PRESETS, DEFAULT_THEME, themeEquals } from '../api/prefs.js';
+import { search as relaySearch } from '../api/search.js';
 import Home from './Home.jsx';
 import FittedTitle from './FittedTitle.jsx';
 import VirtualList from './VirtualList.jsx';
@@ -119,6 +120,19 @@ export default function Library({
   prefs, onUpdatePrefs, onUploadAvatar, avatarV,
 }) {
   const [results, setResults] = useState(null);
+  // Keyboard navigation in search: -1 = nothing, 0 = Top result, 1.. = songs.
+  const [hi, setHi] = useState(-1);
+  const searchRef = useRef(null);
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = e.target?.tagName;
+      if (e.key === '/' && tag !== 'INPUT' && tag !== 'TEXTAREA' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault(); onView('search'); setTimeout(() => searchRef.current?.focus(), 50);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [searchType, setSearchType] = useState('All');
   const [err, setErr] = useState(null);
   const [heroMenu, setHeroMenu] = useState(null);
@@ -161,10 +175,11 @@ export default function Library({
     // Jellyfin's search takes ~1s; an older query's reply must never overwrite
     // a newer one (typing "daft" showed the "daf" results, or vice versa).
     let alive = true;
+    const ctrl = new AbortController();
     const t = setTimeout(() => {
-      jf.search(query.trim()).then((r) => { if (alive) setResults(r); }).catch((e) => { if (alive) setErr(e.message); });
-    }, 250);
-    return () => { alive = false; clearTimeout(t); };
+      relaySearch(jf, query.trim(), { signal: ctrl.signal }).then((r) => { if (alive) { setResults(r); setErr(null); setHi(-1); } }).catch((e) => { if (alive && e.name !== 'AbortError') setErr(e.message); });
+    }, 60);
+    return () => { alive = false; ctrl.abort(); clearTimeout(t); };
   }, [query, jf, view]);
 
   const openAlbum = async (album) => {
@@ -629,21 +644,32 @@ export default function Library({
   // --- search -------------------------------------------------------------
   if (view === 'search') {
     const r = results;
-    // Spotify's Top result: the single best hit, artist preferred if the name
-    // matches closely, else the first song's album/artist.
-    const top = r
-      ? (r.artists[0] && r.artists[0].Name.toLowerCase().startsWith(query.trim().toLowerCase()) ? { kind: 'Artist', item: r.artists[0] }
-        : r.albums[0] ? { kind: 'Album', item: r.albums[0] }
-        : r.artists[0] ? { kind: 'Artist', item: r.artists[0] }
-        : r.tracks[0] ? { kind: 'Song', item: r.tracks[0] } : null)
-      : null;
+    // Top result comes from the engine (exact artist > exact album > best score).
+    const top = r?.top || null;
     const show = (t) => searchType === 'All' || searchType === t;
+    const actOn = (kind, item, i) => {
+      if (kind === 'Song') player.playQueue(r.tracks, Math.max(0, i), null);
+      else if (kind === 'Playlist') onOpenPlaylist(item);
+      else open(item);
+    };
+    const onSearchKey = (e) => {
+      if (!r) return;
+      const n = (top ? 1 : 0) + Math.min(r.tracks.length, 4);
+      if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(n - 1, h + 1)); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(-1, h - 1)); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (hi <= 0) { if (top) actOn(top.kind, top.item, 0); else if (r.tracks[0]) actOn('Song', r.tracks[0], 0); }
+        else { const idx = hi - (top ? 1 : 0); actOn('Song', r.tracks[idx], idx); }
+      } else if (e.key === 'Escape') { setQuery(''); }
+    };
 
     return (
       <div className="content">
         <div className="contentbar">
-          <input className="search" autoFocus placeholder="What do you want to play?"
-            value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input ref={searchRef} className="search" autoFocus placeholder="What do you want to play?"
+            value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onSearchKey} spellCheck="false" />
+          {r?.tookMs != null && <span className="search-took">{r.engine === 'meili' ? `${r.tookMs} ms` : 'basic search'}</span>}
         </div>
         {r && (
           <div className="searchtypes">
@@ -665,8 +691,8 @@ export default function Library({
             <div className="searchgrid">
               <section>
                 <div className="shelf-head"><h2>Top result</h2></div>
-                <div className={`topresult ${top.kind === 'Artist' ? 'round' : ''}`}
-                  onClick={() => top.kind === 'Song' ? openAlbum({ Id: top.item.AlbumId, Name: top.item.Album }) : open(top.item)}>
+                <div className={`topresult ${top.kind === 'Artist' ? 'round' : ''} ${hi === 0 ? 'hi' : ''}`}
+                  onClick={() => top.kind === 'Song' ? openAlbum({ Id: top.item.AlbumId, Name: top.item.Album }) : top.kind === 'Playlist' ? onOpenPlaylist(top.item) : open(top.item)}>
                   <img src={jf.imageUrl(top.kind === 'Song' ? (top.item.AlbumId || top.item.Id) : top.item.Id, { maxHeight: 200 })} alt="" />
                   <div>
                     <h3>{top.item.Name}</h3>
@@ -675,7 +701,7 @@ export default function Library({
                       <b>{top.kind}</b>
                     </div>
                   </div>
-                  <button className="card-play" onClick={(e) => { e.stopPropagation(); top.kind === 'Song' ? player.playQueue(r.tracks, 0) : playItem(top.item); }}>
+                  <button className="card-play" onClick={(e) => { e.stopPropagation(); top.kind === 'Song' ? player.playQueue(r.tracks, Math.max(0, r.tracks.findIndex((t) => t.Id === top.item.Id))) : playItem(top.item); }}>
                     <PlayGlyph />
                   </button>
                 </div>
@@ -683,7 +709,7 @@ export default function Library({
               <section>
                 <div className="shelf-head"><h2>Songs</h2></div>
                 <div className="tracklist" style={{ padding: 0 }}>
-                  {r.tracks.slice(0, 4).map((t, i) => <TrackRow key={t.Id} {...rowProps(r.tracks, i, { showArt: true })} />)}
+                  {r.tracks.slice(0, 4).map((t, i) => <TrackRow key={t.Id} {...rowProps(r.tracks, i, { showArt: true, snippet: t._snippet, highlight: hi === i + (top ? 1 : 0) })} />)}
                 </div>
               </section>
             </div>
@@ -693,7 +719,7 @@ export default function Library({
             <section>
               <div className="shelf-head"><h2>Songs</h2></div>
               <div className="tracklist" style={{ padding: 0 }}>
-                {r.tracks.map((t, i) => <TrackRow key={t.Id} {...rowProps(r.tracks, i, { showArt: true })} />)}
+                {r.tracks.map((t, i) => <TrackRow key={t.Id} {...rowProps(r.tracks, i, { showArt: true, snippet: t._snippet })} />)}
               </div>
             </section>
           )}
