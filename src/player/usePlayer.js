@@ -345,12 +345,12 @@ export function usePlayer(jf) {
   // --- public controls ----------------------------------------------------
 
   const playQueue = useCallback(
-    async (tracks, startIndex = 0, ctx = null) => {
+    async (tracks, startIndex = 0, ctx = null, startAt = 0) => {
       // If another of my clients is the active player, change the song THERE.
       const act = activePlayerRef.current;
       if (act && relayRef.current) {
         relayRef.current.command(act, {
-          action: 'play', trackIds: tracks.map((t) => t.Id), index: startIndex, ctx,
+          action: 'play', trackIds: tracks.map((t) => t.Id), index: startIndex, ctx, startAt,
         });
         return; // display mirrors the active player; nothing to set locally
       }
@@ -374,9 +374,10 @@ export function usePlayer(jf) {
       indexRef.current = start;
       const track = order[start];
       setDuration(ticksToSeconds(track?.RunTimeTicks));
-      anchorAt(0, true);
+      // startAt: play from a moment inside the track (a lyric line you searched for).
+      anchorAt(startAt > 0 ? startAt : 0, true);
       try {
-        await startOn(deviceRef.current, track, 0);
+        await startOn(deviceRef.current, track, startAt > 0 ? startAt : 0);
         setPlaying(true);
       } catch (e) {
         setError(e.message);
@@ -1187,7 +1188,7 @@ export function usePlayer(jf) {
     } else if (cmd.action === 'play' && jf && Array.isArray(cmd.trackIds) && cmd.trackIds.length) {
       try {
         const tracks = await fetchByIds(jf, cmd.trackIds, 'ArtistItems,AlbumArtists,UserData');
-        if (tracks.length) playQueueRef.current(tracks, Math.min(cmd.index || 0, tracks.length - 1), cmd.ctx || null);
+        if (tracks.length) playQueueRef.current(tracks, Math.min(cmd.index || 0, tracks.length - 1), cmd.ctx || null, cmd.startAt || 0);
       } catch { /* ignore */ }
     } else if (cmd.action === 'enqueue' && jf && Array.isArray(cmd.trackIds) && cmd.trackIds.length) {
       (async () => {

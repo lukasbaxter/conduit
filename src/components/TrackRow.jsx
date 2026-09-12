@@ -74,7 +74,7 @@ export default function TrackRow({
   track, n, active, isPlaying = false, onPlay, onToggle, onLike, playlists = [], onAddTo, onNewPlaylist,
   onRemove, draggable = false, onDragStart, onDragOver, onDrop, showArt = false, jf,
   onOpenArtist, onOpenAlbum, hideArtists = false,
-  onAddToQueue, onExclude, onRadio, onDownload, hideAlbum = false, snippet = null, highlight = false,
+  onAddToQueue, onExclude, onRadio, onDownload, hideAlbum = false, snippet = null, snippetAt = null, onPlayAt, highlight = false,
 }) {
   // {x, y} while the context menu is open (from the dots button or a right-click).
   const [menu, setMenu] = useState(null);
@@ -152,7 +152,11 @@ export default function TrackRow({
         </small>}
         {/* A lyric match: the line that matched, with the words lit. */}
         {snippet && (
-          <small className="lyric-snippet">
+          <small
+            className={`lyric-snippet ${snippetAt != null && onPlayAt ? 'playable' : ''}`}
+            title={snippetAt != null && onPlayAt ? 'Play from this line' : undefined}
+            onClick={snippetAt != null && onPlayAt ? (e) => { e.stopPropagation(); onPlayAt(track, snippetAt); } : undefined}
+          >
             <span className="lyric-tag">Lyrics</span>
             {snippet.split(/(\u0001[^\u0002]*\u0002)/g).map((part, i) => (
               part.startsWith('\u0001') ? <mark key={i}>{part.slice(1, -1)}</mark> : <React.Fragment key={i}>{part}</React.Fragment>

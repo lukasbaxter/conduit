@@ -16,7 +16,7 @@ function track(t, userId) {
     Artists: t.artists || [], ArtistItems: (t.artists || []).map((n, i) => ({ Name: n, Id: (t.artistIds || [])[i] })).filter((a) => a.Id),
     Album: t.album, AlbumId: t.albumId, AlbumArtist: t.albumArtist, ProductionYear: t.year,
     RunTimeTicks: t.durationTicks, UserData: { IsFavorite: Array.isArray(t.liked) ? t.liked.includes(userId) : false },
-    _snippet: t.snippet || null, _plays: t.plays || 0,
+    _snippet: t.snippet || null, _snippetAt: t.snippetAt ?? null, _plays: t.plays || 0,
   };
 }
 const album = (a) => ({ Id: a.id, Name: a.name, Type: 'MusicAlbum', AlbumArtist: (a.artists || []).join(', '), AlbumArtists: (a.artists || []).map((n, i) => ({ Name: n, Id: (a.artistIds || [])[i] })), ProductionYear: a.year, ChildCount: a.trackCount, _type: a.type });
@@ -41,7 +41,7 @@ export async function search(jf, q, { limit = 10, filter = null, signal } = {}) 
     if (!res.ok) throw new Error(`search ${res.status}`);
     const r = await res.json();
     return {
-      engine: 'meili', tookMs: r.tookMs,
+      engine: 'meili', tookMs: r.tookMs, chips: r.chips || [], scoped: Boolean(r.scoped),
       top: mapTop(r.top, jf.userId),
       tracks: (r.tracks || []).map((x) => track(x, jf.userId)),
       albums: (r.albums || []).map(album),
@@ -57,6 +57,6 @@ export async function search(jf, q, { limit = 10, filter = null, signal } = {}) 
       : r.albums[0] ? { kind: 'Album', item: r.albums[0] }
       : r.artists[0] ? { kind: 'Artist', item: r.artists[0] }
       : r.tracks[0] ? { kind: 'Song', item: r.tracks[0] } : null;
-    return { engine: 'jellyfin', top, ...r };
+    return { engine: 'jellyfin', top, chips: [], scoped: false, ...r };
   }
 }

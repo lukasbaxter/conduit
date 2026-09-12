@@ -140,11 +140,57 @@ function tokenOf(req) {
 // Normalise for exact-match checks: case, accents, punctuation.
 const norm = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
-async function search(q, { limit = 10, filter = null } = {}) {
-  const track = { indexUid: 'tracks', q, limit: limit * 2, attributesToRetrieve: ['id', 'name', 'artists', 'artistIds', 'album', 'albumId', 'albumArtist', 'year', 'durationTicks', 'plays', 'hasLyrics'],
-    attributesToCrop: ['lyrics'], cropLength: 12, attributesToHighlight: ['lyrics', 'name'], highlightPreTag: '\u0001', highlightPostTag: '\u0002', showRankingScore: true };
+// Operators typed into the box: artist:daft  album:discovery  year:2013
+// year:2010-2015  genre:house  liked:  -- resolved to Meili filters; the rest
+// of the words stay free text. artist:/album: names are looked up in their
+// own index first (typo-tolerant) so "artist:dft pnk" still works.
+async function meiliOne(index, body) {
+  const r = await fetch(`${MEILI}/indexes/${index}/search`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MEILI_KEY}` }, body: JSON.stringify(body), signal: AbortSignal.timeout(2000) });
+  if (!r.ok) throw new Error(`meili ${r.status}`);
+  return r.json();
+}
+const OP = /(^|\s)(artist|album|year|genre|liked|in):("([^"]*)"|(\S*))/gi;
+async function parseOperators(raw, userId) {
+  const filters = [];
+  const chips = [];
+  let text = raw;
+  const ops = [...raw.matchAll(OP)];
+  for (const m of ops) {
+    const key = m[2].toLowerCase(), val = (m[4] ?? m[5] ?? '').trim();
+    text = text.replace(m[0], ' ');
+    if (key === 'year') {
+      const r = /^(\d{4})(?:\s*-\s*(\d{4}))?$/.exec(val);
+      if (r) { filters.push(r[2] ? `year ${r[1]} TO ${r[2]}` : `year = ${r[1]}`); chips.push({ key, label: r[2] ? `${r[1]}–${r[2]}` : r[1] }); }
+    } else if (key === 'liked') {
+      filters.push(`liked = "${userId}"`); chips.push({ key, label: 'Liked Songs' });
+    } else if (key === 'artist' && val) {
+      const hit = (await meiliOne('artists', { q: val, limit: 1 })).hits[0];
+      if (hit) { filters.push(`artistIds = "${hit.id}"`); chips.push({ key, label: hit.name, id: hit.id }); }
+    } else if (key === 'album' && val) {
+      const hit = (await meiliOne('albums', { q: val, limit: 1 })).hits[0];
+      if (hit) { filters.push(`albumId = "${hit.id}"`); chips.push({ key, label: hit.name, id: hit.id }); }
+    } else if (key === 'genre' && val) {
+      const f = await fetch(`${MEILI}/indexes/tracks/facet-search`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MEILI_KEY}` }, body: JSON.stringify({ facetName: 'genres', facetQuery: val }), signal: AbortSignal.timeout(2000) });
+      const hit = f.ok ? (await f.json()).facetHits?.[0] : null;
+      if (hit) { filters.push(`genres = "${hit.value.replace(/"/g, '\\"')}"`); chips.push({ key, label: hit.value }); }
+    } else if (key === 'in' && val) {
+      filters.push(`playlistIds = "${val}"`); chips.push({ key, label: 'this playlist' });
+    }
+  }
+  return { text: text.replace(/\s+/g, ' ').trim(), filter: filters.join(' AND ') || null, chips };
+}
+
+async function search(rawQ, { limit = 10, filter: extraFilter = null, userId = null } = {}) {
+  const { text: q, filter: opFilter, chips } = await parseOperators(rawQ, userId);
+  const filter = [opFilter, extraFilter].filter(Boolean).join(' AND ') || null;
+  const track = { indexUid: 'tracks', q, limit: limit * 2,
+    attributesToRetrieve: ['id', 'name', 'artists', 'artistIds', 'album', 'albumId', 'albumArtist', 'year', 'durationTicks', 'plays', 'liked', 'hasLyrics', 'times'],
+    attributesToHighlight: ['lyrics', 'name'], highlightPreTag: '\u0001', highlightPostTag: '\u0002', showRankingScore: true };
   if (filter) track.filter = filter;
-  const body = { queries: [
+  // With a filter the query is scoped to tracks (search within a playlist,
+  // artist:, year:), so the entity indexes are not asked.
+  const scoped = Boolean(filter);
+  const body = { queries: scoped ? [track] : [
     { indexUid: 'artists', q, limit, showRankingScore: true },
     { indexUid: 'albums', q, limit, showRankingScore: true },
     track,
@@ -152,19 +198,23 @@ async function search(q, { limit = 10, filter = null } = {}) {
   ] };
   const r = await fetch(`${MEILI}/multi-search`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MEILI_KEY}` }, body: JSON.stringify(body), signal: AbortSignal.timeout(2500) });
   if (!r.ok) throw new Error(`meili ${r.status}`);
-  const [artists, albums, tracks, playlists] = (await r.json()).results.map((x) => x.hits);
-  // A lyric-only hit carries the matched line as a snippet; name hits do not.
+  const results = (await r.json()).results.map((x) => x.hits);
+  const [artists, albums, tracks, playlists] = scoped ? [[], [], results[0], []] : results;
   const nq = norm(q);
   for (const t of tracks) {
     const f = t._formatted || {};
     const hits = (x) => ((x || '').match(/\u0001/g) || []).length;
-    // Show the lyric line when the lyrics matched more of the query than the title did.
-    t.snippet = f.lyrics && hits(f.lyrics) > hits(f.name) ? f.lyrics.replace(/\s+/g, ' ').trim() : null;
-    delete t._formatted;
+    // Lyric hit: the whole matching LINE (not a crop) and the second it starts
+    // at, so the client can play the song from that line.
+    t.snippet = null; t.snippetAt = null;
+    if (f.lyrics && hits(f.lyrics) > hits(f.name)) {
+      const lines = f.lyrics.split('\n');
+      let best = -1, bestN = 0;
+      lines.forEach((l, i) => { const n = hits(l); if (n > bestN) { bestN = n; best = i; } });
+      if (best >= 0) { t.snippet = lines[best].trim(); t.snippetAt = Array.isArray(t.times) ? t.times[best] ?? null : null; }
+    }
+    delete t._formatted; delete t.times;
   }
-  // Top result: an exact artist wins, then an exact album, then the best
-  // track by Meili's score; otherwise whichever entity scores highest with a
-  // nudge towards artists (Spotify's behaviour).
   const exactA = artists.find((a) => norm(a.name) === nq || (a.aliases || []).some((x) => norm(x) === nq));
   const exactAl = albums.find((a) => norm(a.name) === nq);
   let top = null;
@@ -179,11 +229,8 @@ async function search(q, { limit = 10, filter = null } = {}) {
     ].filter(Boolean).sort((a, b) => b.s - a.s);
     top = cands[0] ? { kind: cands[0].kind, item: cands[0].item } : null;
   }
-  // Meili's 'words' rule keeps partial matches for multi-word queries ("sit"
-  // alone matches an artist for "sit next to me"); below this score they are
-  // noise for entities, so hide them unless nothing better exists.
-  const strong = (list) => { const s = list.filter((x) => (x._rankingScore || 0) >= 0.6); return s.length ? s : list.slice(0, 1); };
-  return { top, artists: strong(artists), albums: strong(albums), tracks: tracks.slice(0, limit * 2), playlists: strong(playlists) };
+  const strong = (list) => { const s2 = list.filter((x) => (x._rankingScore || 0) >= 0.6); return s2.length ? s2 : list.slice(0, 1); };
+  return { top, artists: strong(artists), albums: strong(albums), tracks: tracks.slice(0, limit * 2), playlists: strong(playlists), chips, scoped };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -202,7 +249,7 @@ const server = http.createServer(async (req, res) => {
       const q = (url.searchParams.get('q') || '').slice(0, 200);
       const limit = Math.min(50, Number(url.searchParams.get('limit')) || 10);
       const filter = url.searchParams.get('filter') || null;
-      const out = q.trim() ? await search(q, { limit, filter }) : { top: null, artists: [], albums: [], tracks: [], playlists: [] };
+      const out = q.trim() ? await search(q, { limit, filter, userId: who.id }) : { top: null, artists: [], albums: [], tracks: [], playlists: [], chips: [] };
       out.tookMs = Date.now() - t0;
       res.writeHead(200, { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(out));

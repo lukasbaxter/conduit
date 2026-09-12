@@ -41,12 +41,12 @@ SYNONYMS = {
 SETTINGS = {
     'tracks': {
         'searchableAttributes': ['name', 'artists', 'album', 'albumArtist', 'lyrics'],
-        'filterableAttributes': ['artistIds', 'albumId', 'year', 'genres', 'liked', 'playlistIds'],
+        'filterableAttributes': ['artistIds', 'albumId', 'year', 'genres', 'liked', 'playlistIds', 'artists', 'album'],
         'sortableAttributes': ['plays', 'year'],
         'rankingRules': ['words', 'typo', 'proximity', 'attribute', 'exactness', 'plays:desc'],
         'synonyms': SYNONYMS,
         'typoTolerance': {'minWordSizeForTypos': {'oneTypo': 3, 'twoTypos': 7}},
-        'displayedAttributes': ['id', 'name', 'artists', 'artistIds', 'album', 'albumId', 'albumArtist', 'year', 'durationTicks', 'plays', 'hasLyrics', 'lyrics'],
+        'displayedAttributes': ['id', 'name', 'artists', 'artistIds', 'album', 'albumId', 'albumArtist', 'year', 'genres', 'durationTicks', 'plays', 'liked', 'hasLyrics', 'lyrics', 'times'],
         'pagination': {'maxTotalHits': 200},
     },
     'albums': {
@@ -119,16 +119,40 @@ for p in playlists:
     for it in d.get('Items', []):
         pl_of.setdefault(it['Id'], []).append(p['Id'])
 
+LRC_LINE = re.compile(r'^\s*((?:\[\d+:\d+(?:\.\d+)?\])+)(.*)$')
+LRC_T = re.compile(r'\[(\d+):(\d+(?:\.\d+)?)\]')
 def lyrics_for(path):
-    if not path: return None
+    """(text, times): one lyric line per text line and, in parallel, the
+    second each line starts at (None when unsynced), so a lyric hit can be
+    played from that exact moment."""
+    if not path: return None, None
     base = os.path.splitext(path.replace(JFP, FS, 1))[0] + '.lrc'
     try:
+        lines, times = [], []
         with open(base, encoding='utf-8', errors='ignore') as fh:
-            lines = [LRC_TS.sub('', l).strip() for l in fh]
-        text = '\n'.join(l for l in lines if l and not l.startswith(('[', 'ti:', 'ar:', 'al:', 'by:', 'length:')))
-        return text[:12000] or None
+            for raw in fh:
+                m = LRC_LINE.match(raw)
+                if m:
+                    text = m.group(2).strip()
+                    if not text: continue
+                    mm, ss = LRC_T.findall(m.group(1))[0]
+                    lines.append(text); times.append(round(int(mm) * 60 + float(ss), 2))
+                else:
+                    text = LRC_TS.sub('', raw).strip()
+                    if not text or text.startswith(('[', 'ti:', 'ar:', 'al:', 'by:', 'length:')): continue
+                    lines.append(text); times.append(None)
+        if not lines: return None, None
+        text = '\n'.join(lines)
+        if len(text) > 12000:
+            keep = 0; n = 0
+            for i, l in enumerate(lines):
+                n += len(l) + 1
+                if n > 12000: break
+                keep = i + 1
+            lines, times = lines[:keep], times[:keep]; text = '\n'.join(lines)
+        return text, times
     except OSError:
-        return None
+        return None, None
 
 def album_type(a):
     n = a.get('ChildCount') or 0
@@ -141,14 +165,14 @@ track_docs = []
 album_plays, artist_plays, artist_tracks = {}, {}, {}
 for t in tracks:
     p = plays.get(t['Id'], 0)
-    lyr = lyrics_for(t.get('Path'))
+    lyr, times = lyrics_for(t.get('Path'))
     aids = [a['Id'] for a in (t.get('ArtistItems') or [])]
     track_docs.append({
         'id': t['Id'], 'name': t['Name'], 'artists': t.get('Artists') or [], 'artistIds': aids,
         'album': t.get('Album'), 'albumId': t.get('AlbumId'), 'albumArtist': t.get('AlbumArtist'),
         'year': t.get('ProductionYear'), 'genres': t.get('Genres') or [], 'durationTicks': t.get('RunTimeTicks'),
         'plays': p, 'liked': likes.get(t['Id'], []), 'playlistIds': pl_of.get(t['Id'], []),
-        'hasLyrics': bool(lyr), 'lyrics': lyr,
+        'hasLyrics': bool(lyr), 'lyrics': lyr, 'times': times,
     })
     if t.get('AlbumId'): album_plays[t['AlbumId']] = album_plays.get(t['AlbumId'], 0) + p
     for aid in aids:

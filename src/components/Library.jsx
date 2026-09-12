@@ -122,6 +122,14 @@ export default function Library({
   const [results, setResults] = useState(null);
   // Keyboard navigation in search: -1 = nothing, 0 = Top result, 1.. = songs.
   const [hi, setHi] = useState(-1);
+  // Search inside the open playlist / album / Liked Songs (engine-scoped).
+  const [within, setWithin] = useState('');
+  const [withinRes, setWithinRes] = useState(null);
+  const recents = Array.isArray(prefs?.recentSearches) ? prefs.recentSearches : [];
+  const remember = (q) => {
+    const t = (q || '').trim(); if (!t || !onUpdatePrefs) return;
+    onUpdatePrefs({ recentSearches: [t, ...recents.filter((x) => x.toLowerCase() !== t.toLowerCase())].slice(0, 10) });
+  };
   const searchRef = useRef(null);
   useEffect(() => {
     const onKey = (e) => {
@@ -181,6 +189,29 @@ export default function Library({
     }, 60);
     return () => { alive = false; ctrl.abort(); clearTimeout(t); };
   }, [query, jf, view]);
+
+  useEffect(() => { setWithin(''); setWithinRes(null); }, [detail?.item?.Id]);
+  useEffect(() => {
+    const it = detail?.item;
+    if (!it || !within.trim()) { setWithinRes(null); return undefined; }
+    const filter = it.Id === LIKED_ID ? `liked = "${jf.userId}"` : detail.kind === 'Album' ? `albumId = "${it.Id}"` : `playlistIds = "${it.Id}"`;
+    let alive = true; const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      relaySearch(jf, within.trim(), { filter, limit: 50, signal: ctrl.signal }).then((r) => {
+        if (!alive) return;
+        // Engine hits carry the ranking; take the page's own row objects (they
+        // have PlaylistItemId etc.) in that order, then anything the engine
+        // missed by plain substring as a safety net.
+        const byId = new Map((detail.tracks || []).map((x) => [x.Id, x]));
+        const q = within.trim().toLowerCase();
+        const ranked = r.engine === 'meili' ? r.tracks.map((h) => { const row = byId.get(h.Id); return row ? { ...row, _snippet: h._snippet, _snippetAt: h._snippetAt } : null; }).filter(Boolean) : [];
+        const seen = new Set(ranked.map((x) => x.Id));
+        const local = (detail.tracks || []).filter((x) => !seen.has(x.Id) && (`${x.Name} ${(x.Artists || []).join(' ')} ${x.Album || ''}`.toLowerCase().includes(q)));
+        setWithinRes([...ranked, ...local]);
+      }).catch(() => { if (alive) setWithinRes((detail.tracks || []).filter((x) => `${x.Name} ${(x.Artists || []).join(' ')}`.toLowerCase().includes(within.trim().toLowerCase()))); });
+    }, 80);
+    return () => { alive = false; ctrl.abort(); clearTimeout(t); };
+  }, [within, detail?.item?.Id, detail?.tracks?.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openAlbum = async (album) => {
     setDetail({ item: album, tracks: [], kind: 'Album', loading: true });
@@ -242,6 +273,8 @@ export default function Library({
     onAddToQueue: (t) => player.addToQueue([t]),
     onRadio: (t) => startMix(t),
     onExclude, onDownload,
+    snippet: tracks[i]._snippet || null, snippetAt: tracks[i]._snippetAt ?? null,
+    onPlayAt: (t, at) => player.playQueue(tracks, i, ctx, at),
     ...extra,
   });
 
@@ -490,6 +523,13 @@ export default function Library({
                   <Dots />
                 </button>
                 {heroMenu && <ContextMenu x={heroMenu.x} y={heroMenu.y} items={heroItems} onClose={() => setHeroMenu(null)} />}
+                {!isArtist && tracks.length > 8 && (
+                  <label className="within" title="Search in this list">
+                    <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M7 1.75a5.25 5.25 0 1 0 0 10.5 5.25 5.25 0 0 0 0-10.5zM.25 7a6.75 6.75 0 1 1 12.096 4.12l3.184 3.185a.75.75 0 1 1-1.06 1.06L11.284 12.18A6.75 6.75 0 0 1 .25 7z" /></svg>
+                    <input value={within} onChange={(e) => setWithin(e.target.value)} placeholder={isPlaylist ? 'Search in playlist' : 'Search in album'} spellCheck="false" />
+                    {within && <button type="button" onClick={() => setWithin('')} aria-label="Clear">×</button>}
+                  </label>
+                )}
               </>
             );
           })()}
@@ -594,25 +634,28 @@ export default function Library({
                 {isLiked ? 'Songs you like will appear here. Save songs by tapping the heart icon.' : 'This playlist is empty.'}
               </p>
             )}
-            {tracks.length > 0 && (
+            {within.trim() && withinRes && withinRes.length === 0 && (
+              <p className="placeholder-note">No matches for &ldquo;{within}&rdquo; in here.</p>
+            )}
+            {tracks.length > 0 && (() => { const shown = within.trim() && withinRes ? withinRes : tracks; const filtered = shown !== tracks; return (
               <VirtualList
-                items={tracks}
+                items={shown}
                 rowHeight={56}
                 getKey={(t, i) => t.PlaylistItemId || `${t.Id}-${i}`}
                 renderRow={(t, i) => (
-                  <div className={overIdx === i && dragIdx != null ? 'dropbefore' : ''}>
+                  <div className={overIdx === i && dragIdx != null && !filtered ? 'dropbefore' : ''}>
                     <TrackRow
-                      {...rowProps(tracks, i, {
+                      {...rowProps(shown, i, {
                         showArt: isPlaylist,
                         hideAlbum: kind === 'Album',
                         onRemove: isPlaylist && !isLiked ? () => onRemoveFromPlaylist(item, t) : undefined,
-                        ...dnd(i),
+                        ...(filtered ? {} : dnd(i)),
                       }, item.Id)}
                     />
                   </div>
                 )}
               />
-            )}
+            ); })()}
           </div>
         )}
       </div>
@@ -648,10 +691,18 @@ export default function Library({
     const top = r?.top || null;
     const show = (t) => searchType === 'All' || searchType === t;
     const actOn = (kind, item, i) => {
+      remember(query);
       if (kind === 'Song') player.playQueue(r.tracks, Math.max(0, i), null);
       else if (kind === 'Playlist') onOpenPlaylist(item);
       else open(item);
     };
+    // Rows on the search page: any way of playing one records the query.
+    const searchRow = (i, extra = {}) => rowProps(r.tracks, i, {
+      showArt: true,
+      onPlay: () => { remember(query); player.playQueue(r.tracks, i, null); },
+      onPlayAt: (t, at) => { remember(query); player.playQueue(r.tracks, i, null, at); },
+      ...extra,
+    });
     const onSearchKey = (e) => {
       if (!r) return;
       const n = (top ? 1 : 0) + Math.min(r.tracks.length, 4);
@@ -680,14 +731,35 @@ export default function Library({
         )}
         <div className="pad">
           {err && <div className="banner error">{err}</div>}
+          {!query.trim() && recents.length > 0 && (
+            <section>
+              <div className="shelf-head"><h2>Recent searches</h2><button onClick={() => onUpdatePrefs?.({ recentSearches: [] })}>Clear</button></div>
+              <div className="pills recents">
+                {recents.map((q2) => <button key={q2} className="pill" onClick={() => setQuery(q2)}>{q2}</button>)}
+              </div>
+            </section>
+          )}
           {!query.trim() && (
-            <>
-              <div className="shelf-head"><h2>Browse all</h2></div>
-              <p className="placeholder-note">Genre and mood browsing needs genre tags, which the retag is adding. Search by song, album or artist above.</p>
-            </>
+            <section>
+              <div className="shelf-head"><h2>Tips</h2></div>
+              <p className="placeholder-note">Type a lyric you remember. Narrow with <code>artist:</code>, <code>album:</code>, <code>year:2013</code>, <code>year:2010-2015</code>, <code>genre:house</code> or <code>liked:</code>. Typos are fine. Press <code>/</code> anywhere to get here, arrows and Enter to play.</p>
+            </section>
+          )}
+          {r?.chips?.length > 0 && (
+            <div className="pills chips">
+              {r.chips.map((c, i) => <span key={i} className="pill on">{c.key}: {c.label}</span>)}
+            </div>
           )}
 
-          {r && searchType === 'All' && top && (
+          {r && r.scoped && r.tracks.length > 0 && (
+            <section>
+              <div className="shelf-head"><h2>Songs</h2></div>
+              <div className="tracklist" style={{ padding: 0 }}>
+                {r.tracks.map((t, i) => <TrackRow key={t.Id} {...searchRow(i, { highlight: hi === i })} />)}
+              </div>
+            </section>
+          )}
+          {r && !r.scoped && searchType === 'All' && top && (
             <div className="searchgrid">
               <section>
                 <div className="shelf-head"><h2>Top result</h2></div>
@@ -709,17 +781,17 @@ export default function Library({
               <section>
                 <div className="shelf-head"><h2>Songs</h2></div>
                 <div className="tracklist" style={{ padding: 0 }}>
-                  {r.tracks.slice(0, 4).map((t, i) => <TrackRow key={t.Id} {...rowProps(r.tracks, i, { showArt: true, snippet: t._snippet, highlight: hi === i + (top ? 1 : 0) })} />)}
+                  {r.tracks.slice(0, 4).map((t, i) => <TrackRow key={t.Id} {...searchRow(i, { highlight: hi === i + (top ? 1 : 0) })} />)}
                 </div>
               </section>
             </div>
           )}
 
-          {r && show('Songs') && searchType !== 'All' && r.tracks.length > 0 && (
+          {r && !r.scoped && show('Songs') && searchType !== 'All' && r.tracks.length > 0 && (
             <section>
               <div className="shelf-head"><h2>Songs</h2></div>
               <div className="tracklist" style={{ padding: 0 }}>
-                {r.tracks.map((t, i) => <TrackRow key={t.Id} {...rowProps(r.tracks, i, { showArt: true, snippet: t._snippet })} />)}
+                {r.tracks.map((t, i) => <TrackRow key={t.Id} {...searchRow(i)} />)}
               </div>
             </section>
           )}
