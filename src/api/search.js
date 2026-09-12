@@ -67,3 +67,20 @@ export async function browse(jf) {
   if (!res.ok) throw new Error(`browse ${res.status}`);
   return (await res.json()).tiles || [];
 }
+
+async function relayGet(jf, path, params = {}, timeout = 30000) {
+  const q = new URLSearchParams(params);
+  const res = await fetch(`${relayBase()}${path}?${q}`, { headers: { 'X-Emby-Token': jf.token }, signal: AbortSignal.timeout(timeout) });
+  if (!res.ok) throw new Error(`${path} ${res.status}`);
+  return res.json();
+}
+// Every release Spotify lists for an artist, flagged with what the library has.
+export const discography = (jf, artistId, name) => relayGet(jf, '/discography', { artistId, name });
+export const similar = (jf, artistId, name) => relayGet(jf, '/similar', { artistId, name }, 15000);
+export const radar = (jf) => relayGet(jf, '/radar', {}, 120000);
+export async function requestAlbum(jf, albumId) {
+  const res = await fetch(`${relayBase()}/request`, { method: 'POST', headers: { 'X-Emby-Token': jf.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ album_id: albumId }), signal: AbortSignal.timeout(30000) });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(j.error || `request ${res.status}`);
+  return j;
+}

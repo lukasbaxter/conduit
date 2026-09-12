@@ -1107,6 +1107,7 @@ export function usePlayer(jf) {
         artUrl: relayTarget.artUrl || null,
         albumId: relayTarget.albumId || null,
         artistId: relayTarget.artistId || null,
+        artists: relayTarget.artists || null,
         itemId: relayTarget.itemId || null,
         liked: Boolean(relayTarget.liked),
         device: relayTarget.device || null,
@@ -1122,6 +1123,7 @@ export function usePlayer(jf) {
         // ArtistItems carries the real artist entity; AlbumArtists is the
         // fallback for tracks credited only at album level.
         artistId: current.ArtistItems?.[0]?.Id || current.AlbumArtists?.[0]?.Id || null,
+        artists: (current.ArtistItems?.length ? current.ArtistItems : current.AlbumArtists || []).map((a) => ({ Id: a.Id, Name: a.Name })),
       }
     : external
     ? { title: external.title, artist: external.artist || '', artId: null }
@@ -1262,6 +1264,7 @@ export function usePlayer(jf) {
       artUrl: `${npBaseUrl}/Items/${current.AlbumId || current.Id}/Images/Primary?maxHeight=128`,
       albumId: current.AlbumId || null,
       artistId: current.ArtistItems?.[0]?.Id || current.AlbumArtists?.[0]?.Id || null,
+      artists: (current.ArtistItems?.length ? current.ArtistItems : current.AlbumArtists || []).map((a) => ({ Id: a.Id, Name: a.Name })),
       liked: Boolean(current.UserData?.IsFavorite),
       // Where the sound actually comes out, so every client can say "Playing
       // on Node" when the session is on a speaker rather than on a client.

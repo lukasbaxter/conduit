@@ -1,3 +1,4 @@
+import { ArtistLinks } from './TrackRow.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 
 const Close = () => (
@@ -43,13 +44,13 @@ function NowPlaying({ player, jf, onOpenArtist, onOpenAlbum, onShowQueue }) {
           >
             {nowPlaying?.title || 'Nothing playing'}
           </div>
-          {nowPlaying?.artistId ? (
-            <div className="npv-artist" onClick={() => onOpenArtist(nowPlaying.artistId)}>
-              {nowPlaying.artist}
-            </div>
-          ) : (
-            <div className="npv-artist" style={{ cursor: 'default' }}>{nowPlaying?.artist}</div>
-          )}
+          <div className="npv-artist" style={{ cursor: 'default' }}>
+            {nowPlaying?.artists?.length
+              ? <ArtistLinks artists={nowPlaying.artists} onOpen={onOpenArtist} className="npv-artist-link" />
+              : nowPlaying?.artistId
+                ? <button className="npv-artist-link" onClick={() => onOpenArtist(nowPlaying.artistId)}>{nowPlaying.artist}</button>
+                : nowPlaying?.artist}
+          </div>
         </div>
       </div>
 

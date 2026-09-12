@@ -314,10 +314,123 @@ async function browse() {
   return tiles;
 }
 
+// --- discography / requests / release radar --------------------------------
+// Music Requests (the Soulseek pipeline at :8732) owns the Spotify credentials:
+// /api/artist gives every release for an artist, /api/request queues an album
+// for download. The relay matches those releases against the library (Meili
+// albums index) so the artist page can show what is here and offer the rest.
+const MUSIC_REQUESTS = process.env.MUSIC_REQUESTS_URL || 'http://192.168.1.85:8732';
+const normTitle = (t) => norm(String(t || '').replace(/\s*[\(\[](deluxe|expanded|remaster(ed)?|edition|version|bonus|anniversary|explicit|clean|drumless|feat\.?|ft\.?)[^\)\]]*[\)\]]/gi, '').replace(/\s*-\s*(single|ep)$/i, ''));
+const discogCache = new Map(); // artistId -> { at, v }
+async function discography(artistId, artistName) {
+  const c = discogCache.get(artistId);
+  if (c && Date.now() - c.at < 60 * 60 * 1000) return c.v;
+  const [mr, lib, reqs] = await Promise.all([
+    fetch(`${MUSIC_REQUESTS}/api/artist?name=${encodeURIComponent(artistName)}`, { signal: AbortSignal.timeout(25000) }).then((r) => r.json()),
+    meiliOne('albums', { q: '', limit: 200, filter: `artistIds = "${artistId}"` }).catch(() => ({ hits: [] })),
+    fetch(`${MUSIC_REQUESTS}/api/requests?limit=2000`, { signal: AbortSignal.timeout(8000) }).then((r) => r.json()).catch(() => ({ requests: [] })),
+  ]);
+  // Exact title first; a library "Deluxe" satisfies a plain Spotify title, but a
+  // Spotify "(Drumless Edition)" is only present if that exact edition is.
+  const exact = new Map((lib.hits || []).map((a) => [norm(a.name), a]));
+  const base = new Map((lib.hits || []).map((a) => [normTitle(a.name), a]));
+  const qualified = (t) => normTitle(t) !== norm(t);
+  const have = { get: (t) => exact.get(norm(t)) || (!qualified(t) ? base.get(normTitle(t)) : null) };
+  const status = new Map((reqs.requests || []).map((r) => [r.album_id, r.status]));
+  const releases = (mr.releases || []).map((r) => {
+    const local = have.get(r.title) || null;
+    return { ...r, inLibrary: local ? local.id : null, localName: local?.name || null, requestStatus: status.get(r.album_id) || null };
+  });
+  // Library albums Spotify does not list (bootlegs, compilations) still belong on the page.
+  const listed = new Set(releases.filter((r) => r.inLibrary).map((r) => r.inLibrary));
+  const extra = (lib.hits || []).filter((a) => !listed.has(a.id)).map((a) => ({ album_id: null, title: a.name, rtype: a.type === 'single' ? 'Single' : a.type === 'ep' ? 'EP' : a.type === 'compilation' ? 'Compilation' : 'Album', year: a.year ? String(a.year) : '', date: a.year ? `${a.year}` : '', image: null, total_tracks: a.trackCount, inLibrary: a.id, localName: a.name, requestStatus: null }));
+  const v = { artist: mr.artist || null, releases: [...releases, ...extra] };
+  discogCache.set(artistId, { at: Date.now(), v });
+  return v;
+}
+
+let radarCache = { at: 0, v: null };
+async function releaseRadar() {
+  if (radarCache.v && Date.now() - radarCache.at < 6 * 60 * 60 * 1000) return radarCache.v;
+  // The library's most played artists; their releases from the last 90 days.
+  const top = await meiliOne('artists', { q: '', limit: 40, sort: ['plays:desc'], attributesToRetrieve: ['id', 'name', 'plays'] });
+  const since = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+  const out = [];
+  for (const a of top.hits || []) {
+    try {
+      const d = await discography(a.id, a.name);
+      for (const r of d.releases) {
+        if (r.album_id && r.date && r.date >= since && r.group !== 'appears_on') out.push({ ...r, artistId: a.id, artistName: a.name });
+      }
+    } catch { /* one artist failing must not sink the radar */ }
+  }
+  out.sort((x, y) => (y.date || '').localeCompare(x.date || ''));
+  radarCache = { at: Date.now(), v: out };
+  return out;
+}
+
+// "Fans also like": Deezer's related artists, kept only when the library has
+// them (so every card opens a real page). Cached a day per artist.
+const similarCache = new Map();
+async function similarArtists(artistId, name) {
+  const c = similarCache.get(artistId);
+  if (c && Date.now() - c.at < 24 * 60 * 60 * 1000) return c.v;
+  const nk = (x) => norm(x);
+  const s = await fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=5`, { signal: AbortSignal.timeout(8000) }).then((r) => r.json());
+  const dz = (s.data || []).find((a) => nk(a.name) === nk(name)) || (s.data || [])[0];
+  let out = [];
+  if (dz) {
+    const rel = await fetch(`https://api.deezer.com/artist/${dz.id}/related?limit=40`, { signal: AbortSignal.timeout(8000) }).then((r) => r.json());
+    const names = (rel.data || []).map((a) => a.name);
+    // one multi-search: each related name against the artists index
+    if (names.length) {
+      const body = { queries: names.slice(0, 40).map((n) => ({ indexUid: 'artists', q: n, limit: 1 })) };
+      const r = await fetch(`${MEILI}/multi-search`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MEILI_KEY}` }, body: JSON.stringify(body), signal: AbortSignal.timeout(4000) });
+      const res = r.ok ? (await r.json()).results : [];
+      res.forEach((x, i) => { const h = x.hits[0]; if (h && nk(h.name) === nk(names[i]) && h.id !== artistId) out.push({ id: h.id, name: h.name, hasImage: h.hasImage }); });
+    }
+  }
+  const v = out.slice(0, 12);
+  similarCache.set(artistId, { at: Date.now(), v });
+  return v;
+}
+
+async function requestAlbum(albumId) {
+  const r = await fetch(`${MUSIC_REQUESTS}/api/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ album_id: albumId }), signal: AbortSignal.timeout(20000) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `request ${r.status}`);
+  discogCache.clear();
+  return j;
+}
+
 const server = http.createServer(async (req, res) => {
   // Health check for Docker.
   if (req.url === '/healthz') { res.writeHead(200); res.end('ok'); return; }
   const url = new URL(req.url, 'http://x');
+  const path = url.pathname.replace(/^\/relay/, '');
+  if (path === '/discography' || path === '/radar' || path === '/request' || path === '/similar') {
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, X-Emby-Token, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
+    if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }
+    try {
+      const token = tokenOf(req);
+      if (!token || !(await whoIs(token))) { res.writeHead(401, cors); res.end('{"error":"unauthorized"}'); return; }
+      let out;
+      if (path === '/discography') out = await discography(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '');
+      else if (path === '/radar') out = { releases: await releaseRadar() };
+      else if (path === '/similar') out = { artists: await similarArtists(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '') };
+      else {
+        let body = ''; for await (const chunk of req) body += chunk;
+        const { album_id } = JSON.parse(body || '{}');
+        if (!album_id) throw new Error('album_id required');
+        out = await requestAlbum(album_id);
+      }
+      res.writeHead(200, { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify(out));
+    } catch (e) {
+      res.writeHead(503, { ...cors, 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: String(e.message || e) }));
+    }
+    return;
+  }
   if (url.pathname === '/browse' || url.pathname === '/relay/browse') {
     const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, X-Emby-Token, Content-Type', 'Access-Control-Allow-Methods': 'GET, OPTIONS' };
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }

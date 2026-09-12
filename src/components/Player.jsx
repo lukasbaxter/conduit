@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import DevicePicker from './DevicePicker.jsx';
-import { Heart, ShuffleGlyph } from './TrackRow.jsx';
+import { Heart, ShuffleGlyph, ArtistLinks } from './TrackRow.jsx';
 
 function fmt(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -98,10 +98,10 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
           <div className="player-meta">
             <div className="player-title">{nowPlaying?.title || 'Nothing playing'}</div>
             <div className="player-artist">
-              {nowPlaying?.artistId ? (
-                <button className="linkish" onClick={() => onOpenArtist(nowPlaying.artistId)}>
-                  {nowPlaying.artist}
-                </button>
+              {nowPlaying?.artists?.length ? (
+                <ArtistLinks artists={nowPlaying.artists} onOpen={onOpenArtist} className="linkish" />
+              ) : nowPlaying?.artistId ? (
+                <button className="linkish" onClick={() => onOpenArtist(nowPlaying.artistId)}>{nowPlaying.artist}</button>
               ) : (
                 nowPlaying?.artist || ''
               )}

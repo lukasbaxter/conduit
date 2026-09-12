@@ -3,7 +3,7 @@ import TrackRow, { PlayGlyph, PauseGlyph, Heart, ShuffleGlyph } from './TrackRow
 import ContextMenu from './ContextMenu.jsx';
 import { vibrantColor } from '../api/colors.js';
 import { QUALITIES, THEME_PRESETS, DEFAULT_THEME, themeEquals } from '../api/prefs.js';
-import { search as relaySearch, browse as relayBrowse } from '../api/search.js';
+import { search as relaySearch, browse as relayBrowse, discography as relayDiscography, similar as relaySimilar, requestAlbum as relayRequest, radar as relayRadar } from '../api/search.js';
 import Home from './Home.jsx';
 import FittedTitle from './FittedTitle.jsx';
 import VirtualList from './VirtualList.jsx';
@@ -132,6 +132,13 @@ export default function Library({
     if (!jf) return;
     relayBrowse(jf).then((t) => { setTiles(t); try { localStorage.setItem('conduit.browse', JSON.stringify(t)); } catch {} }).catch(() => {});
   }, [jf]);
+  const openRadar = async () => {
+    setDetail({ item: { Id: 'radar', Name: 'Release Radar', Type: 'Radar', _color: '#8d67ab' }, tracks: [], kind: 'Radar', releases: null });
+    try {
+      const r = await relayRadar(jf);
+      setDetail((d) => (d && d.item?.Id === 'radar' ? { ...d, releases: r.releases || [] } : d));
+    } catch (e) { setErr(e.message); setDetail((d) => (d && d.item?.Id === 'radar' ? { ...d, releases: [] } : d)); }
+  };
   const openBrowse = async (tile) => {
     setDetail({ item: { Id: `browse:${tile.id}`, Name: tile.name, Type: 'Browse', _color: tile.color, _filter: tile.filter }, tracks: [], kind: 'Browse', loading: true });
     try {
@@ -175,6 +182,28 @@ export default function Library({
     vibrantColor(jf.imageUrl(it.Id, { maxHeight: 120 })).then((rgb) => { if (alive) setVibrant((v) => ({ ...v, [it.Id]: rgb || null })); });
     return () => { alive = false; };
   }, [detail?.item?.Id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Artist page extras from the relay: the full Spotify discography flagged
+  // with what the library has (the rest is requestable) and similar artists.
+  const [discog, setDiscog] = useState({});
+  const [simil, setSimil] = useState({});
+  const [requesting, setRequesting] = useState({});
+  useEffect(() => {
+    const it = detail?.item;
+    if (!it || detail.kind !== 'Artist' || discog[it.Id] !== undefined) return;
+    let alive = true;
+    setDiscog((d) => ({ ...d, [it.Id]: null }));
+    relayDiscography(jf, it.Id, it.Name).then((r) => { if (alive) setDiscog((d) => ({ ...d, [it.Id]: r })); }).catch(() => { if (alive) setDiscog((d) => ({ ...d, [it.Id]: { releases: [] } })); });
+    relaySimilar(jf, it.Id, it.Name).then((r) => { if (alive) setSimil((d) => ({ ...d, [it.Id]: r.artists || [] })); }).catch(() => {});
+    return () => { alive = false; };
+  }, [detail?.item?.Id, detail?.kind]); // eslint-disable-line react-hooks/exhaustive-deps
+  const requestRelease = async (artistId, rel) => {
+    setRequesting((m) => ({ ...m, [rel.album_id]: 'queued' }));
+    try {
+      const r = await relayRequest(jf, rel.album_id);
+      setRequesting((m) => ({ ...m, [rel.album_id]: r.state || r.status || 'queued' }));
+      setDiscog((d) => { const cur = d[artistId]; if (!cur) return d; return { ...d, [artistId]: { ...cur, releases: cur.releases.map((x) => (x.album_id === rel.album_id ? { ...x, requestStatus: r.state || 'queued' } : x)) } }; });
+    } catch (e) { setRequesting((m) => ({ ...m, [rel.album_id]: 'error' })); setErr(e.message); }
+  };
   const headSentinelRef = useRef(null);
   const [headStuck, setHeadStuck] = useState(false);
   useEffect(() => {
@@ -185,6 +214,10 @@ export default function Library({
     return () => io.disconnect();
   }, [detail?.item?.Id, detail?.tracks?.length]);
   const [editPl, setEditPl] = useState(null); // { name, file, preview }
+  // Scrobbling form is edited locally and saved with a button (a token typed
+  // character by character should not be saved 36 times).
+  const [lbDraft, setLbDraft] = useState(null); // { user, token } while editing
+  const [lbSaved, setLbSaved] = useState(false);
   useEffect(() => {
     const h = () => { const it = detail?.item; if (it && detail.kind === 'Playlist' && it.Id !== LIKED_ID) setEditPl({ name: it.Name, file: null, preview: null }); };
     window.addEventListener('conduit:editdetails', h);
@@ -323,6 +356,47 @@ export default function Library({
       },
     } : {});
 
+    if (kind === 'Radar') {
+      const rels = detail.releases;
+      return (
+        <div className="content" style={{ '--hero': item._color }}>
+          <header className="hero tinted browse-hero">
+            <div style={{ minWidth: 0 }}>
+              <div className="kind">Made for you</div>
+              <FittedTitle text="Release Radar" maxLines={2} />
+              <p className="hero-meta">{rels == null ? 'Checking the last 90 days for the artists you play most…' : `${rels.length} new releases from the artists you play most · last 90 days`}</p>
+            </div>
+          </header>
+          <div className="actions slim" />
+          <div className="pad">
+            {rels && rels.length === 0 && <p className="placeholder-note">Nothing new from your top artists in the last 90 days.</p>}
+            {rels && rels.length > 0 && (
+              <div className="grid">
+                {rels.map((r) => r.inLibrary ? (
+                  <Card key={r.album_id} title={r.title} subtitle={`${r.artistName} · ${r.date}`} image={jf.imageUrl(r.inLibrary, { maxHeight: 320 })}
+                    onOpen={() => openAlbum({ Id: r.inLibrary, Name: r.title })} onPlay={() => playItem({ Id: r.inLibrary, Type: 'MusicAlbum' })} />
+                ) : (
+                  <div key={r.album_id} className="card missing">
+                    <div className="card-art">
+                      {r.image ? <img src={r.image} alt="" loading="lazy" /> : <div className="ph" />}
+                      {(() => {
+                        const st = requesting[r.album_id] || r.requestStatus;
+                        const busy = ['queued', 'exists', 'downloading', 'done'].includes(st);
+                        const label = st === 'queued' || st === 'exists' ? 'Requested' : st === 'downloading' ? 'Downloading…' : st === 'done' ? 'Added' : st === 'failed' ? 'Retry request' : 'Request';
+                        return <button className={`card-request ${busy ? 'busy' : ''}`} disabled={busy} onClick={() => requestRelease(r.artistId, r)}>{label}</button>;
+                      })()}
+                    </div>
+                    <div className="card-title">{r.title}</div>
+                    <div className="card-sub"><button className="rowlink" onClick={() => onOpenArtistById(r.artistId)}>{r.artistName}</button> · {r.rtype} · {r.date}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     if (kind === 'Browse') {
       const byAlbum = new Map();
       for (const t of tracks) if (t.AlbumId && !byAlbum.has(t.AlbumId)) byAlbum.set(t.AlbumId, { Id: t.AlbumId, Name: t.Album, AlbumArtist: t.AlbumArtist || (t.Artists || [])[0] });
@@ -405,15 +479,28 @@ export default function Library({
                 Every song you play for at least half its length is sent to <a href="https://listenbrainz.org" target="_blank" rel="noreferrer">ListenBrainz</a> as a listen.
                 That history powers the Weekly Exploration / Daily Jams playlists (Explo) on Home. Get the token from listenbrainz.org → Settings.
               </div>
-              <div className="settings-field">
-                <label>ListenBrainz username</label>
-                <input className="settings-input" value={prefs?.listenbrainz?.user || ''} onChange={(e) => onUpdatePrefs({ listenbrainz: { ...(prefs?.listenbrainz || {}), user: e.target.value.trim() } })} spellCheck="false" placeholder="username" />
-              </div>
-              <div className="settings-field" style={{ marginTop: 10 }}>
-                <label>ListenBrainz user token</label>
-                <input className="settings-input" type="password" value={prefs?.listenbrainz?.token || ''} onChange={(e) => onUpdatePrefs({ listenbrainz: { ...(prefs?.listenbrainz || {}), token: e.target.value.trim() } })} spellCheck="false" placeholder="xxxxxxxx-xxxx-…" />
-                <div className="settings-hint">{prefs?.listenbrainz?.token ? 'Scrobbling is on.' : 'Scrobbling is off until a token is set.'}</div>
-              </div>
+              {(() => {
+                const cur = prefs?.listenbrainz || {};
+                const d = lbDraft || { user: cur.user || '', token: cur.token || '' };
+                const dirty = d.user !== (cur.user || '') || d.token !== (cur.token || '');
+                return (
+                  <form className="lb-form" onSubmit={async (e) => { e.preventDefault(); await onUpdatePrefs({ listenbrainz: { user: d.user.trim(), token: d.token.trim() } }); setLbDraft(null); setLbSaved(true); setTimeout(() => setLbSaved(false), 2500); }}>
+                    <div className="settings-field">
+                      <label>ListenBrainz username</label>
+                      <input className="settings-input" value={d.user} onChange={(e) => setLbDraft({ ...d, user: e.target.value })} spellCheck="false" placeholder="username" />
+                    </div>
+                    <div className="settings-field" style={{ marginTop: 10 }}>
+                      <label>ListenBrainz user token</label>
+                      <input className="settings-input" type="password" value={d.token} onChange={(e) => setLbDraft({ ...d, token: e.target.value })} spellCheck="false" placeholder="xxxxxxxx-xxxx-…" />
+                    </div>
+                    <div className="settings-actions">
+                      <button type="submit" className="primary" disabled={!dirty}>{lbSaved ? 'Saved' : 'Save'}</button>
+                      {cur.token && <button type="button" className="btn-secondary" onClick={async () => { await onUpdatePrefs({ listenbrainz: { user: '', token: '' } }); setLbDraft(null); }}>Disconnect</button>}
+                      <span className="settings-hint" style={{ margin: 0 }}>{cur.token ? `Scrobbling as ${cur.user || 'your account'}.` : 'Scrobbling is off until a token is saved.'}</span>
+                    </div>
+                  </form>
+                );
+              })()}
             </section>
 
             <section className="settings-section">
@@ -653,26 +740,39 @@ export default function Library({
                 </button>
               )}
             </section>
-            {detail.albums?.length > 0 && (() => {
-              const typed = detail.albums.map((a) => ({ a, type: releaseType(a) }));
-              const counts = typed.reduce((m, { type }) => ({ ...m, [type]: (m[type] || 0) + 1 }), {});
+            {(() => {
+              const dg = discog[item.Id];
+              const rels = dg?.releases || [];
+              // Library albums Jellyfin knows but the discography call has not (yet) covered.
+              const libOnly = (detail.albums || []).filter((a) => !rels.some((r) => r.inLibrary === a.Id));
+              const all = [
+                ...rels.map((r) => ({ key: r.inLibrary || r.album_id || r.title, r, type: r.rtype || 'Album', year: r.year, inLib: r.inLibrary })),
+                ...libOnly.map((a) => ({ key: a.Id, r: { title: a.Name, inLibrary: a.Id, image: null }, type: releaseType(a), year: a.ProductionYear ? String(a.ProductionYear) : '', inLib: a.Id })),
+              ];
+              if (!all.length && dg !== null) return null;
+              const counts = all.reduce((m, x) => ({ ...m, [x.type]: (m[x.type] || 0) + 1 }), {});
               const pills = [
-                ['all', 'Popular releases'],
+                ['all', 'All'],
                 counts.Album ? ['album', 'Albums'] : null,
                 (counts.Single || counts.EP) ? ['single', 'Singles and EPs'] : null,
                 counts.Compilation ? ['compilation', 'Compilations'] : null,
+                all.some((x) => !x.inLib) ? ['missing', 'Not in library'] : null,
               ].filter(Boolean);
-              const shown = typed.filter(({ type }) =>
+              // What you own comes first (newest first), then the requestable rest.
+              const shown = all.filter((x) =>
                 discoFilter === 'all' ? true
-                  : discoFilter === 'album' ? type === 'Album'
-                  : discoFilter === 'single' ? (type === 'Single' || type === 'EP')
-                  : type === 'Compilation');
+                  : discoFilter === 'album' ? x.type === 'Album'
+                  : discoFilter === 'single' ? (x.type === 'Single' || x.type === 'EP')
+                  : discoFilter === 'missing' ? !x.inLib
+                  : x.type === 'Compilation')
+                .sort((a, b) => (Boolean(b.inLib) - Boolean(a.inLib)) || String(b.r.date || b.year || '').localeCompare(String(a.r.date || a.year || '')));
+              const have = all.filter((x) => x.inLib).length;
               return (
                 <section>
-                  <div className="shelf-head"><h2>Discography</h2></div>
-                  {/* Spotify's artist page splits releases by kind. Jellyfin has no
-                      release type, so it is read off the track count (<=3 single,
-                      <=6 EP) and the title (" - EP", "(Remixes)"). */}
+                  <div className="shelf-head">
+                    <h2>Discography</h2>
+                    {dg === null ? <span className="settings-hint">Loading…</span> : all.length ? <span className="settings-hint">{have} of {all.length} in your library</span> : null}
+                  </div>
                   {pills.length > 2 && (
                     <div className="pills" style={{ marginBottom: 16 }}>
                       {pills.map(([k, label]) => (
@@ -681,22 +781,48 @@ export default function Library({
                     </div>
                   )}
                   <div className="grid">
-                    {shown.map(({ a, type }) => (
-                      <Card key={a.Id} title={a.Name} subtitle={a.ProductionYear ? `${a.ProductionYear} · ${type}` : type}
-                        image={jf.imageUrl(a.Id, { maxHeight: 320 })} onOpen={() => openAlbum(a)} onPlay={() => playItem(a)} />
+                    {shown.map(({ key, r, type, year, inLib }) => inLib ? (
+                      <Card key={key} title={r.localName || r.title} subtitle={year ? `${year} · ${type}` : type}
+                        image={jf.imageUrl(inLib, { maxHeight: 320 })} onOpen={() => openAlbum({ Id: inLib, Name: r.localName || r.title })} onPlay={() => playItem({ Id: inLib, Type: 'MusicAlbum' })} />
+                    ) : (
+                      <div key={key} className="card missing" role="group">
+                        <div className="card-art">
+                          {r.image ? <img src={r.image} alt="" loading="lazy" /> : <div className="ph" />}
+                          {(() => {
+                            const st = requesting[r.album_id] || r.requestStatus;
+                            const label = st === 'queued' || st === 'exists' ? 'Requested' : st === 'downloading' ? 'Downloading…' : st === 'done' ? 'Added' : st === 'failed' ? 'Retry request' : st === 'error' ? 'Failed' : 'Request';
+                            const busy = st === 'queued' || st === 'exists' || st === 'downloading' || st === 'done';
+                            return (
+                              <button className={`card-request ${busy ? 'busy' : ''}`} disabled={busy || !r.album_id} onClick={(e) => { e.stopPropagation(); requestRelease(item.Id, r); }} title="Download this release into your library">
+                                {label}
+                              </button>
+                            );
+                          })()}
+                        </div>
+                        <div className="card-title">{r.title}</div>
+                        <div className="card-sub">{year ? `${year} · ${type}` : type}{r.total_tracks ? ` · ${r.total_tracks} tracks` : ''}</div>
+                      </div>
                     ))}
                   </div>
                 </section>
               );
             })()}
-            <section>
-              <div className="shelf-head"><h2>Fans also like</h2></div>
-              <p className="placeholder-note">Similar artists need a metadata provider. Not wired up yet.</p>
-            </section>
-            <section>
-              <div className="shelf-head"><h2>About</h2></div>
-              <p className="placeholder-note">{item.Overview || 'No biography yet. These arrive with artist metadata.'}</p>
-            </section>
+            {(simil[item.Id] || []).length > 0 && (
+              <section>
+                <div className="shelf-head"><h2>Fans also like</h2></div>
+                <div className="shelf">
+                  {simil[item.Id].map((a) => (
+                    <Card key={a.id} title={a.name} subtitle="Artist" round image={jf.imageUrl(a.id, { maxHeight: 320 })} onOpen={() => onOpenArtistById(a.id)} onPlay={() => startMix({ Id: a.id })} />
+                  ))}
+                </div>
+              </section>
+            )}
+            {item.Overview && (
+              <section>
+                <div className="shelf-head"><h2>About</h2></div>
+                <p className="placeholder-note">{item.Overview}</p>
+              </section>
+            )}
           </div>
         ) : (
           <div className="tracklist">
@@ -951,6 +1077,8 @@ export default function Library({
       onOpen={open} onOpenLiked={onOpenLiked} onOpenPlaylist={onOpenPlaylist}
       onSeeAll={setSeeAll}
       bar={<FilterPills where="all" setSeeAll={setSeeAll} goHome={() => onView('home')} />}
+      onOpenArtist={onOpenArtistById}
+      onOpenRadar={openRadar}
     />
   );
 }

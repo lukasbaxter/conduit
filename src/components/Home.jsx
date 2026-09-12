@@ -87,14 +87,32 @@ function Card({ title, subtitle, image, round, onOpen, onPlay }) {
  * mixes are. Discover Weekly and Release Radar need listening data we do not
  * have and are labelled placeholders.
  */
-export default function Home({ jf, player, albums, artists, playlists, onOpen, onOpenLiked, onOpenPlaylist, onSeeAll, likedCount, bar }) {
-  const [recent, setRecent] = useState([]);
-  const [added, setAdded] = useState([]);
+export default function Home({ jf, player, albums, artists, playlists, onOpen, onOpenLiked, onOpenPlaylist, onSeeAll, likedCount, bar, onOpenArtist, onOpenRadar }) {
+  const [recent, setRecent] = useState(() => jf?.persisted('home.recent') || []);
+  const [added, setAdded] = useState(() => jf?.persisted('home.added') || []);
+  const [topArtists, setTopArtists] = useState(() => jf?.persisted('home.topArtists') || []);
+  const [recentArtists, setRecentArtists] = useState(() => jf?.persisted('home.recentArtists') || []);
 
+  // All of this is the account's real history (Jellyfin play counts and last
+  // played dates), nothing sampled from the library.
   useEffect(() => {
     if (!jf) return;
-    jf.recentlyPlayedAlbums({ limit: 8 }).then((r) => setRecent(r.items)).catch(() => {});
-    jf.recentlyAddedAlbums({ limit: 8 }).then((r) => setAdded(r.items)).catch(() => {});
+    jf.recentlyPlayedAlbums({ limit: 8 }).then((r) => { setRecent(r.items); jf._persist('home.recent', r.items); }).catch(() => {});
+    jf.recentlyAddedAlbums({ limit: 8 }).then((r) => { setAdded(r.items); jf._persist('home.added', r.items); }).catch(() => {});
+    jf.topTracks({ limit: 200 }).then((top) => {
+      const score = new Map(), last = new Map();
+      for (const t of top) {
+        for (const a of t.ArtistItems || []) {
+          score.set(a.Id, { Id: a.Id, Name: a.Name, n: (score.get(a.Id)?.n || 0) + 1 + (t.UserData?.PlayCount || 0) });
+          const lp = t.UserData?.LastPlayedDate || '';
+          if (lp > (last.get(a.Id)?.lp || '')) last.set(a.Id, { Id: a.Id, Name: a.Name, lp });
+        }
+      }
+      const ta = [...score.values()].sort((a, b) => b.n - a.n).slice(0, 12);
+      const ra = [...last.values()].sort((a, b) => b.lp.localeCompare(a.lp)).slice(0, 8);
+      setTopArtists(ta); jf._persist('home.topArtists', ta);
+      setRecentArtists(ra); jf._persist('home.recentArtists', ra);
+    }).catch(() => {});
   }, [jf]);
 
   const playAlbum = async (a) => {
@@ -123,7 +141,8 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
     return out;
   }, [recent, playlists, albums]);
 
-  const mixSeeds = artists.slice(0, 6);
+  // Daily Mixes are seeded from the artists you actually play most.
+  const mixSeeds = (topArtists.length ? topArtists : artists).slice(0, 6);
   // Explo (ListenBrainz) playlists land in Jellyfin as Weekly-Exploration-…,
   // Weekly-Jams-…, Daily-Jams-…; the newest of each becomes a tile here.
   const explo = useMemo(() => {
@@ -134,7 +153,6 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
       { key: 'dj', label: 'Daily Jams', sub: 'A fresh mix every day.', color: '#e8115b', pl: pick(/^Daily.?Jams/i) },
     ];
   }, [playlists]);
-  const jump = useMemo(() => [...albums].sort(() => Math.random() - 0.5).slice(0, 8), [albums.length]); // eslint-disable-line
 
   return (
     <div className="content">
@@ -164,10 +182,9 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
           {explo.map((e) => e.pl ? (
             <MixTile key={e.key} label={e.label} sub={e.sub} color={e.color} image={jf.imageUrl(e.pl.Id, { maxHeight: 320 })}
               onOpen={() => onOpenPlaylist(e.pl)} onPlay={() => playPlaylist(e.pl)} />
-          ) : e.key === 'dw' ? (
-            <MixTile key={e.key} label={e.label} sub="Arrives once ListenBrainz has your listening history (Settings → Scrobbling)." color={e.color} placeholder />
           ) : null)}
-          <MixTile label="Release Radar" sub="New releases from artists you follow. Needs a release feed." color="#8d67ab" placeholder />
+          <MixTile label="Release Radar" sub="New releases from the artists you play most." color="#8d67ab"
+            image={topArtists[0] ? jf.imageUrl(topArtists[0].Id, { maxHeight: 320 }) : null} onOpen={onOpenRadar} onPlay={onOpenRadar} />
         </Shelf>
 
         {recent.length > 0 && (
@@ -179,15 +196,17 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
           </Shelf>
         )}
 
-        <Shelf title="Jump back in" onSeeAll={() => onSeeAll('albums')}>
-          {jump.map((a) => (
-            <Card key={a.Id} title={a.Name} subtitle={a.AlbumArtist || 'Album'} image={jf.imageUrl(a.Id, { maxHeight: 320 })}
-              onOpen={() => onOpen(a)} onPlay={() => playAlbum(a)} />
-          ))}
-        </Shelf>
+        {recentArtists.length > 0 && (
+          <Shelf title="Jump back in" onSeeAll={() => onSeeAll('artists')}>
+            {recentArtists.map((a) => (
+              <Card key={a.Id} title={a.Name} subtitle="Artist" round image={jf.imageUrl(a.Id, { maxHeight: 320 })}
+                onOpen={() => onOpenArtist(a.Id)} onPlay={() => playMix(a)} />
+            ))}
+          </Shelf>
+        )}
 
         {added.length > 0 && (
-          <Shelf title="New releases for you" onSeeAll={() => onSeeAll('albums')}>
+          <Shelf title="Recently added" onSeeAll={() => onSeeAll('albums')}>
             {added.map((a) => (
               <Card key={a.Id} title={a.Name} subtitle={a.AlbumArtist || 'Album'} image={jf.imageUrl(a.Id, { maxHeight: 320 })}
                 onOpen={() => onOpen(a)} onPlay={() => playAlbum(a)} />
@@ -195,12 +214,14 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
           </Shelf>
         )}
 
-        <Shelf title="Your top artists" onSeeAll={() => onSeeAll('artists')}>
-          {artists.slice(0, 8).map((a) => (
-            <Card key={a.Id} title={a.Name} subtitle="Artist" round image={jf.imageUrl(a.Id, { maxHeight: 320 })}
-              onOpen={() => onOpen(a)} onPlay={() => playMix(a)} />
-          ))}
-        </Shelf>
+        {topArtists.length > 0 && (
+          <Shelf title="Your top artists" onSeeAll={() => onSeeAll('artists')}>
+            {topArtists.slice(0, 8).map((a) => (
+              <Card key={a.Id} title={a.Name} subtitle="Artist" round image={jf.imageUrl(a.Id, { maxHeight: 320 })}
+                onOpen={() => onOpenArtist(a.Id)} onPlay={() => playMix(a)} />
+            ))}
+          </Shelf>
+        )}
       </div>
     </div>
   );

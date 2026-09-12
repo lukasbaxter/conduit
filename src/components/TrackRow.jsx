@@ -20,6 +20,23 @@ export const ShuffleGlyph = ({ size = 16 }) => (
     <path d="m7.5 10.723.98-1.167.957 1.14a2.25 2.25 0 0 0 1.724.804h1.947l-1.017-1.018a.75.75 0 1 1 1.06-1.06l2.829 2.828-2.829 2.828a.75.75 0 1 1-1.06-1.06L13.109 13H11.16a3.75 3.75 0 0 1-2.873-1.34l-.787-.938z" />
   </svg>
 );
+// "A, B, C" where each name is its own link (footer, now-playing view, rows).
+export function ArtistLinks({ artists, fallback = '', onOpen, className = 'rowlink' }) {
+  const list = (artists || []).filter((a) => a && a.Name);
+  if (!list.length) return <>{fallback}</>;
+  return (
+    <>
+      {list.map((a, i) => (
+        <React.Fragment key={a.Id || a.Name}>
+          {a.Id && onOpen ? (
+            <button className={className} onClick={(e) => { e.stopPropagation(); onOpen(a.Id); }}>{a.Name}</button>
+          ) : a.Name}
+          {i < list.length - 1 ? ', ' : ''}
+        </React.Fragment>
+      ))}
+    </>
+  );
+}
 // Spotify's subtle "now playing" mark: three animated bars in the index column.
 export const NowPlayingBars = () => (
   <span className="npbars" aria-label="Now playing"><i /><i /><i /></span>
