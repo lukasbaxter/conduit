@@ -47,13 +47,15 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike }
         <div className="fs-from">{nowPlaying?.device?.name ? `Playing on ${nowPlaying.device.name}` : ''}</div>
         <div className="fs-tabs">
           {[['album', 'Album'], ['viz', 'Visualizer'], ['lyrics', 'Lyrics']].map(([k, label]) => (
-            <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>
+            <span key={k} className={`fs-tab ${tab === k ? 'on' : ''}`}>
+              <button onClick={() => setTab(k)}>{label}</button>
+              {k === 'viz' && tab === 'viz' && (
+                <button className="fs-kebab" title="Visualizer settings" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setVizMenu({ x: r.left - 8, y: r.bottom + 8 }); }}>
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 3a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm0 6.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM8 16a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" /></svg>
+                </button>
+              )}
+            </span>
           ))}
-          {tab === 'viz' && (
-            <button className="fs-tabmore" title="Visualizer settings" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setVizMenu({ x: r.left, y: r.bottom + 6 }); }}>
-              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M3 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm6.5 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM16 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" /></svg>
-            </button>
-          )}
           {vizMenu && <ContextMenu x={vizMenu.x} y={vizMenu.y} items={vizItems} onClose={() => setVizMenu(null)} />}
         </div>
         <button className="fs-close" onClick={onClose} title="Exit full screen">
