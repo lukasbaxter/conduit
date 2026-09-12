@@ -8,6 +8,9 @@ services:
     environment:
       - PORT=8788
       - JELLYFIN_URL=http://192.168.1.85:2101
+      - SESSIONS_FILE=/data/sessions.json
+    volumes:
+      - ./data:/data
     networks:
       - docker_internal
 networks:

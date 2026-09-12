@@ -297,9 +297,18 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
   background: var(--bg-elevated-hi); border-radius: var(--r-art); padding: 4px;
   box-shadow: 0 16px 24px rgba(0,0,0,.3), 0 6px 8px rgba(0,0,0,.2);
 }
+/* Portal version: fixed on screen, kept inside the viewport by ContextMenu. */
+.ctxmenu-fixed { position: fixed; right: auto; top: auto; z-index: 120; min-width: 240px; max-width: 320px; max-height: min(70vh, 560px); }
+.ctxmenu-sub { min-width: 200px; }
 .ctxmenu button { display: block; width: 100%; text-align: left; padding: 10px 12px; border-radius: 2px; font-size: 14px; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ctxmenu button:hover { background: var(--tint-hi); }
+.ctxmenu button:hover, .ctxmenu button.open { background: var(--tint-hi); }
 .ctxmenu button.danger { color: var(--danger); }
+.ctxmenu button:disabled { opacity: .4; }
+.ctxmenu .ctxitem { display: flex; align-items: center; gap: 12px; padding: 9px 10px 9px 8px; }
+.ctxmenu .ctx-ico { width: 16px; height: 16px; display: grid; place-items: center; color: var(--fg-dim); flex: 0 0 16px; }
+.ctxmenu .ctxitem:hover .ctx-ico { color: var(--fg); }
+.ctxmenu .ctx-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.ctxmenu .ctx-chev { color: var(--fg-dim); flex: 0 0 14px; }
 .ctxmenu-label { padding: 8px 12px 4px; font-size: 12px; color: var(--fg-dim); font-weight: 700; }
 .ctxmenu-sep { height: 1px; background: #3d3c3c; margin: 4px 0; }
 
@@ -591,3 +600,13 @@ input[type="range"]:disabled { opacity: .4; }
   background: var(--accent); color: #000; font-size: 11px; font-weight: 700;
   padding: 3px 12px; margin: 0 -8px -8px; /* span full width past the app's side padding */
 }
+
+/* Small centred dialog (playlist name). */
+.modal-back { position: fixed; inset: 0; z-index: 130; background: rgba(0,0,0,.6); display: grid; place-items: center; }
+.modal { background: var(--bg-elevated-hi); border-radius: 8px; padding: 24px; width: min(420px, calc(100vw - 32px)); display: grid; gap: 16px; box-shadow: 0 16px 24px rgba(0,0,0,.3); }
+.modal h3 { margin: 0; font-size: 20px; }
+.modal input { width: 100%; padding: 12px 14px; border-radius: 4px; border: 1px solid #555; background: #1f1f1f; color: var(--fg); font-size: 15px; }
+.modal input:focus { outline: none; border-color: var(--fg); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.modal-actions .primary { background: var(--fg); color: #000; border-radius: 500px; padding: 10px 24px; font-weight: 700; }
+.modal-actions .primary:disabled { opacity: .4; }

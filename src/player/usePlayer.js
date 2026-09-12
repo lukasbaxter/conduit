@@ -188,6 +188,43 @@ export function usePlayer(jf) {
     remoteQueuesRef.current = next; setRemoteQueues(next);
   }, []);
 
+  // The relay's memory of the account's last playback, sent when nobody is
+  // actively playing (on connect, or when the active player just went away).
+  // Adopt it, paused where it was, unless this client is mid-playback itself or
+  // its own remembered playhead is newer. Whatever you left on any device is
+  // what every device opens on; "Nothing playing" never happens.
+  const applySession = useCallback((s) => {
+    const np = s?.nowPlaying;
+    if (!np?.itemId) return;
+    if (queueRef.current.length && (anchorRef.current.playing || loadedRef.current)) return;
+    const mine = (jf && jf.persisted('playhead')) || {};
+    if (queueRef.current.length && (mine.at || 0) >= (s.at || 0)) return;
+    let q = Array.isArray(s.queue) && s.queue.length ? s.queue : [];
+    let i = q.findIndex((t) => t?.Id === np.itemId);
+    if (i < 0) {
+      // No queue survived (or it does not contain the track): show the track alone.
+      q = [{ Id: np.itemId, Name: np.title, Artists: np.artist ? [np.artist] : [], AlbumId: np.albumId || null,
+             ArtistItems: np.artistId ? [{ Id: np.artistId, Name: np.artist }] : [], UserData: { IsFavorite: Boolean(np.liked) },
+             RunTimeTicks: Math.round((np.duration || 0) * 10_000_000), _partial: true }];
+      i = 0;
+    }
+    setQueue(q); queueRef.current = q;
+    setIndex(i); indexRef.current = i;
+    originalQueueRef.current = q;
+    if (['off', 'all', 'one'].includes(np.repeat)) { repeatRef.current = np.repeat; setRepeat(np.repeat); }
+    if (['off', 'on', 'smart'].includes(np.shuffle)) { shuffleRef.current = np.shuffle; setShuffle(np.shuffle); }
+    const dur = np.duration || ticksToSeconds(q[i].RunTimeTicks);
+    setDuration(dur);
+    // The session was live when the relay last heard it; it is not playing
+    // any more (its player is gone), so freeze the playhead where it got to.
+    let pos = np.position || 0;
+    if (np.playing && np.at) pos += (Math.min(Date.now(), (s.at || Date.now())) - np.at) / 1000;
+    anchorAt(Math.max(0, Math.min(pos, dur || pos)), false);
+    loadedRef.current = null;
+    setPlaying(false);
+    restoredRef.current = true;
+  }, [jf, anchorAt]);
+
   // The speakers THIS client can drive itself (desktop mDNS list), so a
   // transfer command naming a device id can be resolved to a real device.
   const localDevicesRef = useRef([]);
@@ -349,6 +386,32 @@ export function usePlayer(jf) {
     [anchorAt, startOn]
   );
 
+  // "Add to queue": append to the session's queue. Routed to the active player
+  // while mirroring, like every other queue change. With nothing playing here
+  // the tracks become the queue, shown paused.
+  const addToQueue = useCallback((tracks) => {
+    if (!tracks?.length) return;
+    const act = activePlayerRef.current;
+    if (act && relayRef.current) {
+      relayRef.current.command(act, { action: 'enqueue', trackIds: tracks.map((t) => t.Id) });
+      return;
+    }
+    const q = queueRef.current;
+    if (!q.length) {
+      setQueue(tracks); queueRef.current = tracks;
+      setIndex(0); indexRef.current = 0;
+      originalQueueRef.current = tracks;
+      setDuration(ticksToSeconds(tracks[0]?.RunTimeTicks));
+      anchorAt(0, false); setPlaying(false);
+      return;
+    }
+    const next = [...q, ...tracks];
+    setQueue(next); queueRef.current = next;
+    originalQueueRef.current = [...originalQueueRef.current, ...tracks];
+  }, [anchorAt]);
+  const addToQueueRef = useRef(addToQueue);
+  useEffect(() => { addToQueueRef.current = addToQueue; }, [addToQueue]);
+
   const skipTo = useCallback(
     async (nextIndex) => {
       const act = activePlayerRef.current;
@@ -389,8 +452,10 @@ export function usePlayer(jf) {
       const q = new URLSearchParams({ userId: jf.userId, Limit: '25', Fields: 'ArtistItems,AlbumArtists,UserData' });
       const data = await jf._fetch(`/Items/${cur.Id}/InstantMix?${q}`);
       const have = new Set(queueRef.current.map((t) => t.Id));
-      let pick = (data.Items || []).filter((t) => !have.has(t.Id));
-      if (!pick.length) pick = (data.Items || []).filter((t) => t.Id !== cur.Id);
+      // Never a track the user excluded from their taste profile.
+      const fresh = (data.Items || []).filter((t) => t.UserData?.Likes !== false);
+      let pick = fresh.filter((t) => !have.has(t.Id));
+      if (!pick.length) pick = fresh.filter((t) => t.Id !== cur.Id);
       if (!pick.length) return skipTo(queueRef.current.length);
       const merged = [...queueRef.current, ...pick];
       setQueue(merged); queueRef.current = merged;
@@ -898,7 +963,21 @@ export function usePlayer(jf) {
     restoredRef.current = true;
     if (queueRef.current.length) return; // something already started (e.g. a transfer)
     const saved = jf.persisted('playback');
-    if (!saved || !Array.isArray(saved.queue) || !saved.queue.length) return;
+    if (!saved || !Array.isArray(saved.queue) || !saved.queue.length) {
+      // Fresh install: nothing remembered here. Jellyfin still knows the last
+      // track this account played; show that, paused at the start. A relay
+      // session (newer, with a real playhead) replaces it when it arrives.
+      jf.lastPlayedTrack().then((t) => {
+        if (!t || queueRef.current.length) return;
+        setQueue([t]); queueRef.current = [t];
+        setIndex(0); indexRef.current = 0;
+        originalQueueRef.current = [t];
+        setDuration(ticksToSeconds(t.RunTimeTicks));
+        anchorAt(0, false);
+        setPlaying(false);
+      }).catch(() => {});
+      return;
+    }
     const head = jf.persisted('playhead') || {};
     // Prefer the track id over the index: a fallback save may have kept only
     // the current track, in which case the index no longer applies.
@@ -950,7 +1029,7 @@ export function usePlayer(jf) {
     try {
       localStorage.setItem(`${jf._lsPrefix}playhead`, JSON.stringify({
         trackId: q[i].Id, index: i, position: Math.max(0, pos),
-        repeat: repeatRef.current, shuffle: shuffleRef.current,
+        repeat: repeatRef.current, shuffle: shuffleRef.current, at: Date.now(),
       }));
     } catch { /* ignore */ }
   }, [jf]);
@@ -1104,6 +1183,11 @@ export function usePlayer(jf) {
         const tracks = await fetchByIds(jf, cmd.trackIds, 'ArtistItems,AlbumArtists,UserData');
         if (tracks.length) playQueueRef.current(tracks, Math.min(cmd.index || 0, tracks.length - 1), cmd.ctx || null);
       } catch { /* ignore */ }
+    } else if (cmd.action === 'enqueue' && jf && Array.isArray(cmd.trackIds) && cmd.trackIds.length) {
+      (async () => {
+        const tracks = await fetchByIds(jf, cmd.trackIds, 'ArtistItems,AlbumArtists,UserData');
+        if (tracks.length) addToQueueRef.current(tracks);
+      })().catch(() => {});
     } else if (cmd.action === 'skipTo') { skipToRef.current(cmd.index | 0); }
     else if (cmd.action === 'toggle') { toggleRef.current(); }
     else if (cmd.action === 'seek') { seekRef.current(cmd.pos || 0); }
@@ -1220,17 +1304,17 @@ export function usePlayer(jf) {
 
   return useMemo(
     () => ({
-      device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId,
+      device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId, addToQueue,
       relayDevices, lanDevices, registerDevices, attachRelay, applyRoster, executeCommand, roster, relay: relayInstance,
-      queue: shownQueue, index: shownIndex, current, applyRemoteQueue,
+      queue: shownQueue, index: shownIndex, current, applyRemoteQueue, applySession,
       playing: shownPlaying, position: shownPosition, duration: shownDuration, volume: shownVolume, error,
       repeat: shownRepeat, shuffle: shownShuffle, cycleRepeat, cycleShuffle,
       playQueue, toggle, next, previous, seek, setVolume, skipTo,
       clearError: () => setError(null),
     }),
     // eslint-disable-next-line
-    [device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId,
-     relayDevices, lanDevices, registerDevices, attachRelay, applyRoster, executeCommand, roster, relayInstance, shownQueue, shownIndex, current, applyRemoteQueue,
+    [device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId, addToQueue,
+     relayDevices, lanDevices, registerDevices, attachRelay, applyRoster, executeCommand, roster, relayInstance, shownQueue, shownIndex, current, applyRemoteQueue, applySession,
      shownPlaying, shownPosition, shownDuration, shownVolume, error, shownRepeat, shownShuffle,
      cycleRepeat, cycleShuffle, playQueue, toggle, next,
      previous, seek, setVolume, skipTo]

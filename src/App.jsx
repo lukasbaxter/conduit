@@ -6,6 +6,7 @@ import Sidebar from './components/Sidebar.jsx';
 import Library, { LIKED_ID } from './components/Library.jsx';
 import Player, { PlayingElsewhereBar } from './components/Player.jsx';
 import RightPanel from './components/RightPanel.jsx';
+import { downloadTrack } from './api/download.js';
 
 // In Electron (desktop) we talk to Jellyfin on the LAN directly. In a browser
 // (the PWA at music.baxtergroup.io) we go same-origin through the nginx proxy,
@@ -83,6 +84,10 @@ export default function App() {
   const [me, setMe] = useState(null);
   const [avatarOk, setAvatarOk] = useState(true);
   const [userMenu, setUserMenu] = useState(false);
+  // "New playlist" dialog: {track} while open. window.prompt() does not exist
+  // in Electron, which is why creating a playlist from a row did nothing there.
+  const [namePrompt, setNamePrompt] = useState(null);
+  const [nameDraft, setNameDraft] = useState('');
 
   // Left rail width. Spotify: drag the gap; below a threshold it snaps to an
   // icon-only rail; the chosen width survives restarts.
@@ -199,6 +204,7 @@ export default function App() {
       onRoster: (r) => player.applyRoster(r),
       onCommand: (cmd) => player.executeCommand(cmd),
       onQueue: (from, q) => player.applyRemoteQueue(from, q),
+      onSession: (s) => player.applySession(s),
     });
     player.attachRelay(relay);
     return () => { relay.close(); player.attachRelay(null); };
@@ -325,8 +331,32 @@ export default function App() {
   };
 
   const onNewPlaylistWithTrack = (track) => {
-    const name = window.prompt('New playlist name', track.Album || 'My Playlist');
-    if (name && name.trim()) onCreatePlaylist(name.trim(), track);
+    setNameDraft(track.Album || 'My Playlist');
+    setNamePrompt({ track });
+  };
+  const submitNamePrompt = (e) => {
+    e?.preventDefault?.();
+    const name = nameDraft.trim();
+    const track = namePrompt?.track;
+    setNamePrompt(null);
+    if (name) onCreatePlaylist(name, track || null);
+  };
+
+  // Thumbs-down in Jellyfin terms: instant mixes and smart shuffle skip it.
+  const onExclude = async (track, excluded) => {
+    const patch = (t) => t.Id === track.Id ? { ...t, UserData: { ...(t.UserData || {}), Likes: excluded ? false : null } } : t;
+    setDetail((d) => d ? { ...d, tracks: d.tracks.map(patch) } : d);
+    player.patchQueue?.(patch);
+    try {
+      await jf.setDislike(track.Id, excluded);
+      notify(excluded ? 'Excluded from your taste profile' : 'Included in your taste profile');
+    } catch (e) { notify(`Could not update: ${e.message}`); }
+  };
+
+  const onDownload = async (track, fmt) => {
+    notify(fmt === 'wav' ? 'Converting to WAV...' : 'Downloading...');
+    try { await downloadTrack(jf, track, fmt); }
+    catch (e) { notify(`Download failed: ${e.message}`); }
   };
 
   const onAddTo = async (pl, track) => {
@@ -449,6 +479,8 @@ export default function App() {
           likedCount={likedCount}
           onOpenArtistById={openArtistById}
           onOpenAlbumById={openAlbumById}
+          onExclude={onExclude}
+          onDownload={onDownload}
         />
         {panel && <div className="panel-spacer" />}
         {panel && (
@@ -474,6 +506,18 @@ pos=${Math.round(player.position)} playing=${player.playing} vol=${player.volume
         </div>
       )}
       {toast && <div className="toast">{toast}</div>}
+      {namePrompt && (
+        <div className="modal-back" onMouseDown={(e) => { if (e.target === e.currentTarget) setNamePrompt(null); }}>
+          <form className="modal" onSubmit={submitNamePrompt}>
+            <h3>New playlist</h3>
+            <input autoFocus value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} onFocus={(e) => e.target.select()} spellCheck="false" />
+            <div className="modal-actions">
+              <button type="button" className="btn-secondary" onClick={() => setNamePrompt(null)}>Cancel</button>
+              <button type="submit" className="primary" disabled={!nameDraft.trim()}>Create</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       <Player
         player={player}

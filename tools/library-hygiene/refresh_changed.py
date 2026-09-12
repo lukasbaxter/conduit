@@ -21,10 +21,10 @@ u = user_id()
 by_path = {}
 start = 0
 while True:
-    d = req(f'/Items?userId={u}&IncludeItemTypes=Audio&Recursive=true&Fields=Path&Limit=5000&StartIndex={start}')
+    d = req(f'/Items?userId={u}&IncludeItemTypes=Audio&Recursive=true&Fields=Path&Limit=2000&StartIndex={start}', timeout=600)
     for it in d['Items']:
         by_path[it.get('Path')] = (it['Id'], it.get('AlbumId'))
-    start += 5000
+    start += 2000
     if start >= d['TotalRecordCount']: break
 print('library tracks', len(by_path), file=sys.stderr)
 

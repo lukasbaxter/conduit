@@ -18,6 +18,7 @@
 // network. Your home speakers therefore appear only when you are home; a
 // friend's TV only on her LAN.
 
+import fs from 'fs';
 import http from 'http';
 import { WebSocketServer } from 'ws';
 
@@ -29,6 +30,37 @@ const JELLYFIN = process.env.JELLYFIN_URL || 'http://192.168.1.85:2101';
 const users = new Map();
 // userId -> clientId of the current active player (the one actually playing).
 const active = new Map();
+
+// userId -> { nowPlaying, queue, at }: the account's last known playback, kept
+// after the client that produced it disconnects and across relay restarts.
+// A client that opens with no active session anywhere adopts this, so the
+// account never comes up on "Nothing playing" -- the song you left on your
+// phone is what the desktop shows, paused where it was.
+const lastSession = new Map();
+const SESSIONS_FILE = process.env.SESSIONS_FILE || null;
+try {
+  if (SESSIONS_FILE && fs.existsSync(SESSIONS_FILE)) {
+    for (const [uid, s] of Object.entries(JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8')))) lastSession.set(uid, s);
+  }
+} catch (e) { console.error('sessions load failed', e.message); }
+let saveTimer = null;
+function saveSessions() {
+  if (!SESSIONS_FILE || saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    try { fs.writeFileSync(SESSIONS_FILE, JSON.stringify(Object.fromEntries(lastSession))); }
+    catch (e) { console.error('sessions save failed', e.message); }
+  }, 2000);
+}
+function rememberSession(uid, patch) {
+  const cur = lastSession.get(uid) || { nowPlaying: null, queue: null, at: 0 };
+  lastSession.set(uid, { ...cur, ...patch, at: Date.now() });
+  saveSessions();
+}
+function sessionMsg(uid) {
+  const s = lastSession.get(uid);
+  return s && s.nowPlaying ? { type: 'session', nowPlaying: s.nowPlaying, queue: s.queue || [], at: s.at } : null;
+}
 
 function userMap(uid) {
   if (!users.has(uid)) users.set(uid, new Map());
@@ -184,6 +216,8 @@ wss.on('connection', (ws, req) => {
       for (const c of userMap(self.uid).values()) {
         if (c.id !== self.id && c.queue) send(ws, { type: 'queue', from: c.id, queue: c.queue });
       }
+      // Nobody is playing right now: hand over what the account played last.
+      if (!active.has(self.uid)) { const sm = sessionMsg(self.uid); if (sm) send(ws, sm); }
       // Now replay what arrived during verification, in order.
       for (const b of backlog.splice(0)) await onMessage(b);
       return;
@@ -201,6 +235,7 @@ wss.on('connection', (ws, req) => {
       // on a mirroring client shows what the active player will play next.
       case 'queue':
         self.queue = Array.isArray(msg.queue) ? msg.queue : null;
+        if (self.queue && (!active.has(self.uid) || active.get(self.uid) === self.id)) rememberSession(self.uid, { queue: self.queue });
         for (const c of userMap(self.uid).values()) {
           if (c.id !== self.id) send(c.ws, { type: 'queue', from: self.id, queue: self.queue });
         }
@@ -216,6 +251,9 @@ wss.on('connection', (ws, req) => {
         // never steals playback, it only recovers a dropped claim.
         if (self.nowPlaying && self.nowPlaying.playing && !active.has(self.uid)) {
           active.set(self.uid, self.id);
+        }
+        if (self.nowPlaying && (!active.has(self.uid) || active.get(self.uid) === self.id)) {
+          rememberSession(self.uid, { nowPlaying: self.nowPlaying, queue: self.queue || (lastSession.get(self.uid) || {}).queue || null });
         }
         broadcastRoster(self.uid);
         break;
@@ -254,8 +292,16 @@ wss.on('connection', (ws, req) => {
     clearTimeout(timeout);
     if (self) {
       userMap(self.uid).delete(self.id);
-      if (active.get(self.uid) === self.id) active.delete(self.uid);
+      const wasActive = active.get(self.uid) === self.id;
+      if (wasActive) active.delete(self.uid);
       broadcastRoster(self.uid);
+      // The player that was driving the session is gone: the mirrors would
+      // fall back to whatever they had locally, so give them the session to
+      // keep showing (paused) instead.
+      if (wasActive) {
+        const sm = sessionMsg(self.uid);
+        if (sm) for (const c of userMap(self.uid).values()) send(c.ws, sm);
+      }
     }
   });
   ws.on('error', () => {});

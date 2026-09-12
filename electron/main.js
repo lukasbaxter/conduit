@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { Discovery } = require('./discovery');
@@ -165,6 +165,21 @@ ipcMain.on('renderer:error', (_e, msg) => trace(`RENDERER ERROR: ${msg}`));
 ipcMain.on('renderer:debug', (_e, msg) => trace(`ui: ${msg}`));
 
 handle('devices:list', () => (discovery ? withSyncInfo(discovery.list()) : []));
+
+// Track downloads. The renderer cannot use <a download> for a Jellyfin URL
+// (cross-origin, so Chromium would navigate to the stream and play it in
+// place of the app); main starts the download and names the file. The
+// renderer passes the wanted filename as a `conduit_name` query param, which
+// Jellyfin ignores.
+handle('download', (url) => { if (win) win.webContents.downloadURL(url); return true; });
+app.whenReady().then(() => {
+  session.defaultSession.on('will-download', (_e, item) => {
+    let name = item.getFilename();
+    try { name = new URL(item.getURL()).searchParams.get('conduit_name') || name; } catch { /* blob: etc. */ }
+    item.setSaveDialogOptions({ defaultPath: path.join(app.getPath('downloads'), name) });
+    trace(`download ${name}`);
+  });
+});
 
 handle('device:play', (device, url, meta, startAt) => transportFor(device).play(url, meta, startAt || 0));
 handle('device:resume', (device) => transportFor(device).resume());

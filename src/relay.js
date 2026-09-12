@@ -27,7 +27,7 @@ function clientId() {
 }
 
 export class Relay {
-  constructor({ token, name, kind, canPlay = true, onRoster, onCommand, onQueue }) {
+  constructor({ token, name, kind, canPlay = true, onRoster, onCommand, onQueue, onSession }) {
     this.token = token;
     this.name = name;
     this.kind = kind; // 'desktop' | 'web' | 'mobile'
@@ -35,6 +35,7 @@ export class Relay {
     this.onRoster = onRoster || (() => {});
     this.onCommand = onCommand || (() => {});
     this.onQueue = onQueue || (() => {});
+    this.onSession = onSession || (() => {});
     this.id = clientId();
     this.ws = null;
     this.closed = false;
@@ -71,6 +72,7 @@ export class Relay {
         if (this._pending.nowPlaying) this.reportNowPlaying(this._pending.nowPlaying);
         if (this._pending.queue) this.reportQueue(this._pending.queue);
       } else if (m.type === 'queue') this.onQueue(m.from, m.queue || null);
+      else if (m.type === 'session') this.onSession({ nowPlaying: m.nowPlaying, queue: m.queue || [], at: m.at || 0 });
       else if (m.type === 'roster') this.onRoster({ players: m.players || [], lanDevices: m.lanDevices || [], activeClientId: m.activeClientId || null });
       else if (m.type === 'command') {
         // A yield means another client took over: we no longer hold the claim,

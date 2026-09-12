@@ -44,10 +44,24 @@ function Shelf({ title, items, jf, round, onOpen, onPlay, onSeeAll, subtitle }) 
 
 const SEARCH_TYPES = ['All', 'Songs', 'Artists', 'Albums', 'Playlists'];
 
+// Spotify's rule of thumb for a release with no declared type: up to three
+// tracks (under 30 min) is a single, up to six an EP, otherwise an album.
+export function releaseType(album) {
+  const n = album.ChildCount ?? album.SongCount ?? 0;
+  const mins = (album.RunTimeTicks || 0) / 600_000_000;
+  const name = album.Name || '';
+  if (/various artists/i.test(album.AlbumArtist || '')) return 'Compilation';
+  if (/\b(EP)\b\s*$|\s[-–]\s*EP\s*$/i.test(name)) return 'EP';
+  if (/\s[-–]\s*Single\s*$|\(single\)$/i.test(name)) return 'Single';
+  if (n && n <= 3 && (!mins || mins < 30)) return 'Single';
+  if (n && n <= 6 && (!mins || mins < 30)) return 'EP';
+  return 'Album';
+}
+
 export default function Library({
   jf, player, view, albums, artists, playlists, detail, setDetail, query, setQuery,
   onLike, onAddTo, onNewPlaylist, onRemoveFromPlaylist, onReorder, onOpenPlaylist, onOpenLiked, likedCount,
-  onOpenArtistById, onOpenAlbumById,
+  onOpenArtistById, onOpenAlbumById, onExclude, onDownload,
 }) {
   const [results, setResults] = useState(null);
   const [searchType, setSearchType] = useState('All');
@@ -56,6 +70,8 @@ export default function Library({
   const [dragIdx, setDragIdx] = useState(null);
   // Artist page "Popular": 5 rows, "See more" expands to 10, like Spotify.
   const [popularExpanded, setPopularExpanded] = useState(false);
+  // Discography filter on the artist page: 'all' | 'album' | 'single' | 'compilation'.
+  const [discoFilter, setDiscoFilter] = useState('all');
   const [overIdx, setOverIdx] = useState(null);
 
   useEffect(() => {
@@ -123,6 +139,9 @@ export default function Library({
     onToggle: () => player.toggle(),
     onLike, playlists, onAddTo, onNewPlaylist,
     onOpenArtist: onOpenArtistById, onOpenAlbum: onOpenAlbumById,
+    onAddToQueue: (t) => player.addToQueue([t]),
+    onRadio: (t) => startMix(t),
+    onExclude, onDownload,
     ...extra,
   });
 
@@ -173,7 +192,7 @@ export default function Library({
                 Verified Artist
               </span>
             ) : (
-              <div className="kind">{isLiked ? 'Playlist' : kind}</div>
+              <div className="kind">{isLiked ? 'Playlist' : kind === 'Album' ? releaseType({ ...item, ChildCount: item.ChildCount ?? tracks.length, RunTimeTicks: item.RunTimeTicks || tracks.reduce((s2, t) => s2 + (t.RunTimeTicks || 0), 0) }) : kind}</div>
             )}
             <FittedTitle text={item.Name} maxLines={2} />
             <p>
@@ -219,17 +238,42 @@ export default function Library({
                 </button>
               )}
             </section>
-            {detail.albums?.length > 0 && (
-              <section>
-                <div className="shelf-head"><h2>Discography</h2></div>
-                <div className="grid">
-                  {detail.albums.map((a) => (
-                    <Card key={a.Id} title={a.Name} subtitle={a.ProductionYear ? `${a.ProductionYear} · Album` : 'Album'}
-                      image={jf.imageUrl(a.Id, { maxHeight: 320 })} onOpen={() => openAlbum(a)} onPlay={() => playItem(a)} />
-                  ))}
-                </div>
-              </section>
-            )}
+            {detail.albums?.length > 0 && (() => {
+              const typed = detail.albums.map((a) => ({ a, type: releaseType(a) }));
+              const counts = typed.reduce((m, { type }) => ({ ...m, [type]: (m[type] || 0) + 1 }), {});
+              const pills = [
+                ['all', 'Popular releases'],
+                counts.Album ? ['album', 'Albums'] : null,
+                (counts.Single || counts.EP) ? ['single', 'Singles and EPs'] : null,
+                counts.Compilation ? ['compilation', 'Compilations'] : null,
+              ].filter(Boolean);
+              const shown = typed.filter(({ type }) =>
+                discoFilter === 'all' ? true
+                  : discoFilter === 'album' ? type === 'Album'
+                  : discoFilter === 'single' ? (type === 'Single' || type === 'EP')
+                  : type === 'Compilation');
+              return (
+                <section>
+                  <div className="shelf-head"><h2>Discography</h2></div>
+                  {/* Spotify's artist page splits releases by kind. Jellyfin has no
+                      release type, so it is read off the track count (<=3 single,
+                      <=6 EP) and the title (" - EP", "(Remixes)"). */}
+                  {pills.length > 2 && (
+                    <div className="pills" style={{ marginBottom: 16 }}>
+                      {pills.map(([k, label]) => (
+                        <button key={k} className={`pill ${discoFilter === k ? 'on' : ''}`} onClick={() => setDiscoFilter(k)}>{label}</button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="grid">
+                    {shown.map(({ a, type }) => (
+                      <Card key={a.Id} title={a.Name} subtitle={a.ProductionYear ? `${a.ProductionYear} · ${type}` : type}
+                        image={jf.imageUrl(a.Id, { maxHeight: 320 })} onOpen={() => openAlbum(a)} onPlay={() => playItem(a)} />
+                    ))}
+                  </div>
+                </section>
+              );
+            })()}
             <section>
               <div className="shelf-head"><h2>Fans also like</h2></div>
               <p className="placeholder-note">Similar artists need a metadata provider. Not wired up yet.</p>

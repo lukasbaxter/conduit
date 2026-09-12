@@ -48,6 +48,9 @@ contextBridge.exposeInMainWorld('conduit', {
     },
   },
 
+  // Save a track: main names the file and shows the save dialog.
+  download: (url) => call('download', url),
+
   remote: {
     play: (device, url, meta, startAt = 0) => call('device:play', device, url, meta, startAt),
     resume: (device) => call('device:resume', device),

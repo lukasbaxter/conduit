@@ -24,8 +24,18 @@ while True:
     start += 5000
     if start >= d['TotalRecordCount']: break
 dead = [a for a in arts if a['Name'] not in credited]
-print('artists', len(arts), 'credited spellings', len(credited), 'dead', len(dead), file=sys.stderr)
+# DELETE /Items/{id} deletes the item's files too. For an artist that lives in
+# Jellyfin's metadata folder that is just its cached images; for one backed by
+# a real /music/<Artist> folder it would be the music (the mount is read-only,
+# but never lean on that). Folder-backed ghosts drop out of /Artists on their
+# own once nothing credits them, so they are only reported here.
+for a in dead:
+    a['Path'] = req(f"/Items/{a['Id']}?userId={u}").get('Path') or ''
+folder_backed = [a for a in dead if not a['Path'].startswith('/config/metadata/')]
+dead = [a for a in dead if a['Path'].startswith('/config/metadata/')]
+print('artists', len(arts), 'credited spellings', len(credited), 'dead (metadata-only, deletable)', len(dead), 'dead but folder-backed (left alone)', len(folder_backed), file=sys.stderr)
 for a in dead: print('  ', a['Name'], file=sys.stderr)
+for a in folder_backed: print('   keep:', a['Name'], a['Path'], file=sys.stderr)
 if apply:
     n = 0
     for a in dead:

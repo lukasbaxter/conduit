@@ -193,6 +193,17 @@ export class Jellyfin {
     return { items: ids.map((id) => byId.get(id)).filter(Boolean) };
   }
 
+  // The last track this account played anywhere (Jellyfin's own history), for
+  // a client that has nothing remembered locally and no live session to mirror.
+  async lastPlayedTrack() {
+    const q = new URLSearchParams({
+      IncludeItemTypes: 'Audio', Recursive: 'true', SortBy: 'DatePlayed', SortOrder: 'Descending',
+      Filters: 'IsPlayed', Fields: 'ParentId,ArtistItems,AlbumArtists,UserData', Limit: '1', userId: this.userId,
+    });
+    const data = await this._fetch(`/Items?${q}`);
+    return (data.Items || [])[0] || null;
+  }
+
   async recentlyAddedAlbums({ limit = 8 } = {}) {
     const q = new URLSearchParams({
       IncludeItemTypes: 'MusicAlbum',
@@ -255,17 +266,20 @@ export class Jellyfin {
       IncludeItemTypes: 'Playlist',
       Recursive: 'true',
       SortBy: 'SortName',
-      Fields: 'ChildCount',
+      Fields: 'ChildCount,Path',
       Limit: String(limit),
       userId: this.userId,
     });
     const data = await this._fetch(`/Items?${q}`);
     // Jellyfin imports stray .m3u/.info/.sfv files left behind by Soulseek rips
     // as empty playlists -- 86 of them in this library, things like "00.info".
-    // Real playlists have contents, so ChildCount is the honest filter.
+    // Those live inside the music folders; playlists made in the app live under
+    // Jellyfin's own data dir, so the path is the honest filter (an empty
+    // playlist you just created must still show up).
     const items = (data.Items || []).filter(
       (p) =>
-        (p.ChildCount ?? 0) > 0 &&
+        ((p.Path || '').includes('/data/playlists/') || (p.ChildCount ?? 0) > 0) &&
+        !/\.(m3u8?|info|sfv|nfo|txt|cue|log)$/i.test(p.Name || '') &&
         (!p.MediaType || p.MediaType === 'Audio' || p.MediaType === 'Unknown')
     );
     return { items, total: items.length };
@@ -335,11 +349,35 @@ export class Jellyfin {
     return { albums: albums.items, artists: artists.items, tracks: tracks.items, playlists: playlists.items };
   }
 
-  // Jellyfin's own "more like this" -- no Last.fm key required.
+  // Jellyfin's own "more like this" -- no Last.fm key required. Tracks the
+  // user excluded from their taste profile (thumbs-down) never come back here.
   async instantMix(itemId, limit = 100) {
-    const q = new URLSearchParams({ userId: this.userId, Limit: String(limit) });
+    const q = new URLSearchParams({ userId: this.userId, Limit: String(limit), Fields: 'ParentId,ArtistItems,AlbumArtists,UserData' });
     const data = await this._fetch(`/Items/${itemId}/InstantMix?${q}`);
-    return data.Items || [];
+    return (data.Items || []).filter((t) => t.UserData?.Likes !== false);
+  }
+
+  // "Exclude from your taste profile": Jellyfin's per-item thumbs-down. Mixes
+  // and smart shuffle skip anything with UserData.Likes === false.
+  async setDislike(itemId, disliked) {
+    this._evict('tracks:'); this._evict('playlist:'); this._evict('favorites:');
+    const path = `/UserItems/${itemId}/Rating`;
+    return this._fetch(disliked ? `${path}?likes=false` : path, { method: disliked ? 'POST' : 'DELETE' });
+  }
+
+  // Download URLs. 'original' is the file as stored (with its real filename);
+  // the rest are Jellyfin transcodes. WAV is assembled client-side (Jellyfin's
+  // transcoder has no wav muxer), see downloadTrack().
+  downloadUrl(itemId, fmt = 'original') {
+    const key = `api_key=${encodeURIComponent(this.token)}`;
+    const t = {
+      flac: 'stream.flac?audioCodec=flac',
+      mp3: 'stream.mp3?audioCodec=mp3&audioBitRate=320000',
+      aac: 'stream.aac?audioCodec=aac&audioBitRate=256000',
+      ogg: 'stream.ogg?audioCodec=libvorbis&audioBitRate=320000',
+    }[fmt];
+    if (!t) return `${this.baseUrl}/Items/${itemId}/Download?${key}`;
+    return `${this.baseUrl}/Audio/${itemId}/${t}&${key}`;
   }
 
   // --- favourites ("Liked Songs") ----------------------------------------
