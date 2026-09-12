@@ -6,6 +6,7 @@ import Sidebar from './components/Sidebar.jsx';
 import Library, { LIKED_ID } from './components/Library.jsx';
 import Player, { PlayingElsewhereBar } from './components/Player.jsx';
 import RightPanel from './components/RightPanel.jsx';
+import FullScreen from './components/FullScreen.jsx';
 import { downloadTrack } from './api/download.js';
 import { applyTheme, DEFAULT_THEME } from './api/prefs.js';
 import { search as relaySearch } from './api/search.js';
@@ -100,6 +101,16 @@ export default function App() {
   // "New playlist" dialog: {track} while open. window.prompt() does not exist
   // in Electron, which is why creating a playlist from a row did nothing there.
   const [namePrompt, setNamePrompt] = useState(null);
+  // Full-screen player (Spotify's expand button). Uses the Fullscreen API when
+  // the platform allows; the overlay works either way.
+  const [fullScreen, setFullScreen] = useState(false);
+  const openFullScreen = () => { setFullScreen(true); document.documentElement.requestFullscreen?.().catch(() => {}); };
+  const closeFullScreen = () => { setFullScreen(false); if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); };
+  useEffect(() => {
+    const h = () => { if (!document.fullscreenElement) setFullScreen(false); };
+    document.addEventListener('fullscreenchange', h);
+    return () => document.removeEventListener('fullscreenchange', h);
+  }, []);
   // Account settings: theme + playback quality. Loaded from Jellyfin, applied
   // to the CSS variables, kept in sync across clients over the relay.
   const [prefs, setPrefs] = useState({ theme: DEFAULT_THEME, quality: 'original' });
@@ -755,8 +766,10 @@ pos=${Math.round(player.position)} playing=${player.playing} vol=${player.volume
         panel={panel}
         onPanel={setPanel}
         onLike={onLike}
+        onFullScreen={openFullScreen}
       />
       <PlayingElsewhereBar player={player} />
+      {fullScreen && <FullScreen player={player} jf={jf} onClose={closeFullScreen} onOpenArtist={openArtistById} onLike={onLike} />}
     </div>
   );
 }

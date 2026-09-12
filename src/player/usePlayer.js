@@ -107,7 +107,24 @@ export function usePlayer(jf) {
   const audioRef = useRef(null);
   if (!audioRef.current && typeof Audio !== 'undefined') {
     audioRef.current = new Audio();
+    // The visualizer taps this element through a MediaElementSource, which is
+    // silent for cross-origin media unless the element is CORS-enabled. The
+    // stream origin (music.baxtergroup.io) answers with ACAO: *.
+    audioRef.current.crossOrigin = 'anonymous';
   }
+  // Built on first use (a user gesture: opening the visualizer). One source
+  // per element for the element's whole life, so it lives in a ref.
+  const webAudioRef = useRef(null);
+  const webAudio = useCallback(() => {
+    if (webAudioRef.current) { webAudioRef.current.ctx.resume?.(); return webAudioRef.current; }
+    const el = audioRef.current; if (!el) return null;
+    const Ctx = window.AudioContext || window.webkitAudioContext; if (!Ctx) return null;
+    const ctx = new Ctx();
+    const source = ctx.createMediaElementSource(el);
+    source.connect(ctx.destination);
+    webAudioRef.current = { ctx, source };
+    return webAudioRef.current;
+  }, []);
 
   // Mirrors of state that async callbacks and intervals need to read without
   // being re-created on every tick.
@@ -1357,7 +1374,7 @@ export function usePlayer(jf) {
 
   return useMemo(
     () => ({
-      device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId, addToQueue, removeFromQueue, moveInQueue, clearQueued,
+      device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId, addToQueue, removeFromQueue, moveInQueue, clearQueued, webAudio,
       relayDevices, lanDevices, registerDevices, attachRelay, applyRoster, executeCommand, roster, relay: relayInstance,
       queue: shownQueue, index: shownIndex, current, applyRemoteQueue, applySession,
       playing: shownPlaying, position: shownPosition, duration: shownDuration, volume: shownVolume, error,
@@ -1366,7 +1383,7 @@ export function usePlayer(jf) {
       clearError: () => setError(null),
     }),
     // eslint-disable-next-line
-    [device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId, addToQueue, removeFromQueue, moveInQueue, clearQueued,
+    [device, setDevice, adoptActive, nowPlaying, nowPlayingId, external, patchQueue, syncLiked, contextId, addToQueue, removeFromQueue, moveInQueue, clearQueued, webAudio,
      relayDevices, lanDevices, registerDevices, attachRelay, applyRoster, executeCommand, roster, relayInstance, shownQueue, shownIndex, current, applyRemoteQueue, applySession,
      shownPlaying, shownPosition, shownDuration, shownVolume, error, shownRepeat, shownShuffle,
      cycleRepeat, cycleShuffle, setShuffleRouted, playQueue, toggle, next,

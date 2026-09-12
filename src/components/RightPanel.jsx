@@ -188,7 +188,7 @@ function Queue({ player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlis
  * lines stay full opacity -- Spotify's actual treatment, which is the opposite
  * of what most clones do.
  */
-function Lyrics({ player, jf }) {
+export function Lyrics({ player, jf }) {
   const { position } = player;
   // Follow the session-wide track, not just this client's own queue item, so
   // lyrics load and stay in sync even when we are mirroring another device

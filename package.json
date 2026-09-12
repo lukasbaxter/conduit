@@ -15,6 +15,8 @@
   },
   "dependencies": {
     "bonjour-service": "^1.2.1",
+    "butterchurn": "^2.6.7",
+    "butterchurn-presets": "^2.4.7",
     "castv2-client": "^1.2.0"
   },
   "devDependencies": {
@@ -22,10 +24,12 @@
     "concurrently": "^9.0.1",
     "electron": "^44.3.0",
     "electron-builder": "^26.15.3",
+    "puppeteer": "^24.43.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "vite": "^5.4.8",
-    "wait-on": "^8.0.1"
+    "wait-on": "^8.0.1",
+    "ws": "^8.21.3"
   },
   "build": {
     "appId": "io.baxtergroup.conduit",
