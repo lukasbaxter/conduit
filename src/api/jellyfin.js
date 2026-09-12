@@ -31,6 +31,27 @@ function authHeader(token) {
   return `MediaBrowser ${parts.join(', ')}`;
 }
 
+// Jellyfin creates one MusicArtist per distinct spelling in the tags ("Tones
+// and I" / "Tones And I", a BOM-prefixed "Daft Punk", "JAY-Z" with a Unicode
+// hyphen) yet matches songs to any of them case-insensitively, so showing
+// more than one is pure noise. The library tags are normalised server-side
+// (tools/library-hygiene), this guards against the next download.
+const ARTIST_TYPO = /[\u2010-\u2015\u2212]/g;
+export function artistKey(name) {
+  return (name || '').replace(/[\uFEFF\u200B]/g, '').replace(ARTIST_TYPO, '-')
+    .replace(/[\u2018\u2019]/g, "'").replace(/\s+/g, ' ').trim().toLowerCase();
+}
+export function dedupeArtists(items) {
+  const seen = new Map();
+  for (const a of items) {
+    const k = artistKey(a.Name);
+    const prev = seen.get(k);
+    // keep the one with a portrait; otherwise the first (sorted) spelling
+    if (!prev || (!prev.ImageTags?.Primary && a.ImageTags?.Primary)) seen.set(k, a);
+  }
+  return items.filter((a) => seen.get(artistKey(a.Name)) === a);
+}
+
 export class Jellyfin {
   constructor({ baseUrl, token = null, userId = null }) {
     // Trailing slashes produce double-slash URLs that some reverse proxies 404.
@@ -139,7 +160,8 @@ export class Jellyfin {
     });
     if (search) q.set('searchTerm', search);
     const data = await this._fetch(`/Artists?${q}`);
-    return { items: data.Items || [], total: data.TotalRecordCount ?? 0 };
+    const items = dedupeArtists(data.Items || []);
+    return { items, total: (data.TotalRecordCount ?? 0) - ((data.Items || []).length - items.length) };
   }
 
   // Albums this user has played most recently -- feeds the home shortcuts and

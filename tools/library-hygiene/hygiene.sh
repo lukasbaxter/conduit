@@ -1,0 +1,48 @@
+#!/bin/bash
+# Nightly library hygiene on .85. Idempotent: every step skips what is done.
+# Install: crontab -e ->  30 4 * * * /home/lukas/conduit-hygiene/hygiene.sh >> /home/lukas/conduit-hygiene/hygiene.log 2>&1
+set -u
+cd "$(dirname "$0")"
+echo "=== $(date -Is) hygiene start"
+python3 scan_tags.py /mnt/wd_nvme1/music tags.json || exit 1
+python3 - <<'PY' || exit 1
+# oracle terms: every distinct artist string and every span between separators
+import json, re
+from namekey import clean, ANY
+tags = json.load(open('tags.json')); oracle = json.load(open('oracle.json')) if __import__('os').path.exists('oracle.json') else {}
+SEP = re.compile(ANY.pattern, re.I); terms = set()
+for t in tags.values():
+    if not t or 'error' in t: continue
+    for k in ('artist', 'albumartist'):
+        for v in t[k]:
+            for n in v.split(';'):
+                c = clean(n)
+                if not c: continue
+                terms.add(c)
+                if not ANY.search(c): continue
+                toks, seps, pos = [], [], 0
+                for m in SEP.finditer(c):
+                    toks.append(clean(c[pos:m.start()])); seps.append(m.group(0)); pos = m.end()
+                toks.append(clean(c[pos:]))
+                for i in range(len(toks)):
+                    for j in range(i, len(toks)):
+                        out = toks[i]
+                        for k2 in range(i, j): out += seps[k2] + toks[k2 + 1]
+                        if clean(out): terms.add(clean(out))
+new = sorted(t for t in terms if t not in oracle)
+json.dump(new, open('terms-new.json', 'w'), ensure_ascii=False)
+print('oracle terms new:', len(new))
+PY
+python3 oracle.py terms-new.json oracle.json || exit 1
+python3 plan_names.py tags.json oracle.json plan.json whitelist.json || exit 1
+STAMP=$(date +%Y%m%d-%H%M)
+python3 apply_tags.py plan.json "applied-$STAMP.json" --apply || exit 1
+if [ "$(python3 -c "import json;print(len(json.load(open('applied-$STAMP.json'))))")" != "0" ]; then
+  python3 refresh_changed.py "applied-$STAMP.json"
+else
+  rm -f "applied-$STAMP.json" "applied-$STAMP.json.problems.json"
+fi
+python3 cleanup_artists.py --apply
+python3 artist_images.py oracle.json --apply
+python3 albums.py && python3 album_covers.py albums_noimg.json --apply
+echo "=== $(date -Is) hygiene done"
