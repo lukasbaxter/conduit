@@ -117,7 +117,7 @@ export default function Library({
   onLike, onAddTo, onNewPlaylist, onRemoveFromPlaylist, onReorder, onOpenPlaylist, onOpenLiked, likedCount,
   onOpenArtistById, onOpenAlbumById, onExclude, onDownload,
   seeAll, setSeeAll, onEditPlaylist, onDeletePlaylist, me, onView, onOpenProfile,
-  prefs, onUpdatePrefs, onUploadAvatar, avatarV,
+  prefs, onUpdatePrefs, onUploadAvatar, avatarV, onFollowAlbum,
 }) {
   const [results, setResults] = useState(null);
   // Keyboard navigation in search: -1 = nothing, 0 = Top result, 1.. = songs.
@@ -185,6 +185,11 @@ export default function Library({
     return () => io.disconnect();
   }, [detail?.item?.Id, detail?.tracks?.length]);
   const [editPl, setEditPl] = useState(null); // { name, file, preview }
+  useEffect(() => {
+    const h = () => { const it = detail?.item; if (it && detail.kind === 'Playlist' && it.Id !== LIKED_ID) setEditPl({ name: it.Name, file: null, preview: null }); };
+    window.addEventListener('conduit:editdetails', h);
+    return () => window.removeEventListener('conduit:editdetails', h);
+  }, [detail?.item?.Id, detail?.kind]); // eslint-disable-line react-hooks/exhaustive-deps
   const [dragIdx, setDragIdx] = useState(null);
   // Artist page "Popular": 5 rows, "See more" expands to 10, like Spotify.
   const [popularExpanded, setPopularExpanded] = useState(false);
@@ -572,6 +577,7 @@ export default function Library({
                 ...playlists.filter((p) => p.Id !== item.Id).map((p) => ({ key: p.Id, label: p.Name, onClick: () => tracks.forEach((t) => onAddTo?.(p, t)) })),
               ] } : null,
               lead ? { label: 'Go to artist', onClick: () => onOpenArtistById(lead.Id) } : null,
+              kind === 'Album' ? { label: item.UserData?.IsFavorite ? 'Remove from Your Library' : 'Save to Your Library', onClick: () => onFollowAlbum?.(item, !item.UserData?.IsFavorite) } : null,
               isPlaylist && !isLiked ? { sep: true } : null,
               isPlaylist && !isLiked ? { label: 'Edit details', onClick: () => setEditPl({ name: item.Name, file: null, preview: null }) } : null,
               isPlaylist && !isLiked ? { label: 'Delete', danger: true, onClick: () => { if (window.confirm(`Delete "${item.Name}"?`)) onDeletePlaylist(item); } } : null,
@@ -590,6 +596,11 @@ export default function Library({
                     <Shuffle />
                   </button>
                 )}
+                {kind === 'Album' && (() => { const saved = Boolean(item.UserData?.IsFavorite); return (
+                  <button className={`iconbtn ${saved ? 'on' : ''}`} onClick={() => onFollowAlbum?.(item, !saved)} title={saved ? 'Remove from Your Library' : 'Save to Your Library'}>
+                    <Heart on={saved} size={24} />
+                  </button>
+                ); })()}
                 {isArtist && <button className="btn-secondary" disabled title="Not wired up yet">Follow</button>}
                 <button className="iconbtn" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHeroMenu({ x: r.left, y: r.bottom + 4 }); }} title={`More options for ${item.Name}`}>
                   <Dots />

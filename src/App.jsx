@@ -79,6 +79,7 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [view, setView] = useState('home');
   const [playlists, setPlaylists] = useState([]);
+  const [savedAlbums, setSavedAlbums] = useState([]);
   const [likedCount, setLikedCount] = useState(null);
   const likedCacheRef = useRef(null);
   const [toast, setToast] = useState(null);
@@ -188,6 +189,7 @@ export default function App() {
       const alb = client.persisted('albums'); if (alb) setAlbums(alb);
       const art = client.persisted('artists'); if (art) setArtists(art);
       const pls = client.persisted('playlists'); if (pls) setPlaylists(pls);
+      const sal = client.persisted('savedAlbums'); if (sal) setSavedAlbums(sal);
       const lc = client.persisted('likedCount'); if (lc != null) setLikedCount(lc);
       const lk = client.persisted('liked'); if (lk) likedCacheRef.current = lk;
       if (alb) setLibLoading(false);
@@ -203,7 +205,7 @@ export default function App() {
     const cached = jf.persisted('prefs');
     if (cached) { setPrefs((p) => ({ ...p, ...cached })); applyTheme(cached.theme); jf.quality = cached.quality || 'original'; }
     jf.getPrefs().then((p) => {
-      const next = { theme: { ...DEFAULT_THEME, ...(p.theme || {}) }, quality: p.quality || 'original' };
+      const next = { ...p, theme: { ...DEFAULT_THEME, ...(p.theme || {}) }, quality: p.quality || 'original' };
       setPrefs(next); applyTheme(next.theme); jf.quality = next.quality; jf._persist('prefs', next);
     }).catch(() => {});
   }, [jf]);
@@ -233,6 +235,7 @@ export default function App() {
       .finally(() => setLibLoading(false));
     jf.artists({ limit: 500 }).then((r) => { setArtists(r.items); jf._persist('artists', r.items); }).catch(() => {});
     jf.playlists().then((p) => { setPlaylists(p.items); jf._persist('playlists', p.items); }).catch(() => {});
+    jf.favoriteAlbums().then((a) => { setSavedAlbums(a.items); jf._persist('savedAlbums', a.items); }).catch(() => {});
     jf.favoriteCount().then((n) => { setLikedCount(n); jf._persist('likedCount', n); }).catch(() => {});
   }, [jf]);
 
@@ -240,9 +243,9 @@ export default function App() {
 
   const refreshPlaylists = async () => {
     try {
-      const [p, n] = await Promise.all([jf.playlists(), jf.favoriteCount()]);
-      setPlaylists(p.items); setLikedCount(n);
-      jf._persist('playlists', p.items); jf._persist('likedCount', n);
+      const [p, n, a] = await Promise.all([jf.playlists(), jf.favoriteCount(), jf.favoriteAlbums()]);
+      setPlaylists(p.items); setLikedCount(n); setSavedAlbums(a.items);
+      jf._persist('playlists', p.items); jf._persist('likedCount', n); jf._persist('savedAlbums', a.items);
     } catch { /* ignore */ }
   };
 
@@ -294,7 +297,12 @@ export default function App() {
       onCommand: (cmd) => player.executeCommand(cmd),
       onQueue: (from, q) => player.applyRemoteQueue(from, q),
       onSession: (s) => player.applySession(s),
-      onPrefs: (p) => { const next = { theme: { ...DEFAULT_THEME, ...(p.theme || {}) }, quality: p.quality || 'original' }; setPrefs(next); applyTheme(next.theme); jf.quality = next.quality; jf._persist('prefs', next); },
+      onPrefs: (p) => {
+        const next = { ...p, theme: { ...DEFAULT_THEME, ...(p.theme || {}) }, quality: p.quality || 'original' };
+        delete next._libraryChanged;
+        setPrefs(next); applyTheme(next.theme); jf.quality = next.quality; jf._persist('prefs', next);
+        if (p._libraryChanged && p._libraryChanged !== relayLibraryPing.current) { relayLibraryPing.current = p._libraryChanged; refreshPlaylists(); }
+      },
     });
     player.attachRelay(relay);
     return () => { relay.close(); player.attachRelay(null); };
@@ -362,6 +370,7 @@ export default function App() {
     try {
       await jf.deleteItem(pl.Id);
       await refreshPlaylists();
+      player.relay?.sendPrefs?.({ ...prefs, _libraryChanged: Date.now() });
       setDetail(null);
       notify(`Deleted ${pl.Name}`);
     } catch (e) { notify(`Could not delete: ${e.message}`); }
@@ -474,10 +483,25 @@ export default function App() {
     }
   };
 
+  // "Save to Your Library" for an album: a Jellyfin favourite on the album.
+  const onFollowAlbum = async (album, on) => {
+    setDetail((d) => (d && d.item?.Id === album.Id ? { ...d, item: { ...d.item, UserData: { ...(d.item.UserData || {}), IsFavorite: on } } } : d));
+    setSavedAlbums((list) => (on ? [album, ...list.filter((a) => a.Id !== album.Id)] : list.filter((a) => a.Id !== album.Id)));
+    try {
+      await jf.setFavorite(album.Id, on);
+      notify(on ? 'Added to Your Library' : 'Removed from Your Library');
+      const a = await jf.favoriteAlbums(); setSavedAlbums(a.items); jf._persist('savedAlbums', a.items);
+      player.relay?.sendPrefs?.({ ...prefs, _libraryChanged: Date.now() });
+    } catch (e) { notify(`Could not update: ${e.message}`); }
+  };
+  // Another client changed the library (saved an album, made a playlist).
+  const relayLibraryPing = useRef(0);
+
   const onCreatePlaylist = async (name, firstTrack = null) => {
     try {
       await jf.createPlaylist(name, firstTrack ? [firstTrack.Id] : []);
       await refreshPlaylists();
+      player.relay?.sendPrefs?.({ ...prefs, _libraryChanged: Date.now() });
       notify(firstTrack ? `Added to ${name}` : `Created ${name}`);
     } catch (e) { notify(`Could not create playlist: ${e.message}`); }
   };
@@ -604,6 +628,15 @@ export default function App() {
           view={view}
           onView={goView}
           playlists={playlists}
+          savedAlbums={savedAlbums}
+          onOpenAlbum={openAlbumById}
+          player={player}
+          prefs={prefs}
+          onUpdatePrefs={updatePrefs}
+          onEditPlaylist={(pl) => { setDetail(null); openPlaylist(pl).then(() => setTimeout(() => window.dispatchEvent(new CustomEvent('conduit:editdetails')), 300)); }}
+          onDeletePlaylist={onDeletePlaylist}
+          onFollowAlbum={onFollowAlbum}
+          onOpenArtist={openArtistById}
           likedCount={likedCount}
           loading={libLoading}
           onOpen={openPlaylist}
@@ -653,6 +686,7 @@ export default function App() {
           onUpdatePrefs={updatePrefs}
           onUploadAvatar={onUploadAvatar}
           avatarV={avatarV}
+          onFollowAlbum={onFollowAlbum}
         />
         {panel && <div className="panel-spacer" />}
         {panel && (

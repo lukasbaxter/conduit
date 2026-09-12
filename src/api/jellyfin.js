@@ -492,6 +492,16 @@ export class Jellyfin {
     });
   }
 
+  // Albums saved to Your Library = Jellyfin favourites on album items.
+  async favoriteAlbums({ limit = 500 } = {}) {
+    const q = new URLSearchParams({
+      IncludeItemTypes: 'MusicAlbum', Recursive: 'true', Filters: 'IsFavorite', SortBy: 'DateCreated', SortOrder: 'Descending',
+      Fields: 'ChildCount,ProductionYear,AlbumArtists', Limit: String(limit), userId: this.userId,
+    });
+    const data = await this._fetch(`/Items?${q}`);
+    return { items: data.Items || [] };
+  }
+
   // Newest likes first, which is how Spotify orders Liked Songs.
   favoriteTracks(opts = {}) {
     return this._cached(`favorites:${opts.limit || 500}`, () => this._favoriteTracks(opts));
