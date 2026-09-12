@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import TrackRow, { PlayGlyph, PauseGlyph, Heart } from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import Home from './Home.jsx';
@@ -120,6 +120,17 @@ export default function Library({
   const [searchType, setSearchType] = useState('All');
   const [err, setErr] = useState(null);
   const [heroMenu, setHeroMenu] = useState(null);
+  // The column header is see-through over the hero's colour band and turns
+  // solid once it sticks under the top bar (Spotify does the same).
+  const headSentinelRef = useRef(null);
+  const [headStuck, setHeadStuck] = useState(false);
+  useEffect(() => {
+    const el = headSentinelRef.current;
+    if (!el) { setHeadStuck(false); return undefined; }
+    const io = new IntersectionObserver(([e]) => setHeadStuck(!e.isIntersecting), { root: el.closest('.content'), rootMargin: '-70px 0px 0px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [detail?.item?.Id, detail?.tracks?.length]);
   const [editPl, setEditPl] = useState(null); // { name, file, preview }
   const [dragIdx, setDragIdx] = useState(null);
   // Artist page "Popular": 5 rows, "See more" expands to 10, like Spotify.
@@ -208,6 +219,9 @@ export default function Library({
     const totalTicks = tracks.reduce((s2, t) => s2 + (t.RunTimeTicks || 0), 0);
     const tint = heroTint(blurhashAverage(item.ImageBlurHashes?.Primary?.[item.ImageTags?.Primary]));
     const lead = !isArtist && !isPlaylist ? (item.AlbumArtists?.[0] || null) : null;
+    // The colour lives on the page wrapper so the band behind the action bar
+    // (.actions::before) sees it too, not just the header.
+    const heroStyle = tint && !isArtist ? { '--hero': tint } : isLiked ? { '--hero': '#5038a0' } : undefined;
 
     // Drag-to-reorder for user playlists (Liked Songs is date-ordered, not reorderable).
     const dnd = (i) => (isPlaylist && !isLiked ? {
@@ -222,16 +236,15 @@ export default function Library({
     } : {});
 
     return (
-      <div className="content">
+      <div className="content" style={heroStyle}>
         <div className="contentbar">
           <FilterPills where="detail" setSeeAll={setSeeAll} goHome={() => onView('home')} />
         </div>
 
         {(() => {
-          const style = tint && !isArtist ? { '--hero': tint } : undefined;
           const canEdit = isPlaylist && !isLiked;
           return (
-            <header className={`hero ${isArtist ? 'artist' : ''} ${tint || isLiked ? 'tinted' : ''} ${isLiked ? 'liked' : ''}`} style={style}>
+            <header className={`hero ${isArtist ? 'artist' : ''} ${tint || isLiked ? 'tinted' : ''}`}>
               {isLiked ? (
                 <div className="liked-art">
                   <Heart on={false} size={100} />
@@ -404,8 +417,9 @@ export default function Library({
           </div>
         ) : (
           <div className="tracklist">
+            {tracks.length > 0 && <div ref={headSentinelRef} style={{ height: 1 }} />}
             {tracks.length > 0 && (
-              <div className={`trackhead ${isPlaylist ? 'with-art' : ''}`}>
+              <div className={`trackhead ${isPlaylist ? 'with-art' : ''} ${headStuck ? 'stuck' : ''}`}>
                 <span className="th-n">#</span>
                 {isPlaylist && <span />}
                 <span>Title</span>

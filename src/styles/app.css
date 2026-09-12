@@ -213,10 +213,16 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .hero {
   --hero: #3d3c3c;
   display: flex; gap: 24px; align-items: flex-end; padding: 32px 24px 24px;
-  background: linear-gradient(180deg, var(--hero) 0%, color-mix(in srgb, var(--hero) 55%, var(--bg-base)) 100%);
+  /* Spotify: flat extracted colour with a light-to-dark wash over it... */
+  background: linear-gradient(transparent 0, rgba(0,0,0,.5) 100%), var(--hero);
 }
-/* Spotify carries the extracted colour a little way behind the action row. */
-.hero.tinted + .actions { background: linear-gradient(180deg, color-mix(in srgb, var(--hero, #3d3c3c) 35%, var(--bg-base)) 0%, var(--bg-base) 100%); margin-top: 0; }
+/* ...then the same colour keeps going for 232px behind the action bar and
+   the top of the list, fading into the page (main-actionBarBackground). */
+.actions { position: relative; isolation: isolate; }
+.actions::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 232px; z-index: -1;
+  background: linear-gradient(rgba(0,0,0,.5) 0, var(--bg-base) 100%), var(--hero, #3d3c3c);
+}
 .hero-cover { position: relative; padding: 0; flex: none; border-radius: var(--r-art); }
 .hero-cover:disabled { cursor: default; }
 .hero-cover img { display: block; }
@@ -235,8 +241,9 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .trackhead {
   display: grid; grid-template-columns: 36px minmax(0, 4fr) minmax(0, 3fr) 32px 5ch 32px; gap: 12px; align-items: center;
   padding: 0 16px; height: 36px; margin-bottom: 16px; color: var(--fg-dim); font-size: 14px;
-  border-bottom: 1px solid rgba(255,255,255,.1); position: sticky; top: 64px; background: var(--bg-base); z-index: 2;
+  border-bottom: 1px solid rgba(255,255,255,.1); position: sticky; top: 64px; background: transparent; z-index: 2;
 }
+.trackhead.stuck { background: var(--bg-base); }
 .trackhead.with-art { grid-template-columns: 36px auto minmax(0, 4fr) minmax(0, 3fr) 32px 5ch 32px; }
 .trackhead .th-n { text-align: center; font-size: 16px; }
 .trackhead .th-dur { display: grid; place-items: end; padding-right: 2px; }
@@ -653,4 +660,3 @@ input[type="range"]:disabled { opacity: .4; }
 .modal-actions .primary:disabled { opacity: .4; }
 
 .trackhead.with-art > span:nth-child(2) { width: 40px; }
-.hero.liked { --hero: #5038a0; }
