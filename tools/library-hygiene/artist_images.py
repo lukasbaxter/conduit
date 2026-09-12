@@ -12,7 +12,7 @@ artists alike; Jellyfin keeps the file in its own metadata store). Runs on .85.
 import base64, json, os, sys, time, urllib.parse, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from jf import req, user_id
+from jf import req, user_id, JF, KEY
 from namekey import key
 
 oracle = json.load(open(sys.argv[1])); apply = '--apply' in sys.argv; redo = '--redo' in sys.argv
@@ -48,9 +48,19 @@ def source(name):
             return None, 'deezer-err:' + str(e)[:40]
     return None, 'nomatch'
 
+def album_cover(artist_id):
+    """Last resort: the artist's own album art. Better than a blank circle."""
+    d = req(f"/Items?userId={u}&ArtistIds={artist_id}&IncludeItemTypes=MusicAlbum&Recursive=true&SortBy=PremiereDate,SortName&Limit=20")
+    for al in d.get('Items', []):
+        if (al.get('ImageTags') or {}).get('Primary'):
+            return f"{JF}/Items/{al['Id']}/Images/Primary?maxWidth=1000&api_key={KEY}"
+    return None
+
 def one(a):
     url, how = source(a['Name'])
-    if not url: return a['Name'], how
+    if not url:
+        url = album_cover(a['Id']); how = 'album-cover'
+    if not url: return a['Name'], 'nomatch'
     try:
         data = get(url)
         if len(data) < 2000: return a['Name'], 'tiny'
