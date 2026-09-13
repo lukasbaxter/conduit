@@ -75,6 +75,8 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
   ];
   const openMenu = (ev, entry) => { ev.preventDefault(); ev.stopPropagation(); setMenu({ x: ev.clientX, y: ev.clientY, entry }); };
 
+  // Phone Library tab: Spotify's filter chips + "Recents" sort row (CSS shows them only there).
+  const [libFilter, setLibFilter] = useState(null); // null | 'playlist' | 'album'
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
 
@@ -108,6 +110,14 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
           </button>
         </div>
 
+        <div className="libchips">
+          {libFilter && <button className="pill x" onClick={() => setLibFilter(null)} aria-label="Clear filter">×</button>}
+          {[['playlist', 'Playlists'], ['album', 'Albums']].map(([k, label]) => (!libFilter || libFilter === k) && (
+            <button key={k} className={`pill ${libFilter === k ? 'on' : ''}`} onClick={() => setLibFilter(libFilter === k ? null : k)}>{label}</button>
+          ))}
+          <button className="pill" onClick={() => setCreating((v) => !v)}>+ Playlist</button>
+        </div>
+        <div className="libsort"><span>⇅ Recents</span></div>
         <div className="liblist">
           {creating && (
             <form onSubmit={submit} style={{ padding: '4px 8px 10px' }}>
@@ -122,15 +132,15 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
             </form>
           )}
 
-          <button className="libitem" onClick={onOpenLiked} onContextMenu={(ev) => openMenu(ev, { id: 'liked', kind: 'liked' })} title="Liked Songs">
+          {(!libFilter || libFilter === 'playlist') && <button className="libitem" onClick={onOpenLiked} onContextMenu={(ev) => openMenu(ev, { id: 'liked', kind: 'liked' })} title="Liked Songs">
             <LikedCover />
             <span className="libitem-text">
               <span className="libitem-name">Liked Songs</span>
               <span className="libitem-sub">Playlist{likedCount != null ? ` · ${likedCount} songs` : ''}</span>
             </span>
-          </button>
+          </button>}
 
-          {entries.map((e) => {
+          {entries.filter((e) => !libFilter || e.kind === libFilter).map((e) => {
             const it = e.item;
             const art = jf.imageUrl(it.Id, { maxHeight: 84 });
             const sub = e.kind === 'album'

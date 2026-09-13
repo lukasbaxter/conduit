@@ -1,11 +1,11 @@
 // Conduit on the phone: the web build (music.baxtergroup.io) inside a native
 // WebView, so Expo Go runs it without a store build. The web app's mobile
 // layout (bottom tabs, compact player) does the rest; this shell only
-// supplies the dark safe-area chrome, media playback permissions, and a
-// pull-to-refresh style reload if the page ever wedges.
+// supplies media playback permissions and a retry screen; it draws full-bleed
+// and the page itself pads for the notch / home indicator (viewport-fit=cover).
 import { useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 const URL = process.env.EXPO_PUBLIC_CONDUIT_URL || 'https://music.baxtergroup.io/';
@@ -14,8 +14,8 @@ export default function App() {
   const web = useRef(null);
   const [error, setError] = useState(null);
   return (
-    <SafeAreaView style={styles.root}>
-      <StatusBar style="light" />
+    <View style={styles.root}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
       {error ? (
         <View style={styles.err}>
           <Text style={styles.errText}>Conduit could not load{'\n'}{error}</Text>
@@ -32,6 +32,9 @@ export default function App() {
         allowsBackForwardNavigationGestures
         // The web app decides the layout; tell it it is inside the shell.
         applicationNameForUserAgent="ConduitMobile/0.1"
+        // Full-bleed under the notch and home indicator; the page pads with env(safe-area-inset-*).
+        contentInsetAdjustmentBehavior="never"
+        automaticallyAdjustContentInsets={false}
         // Never leave the app for our own links; open anything else in the browser.
         setSupportMultipleWindows={false}
         pullToRefreshEnabled={Platform.OS === 'android'}
@@ -41,7 +44,7 @@ export default function App() {
         overScrollMode="never"
         bounces={false}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

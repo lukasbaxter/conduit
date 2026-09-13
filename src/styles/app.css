@@ -828,7 +828,7 @@ button:disabled { cursor: default; }
 .fs-tab.on:has(.fs-kebab) > button:first-child { padding-right: 8px; }
 .fs-kebab { width: 26px; height: 36px; display: grid; place-items: center; color: #ffffffb3; border-radius: 0 500px 500px 0; padding-right: 8px; }
 .fs-kebab:hover { color: #fff; }
-.fs-chevron, .fs-from-phone, .fs-phone-row, .mobile-back, .mobile-title { display: none; }
+.fs-chevron, .fs-from-phone, .fs-phone-row, .mobile-back, .mobile-title, .libchips, .libsort, .login-mark { display: none; }
 .fs-close { justify-self: end; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #ffffffb3; background: rgba(0,0,0,.35); }
 .fs-close:hover { color: #fff; }
 .fs-stage { display: grid; place-items: center; min-height: 0; padding: 0 32px; }
@@ -1100,6 +1100,64 @@ button:disabled { cursor: default; }
   .fs-phone-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; padding: 4px 0 0; color: #b3b3b3; }
   .fs-phone-row button { color: #b3b3b3; padding: 8px; }
   .fs-phone-row button.on { color: var(--accent); }
+
+  /* ---- Safe areas (the Expo shell draws full-bleed; viewport-fit=cover). ---- */
+  .app { grid-template-rows: calc(48px + env(safe-area-inset-top)) minmax(0, 1fr) auto auto; }
+  .navbar { height: auto; padding-top: env(safe-area-inset-top); }
+  .app.mobile-detail .content > .pad:first-child, .app.mobile-detail .content > .contentbar:first-child, .app.mobile-detail .sf-hero { padding-top: calc(56px + env(safe-area-inset-top)); }
+  .app.mobile-detail .settings { padding-top: calc(56px + env(safe-area-inset-top)); }
+  .rightpanel .panel-header { padding-top: calc(8px + env(safe-area-inset-top)); height: auto; }
+  .contentbar, .detailbar, .disco-filters { position: static; }
+  .trackhead { position: static; }
+
+  /* ---- Login: Spotify's black page, wordmark, white fields, green pill. ---- */
+  .login { align-items: flex-start; padding-top: calc(80px + env(safe-area-inset-top)); background: #000; }
+  .login form { width: 100%; background: transparent; padding: 0 24px; gap: 16px; }
+  .login-mark { display: grid; place-items: center; color: #fff; margin-bottom: 8px; }
+  .login h1 { text-align: center; font-size: 28px; letter-spacing: -.5px; }
+  .login-sub { text-align: center; font-size: 15px; color: #a7a7a7; margin-bottom: 16px; }
+  .login label { font-size: 14px; color: #fff; gap: 8px; }
+  .login input { background: #121212; border: 1px solid #727272; border-radius: 4px; padding: 14px; font-size: 16px; color: #fff; }
+  .login input:focus { border-color: #fff; }
+  .login .primary { background: var(--accent); color: #000; border-radius: 500px; min-height: 48px; font-size: 16px; font-weight: 700; margin-top: 8px; }
+
+  /* ---- Touch: no sticky hover tints, affordances always visible. ---- */
+  .trackrow:hover, .card:hover, .libitem:hover, .shortcut:hover, .qrow:hover, .hrow:hover { background: transparent; }
+  .trackrow.active { background: transparent; }
+  .trackrow-idx { opacity: 1; }
+  .trackrow-playglyph { display: none; }
+
+  /* ---- Search: Browse tiles two across, ~100pt, title 14 bold. ---- */
+  .tilegrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tile { aspect-ratio: auto; height: 100px; border-radius: 4px; padding: 12px; }
+  .tile span { font-size: 15px; max-width: 75%; }
+  .tile img, .tile .tile-liked { width: 60%; right: -14%; bottom: -14%; }
+
+  /* ---- Artist page: quieter Request pills, filters not sticky. ---- */
+  .card-request { font-size: 12px; padding: 6px 12px; }
+
+  /* ---- Library tab: chips + sort row like Spotify's. ---- */
+  .libchips { display: flex; gap: 8px; padding: 8px 16px 4px; overflow-x: auto; scrollbar-width: none; }
+  .libchips::-webkit-scrollbar { display: none; }
+  .libchips .pill { flex: none; }
+  .libchips .pill.x { width: 32px; padding: 0; display: grid; place-items: center; font-size: 18px; }
+  .libsort { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px 4px; font-size: 13px; font-weight: 600; color: #fff; }
+  .newplaylist-input { width: 100%; }
+
+  /* ---- Bottom sheets: context menus and the device picker slide up from the bottom. ---- */
+  .ctxmenu-fixed { left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: 100%; max-width: none; min-width: 0; border-radius: 16px 16px 0 0; padding: 12px 8px calc(16px + env(safe-area-inset-bottom)); max-height: 80vh; overflow-y: auto; background: var(--bg-elevated-hi); box-shadow: 0 -8px 40px rgba(0,0,0,.6); }
+  .ctxmenu-fixed::before { content: ''; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: -1; }
+  .ctxmenu-fixed::after { content: ''; display: block; position: absolute; top: 6px; left: 50%; width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.25); transform: translateX(-50%); }
+  .ctxmenu-fixed button, .ctxmenu-fixed .ctxitem { padding: 14px 12px; font-size: 16px; }
+  .ctxmenu-sub { position: fixed !important; }
+  .devicemenu { position: fixed !important; left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: 100% !important; max-width: none; border-radius: 16px 16px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); max-height: 80vh; overflow-y: auto; box-shadow: 0 -8px 40px rgba(0,0,0,.6); }
+  .devicemenu::before { content: ''; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: -1; }
+
+  /* ---- Now playing: lyrics scroll inside the stage. ---- */
+  .fs-stage { overflow: hidden; }
+  .fs-stage:has(.fs-lyrics) { display: block; }
+  .fs-lyrics { height: 100%; overflow-y: auto; box-sizing: border-box; }
+  .fs-lyrics .lyric-line { font-size: 24px; }
 }
 
 /* ================= History = stats.fm's user page =================
