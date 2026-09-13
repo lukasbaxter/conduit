@@ -207,6 +207,45 @@ export default function Library({
     relaySimilar(jf, it.Id, it.Name).then((r) => { if (alive) setSimil((d) => ({ ...d, [it.Id]: r.artists || [] })); }).catch(() => {});
     return () => { alive = false; };
   }, [detail?.item?.Id, detail?.kind]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Playlist page "Recommended": ten songs to add, seeded from what is
+  // already in the playlist (Jellyfin instant mixes off a few random members,
+  // merged, minus anything the playlist has or the user dislikes). Keyed by
+  // playlist id + a generation counter so Refresh reseeds.
+  const [reco, setReco] = useState({}); // playlistId -> { gen, items: [] | null }
+  const [recoGen, setRecoGen] = useState({});
+  useEffect(() => {
+    const it = detail?.item;
+    if (!it || detail.kind !== 'Playlist' || it.Id === LIKED_ID || it._mix || detail.loading) return undefined;
+    const gen = recoGen[it.Id] || 0;
+    if (reco[it.Id]?.gen === gen) return undefined;
+    let alive = true;
+    setReco((m) => ({ ...m, [it.Id]: { gen, items: null } }));
+    (async () => {
+      const have = new Set((detail.tracks || []).map((t) => t.Id));
+      const pool = (detail.tracks || []).filter((t) => t.UserData?.Likes !== false);
+      const seeds = [...pool].sort(() => Math.random() - 0.5).slice(0, 3);
+      let out = [];
+      if (seeds.length) {
+        const mixes = await Promise.all(seeds.map((t) => jf.instantMix(t.Id, 30).catch(() => [])));
+        const seen = new Set();
+        // Interleave the mixes so one seed does not dominate the ten.
+        for (let i = 0; out.length < 40 && mixes.some((m) => m.length > i); i += 1) {
+          for (const m of mixes) { const t = m[i]; if (t && !have.has(t.Id) && !seen.has(t.Id)) { seen.add(t.Id); out.push(t); } }
+        }
+      } else {
+        out = await jf.topTracks({ limit: 40 }).catch(() => []);
+        out = out.filter((t) => !have.has(t.Id));
+      }
+      if (alive) setReco((m) => ({ ...m, [it.Id]: { gen, items: out.slice(0, 10) } }));
+    })().catch(() => { if (alive) setReco((m) => ({ ...m, [it.Id]: { gen, items: [] } })); });
+    return () => { alive = false; };
+  }, [detail?.item?.Id, detail?.kind, detail?.loading, recoGen]); // eslint-disable-line react-hooks/exhaustive-deps
+  const addRecommended = async (pl, t) => {
+    // Drop the row at once; the playlist refresh is onAddTo's job.
+    setReco((m) => { const cur = m[pl.Id]; return cur ? { ...m, [pl.Id]: { ...cur, items: cur.items.filter((x) => x.Id !== t.Id) } } : m; });
+    await onAddTo?.(pl, t);
+  };
+
   const requestRelease = async (artistId, rel) => {
     setRequesting((m) => ({ ...m, [rel.album_id]: 'queued' }));
     try {
@@ -878,6 +917,32 @@ export default function Library({
                 )}
               />
             ); })()}
+            {isPlaylist && !isLiked && !item._mix && !detail.loading && !within.trim() && (() => {
+              const rec = reco[item.Id];
+              if (!rec || (rec.items && rec.items.length === 0)) return null;
+              return (
+                <section className="reco">
+                  <div className="reco-head">
+                    <div>
+                      <h2>Recommended</h2>
+                      <p>Based on what&rsquo;s in this playlist</p>
+                    </div>
+                  </div>
+                  {rec.items === null ? <p className="placeholder-note">Finding songs&hellip;</p> : rec.items.map((t, i) => (
+                    <div key={t.Id} className="reco-row">
+                      <TrackRow
+                        {...rowProps(rec.items, i, { showArt: true }, null)}
+                        n=""
+                      />
+                      <button className="reco-add" onClick={() => addRecommended(item, t)}>Add</button>
+                    </div>
+                  ))}
+                  {rec.items !== null && (
+                    <button className="reco-refresh" onClick={() => setRecoGen((g) => ({ ...g, [item.Id]: (g[item.Id] || 0) + 1 }))}>Refresh</button>
+                  )}
+                </section>
+              );
+            })()}
           </div>
         )}
       </div>
@@ -942,7 +1007,8 @@ export default function Library({
         <div className="contentbar">
           <input ref={searchRef} className="search" autoFocus placeholder="What do you want to play?"
             value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onSearchKey} spellCheck="false" />
-          {r?.tookMs != null && <span className="search-took">{r.engine === 'meili' ? `${r.tookMs} ms` : 'basic search'}</span>}
+          {/* Invisible marker for the tests: which engine answered and how fast. */}
+          {r?.tookMs != null && <span className="search-took" hidden>{r.engine === 'meili' ? `${r.tookMs} ms` : 'basic search'}</span>}
         </div>
         {r && (
           <div className="searchtypes">

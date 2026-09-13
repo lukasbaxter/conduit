@@ -273,28 +273,97 @@ async function search(rawQ, { limit = 10, filter: extraFilter = null, userId = n
 }
 
 // --- browse ---------------------------------------------------------------
-// The tiles on the empty search page. Raw genre tags are a mess (100s of
-// spellings, "R&B" split into "R" and "B" by the tag delimiter), so they are
-// folded into a fixed set of buckets by keyword; each bucket gets its track
-// count and the cover of its most-played album. Cached for 10 minutes.
+// The tiles on the empty search page. Raw genre tags are a mess (600 spellings,
+// "R&B" split into "R" and "B" by the tag delimiter), so each tag is filed
+// under a bucket by bucketsOf() below; each bucket gets its track count and
+// the cover of its most-played album. Cached for 10 minutes.
 const BUCKETS = [
-  { id: 'hiphop', name: 'Hip-Hop', color: '#4b7d9b', re: /hip.?hop|\brap\b|trap|drill|grime|boom bap/i },
-  { id: 'pop', name: 'Pop', color: '#8d67ab', re: /\bpop\b(?!.*punk)|k-?pop|j-?pop|synthpop|electropop|dance pop/i },
-  { id: 'electronic', name: 'Electronic', color: '#e13300', re: /electro|house|techno|trance|edm|dubstep|drum|bass|dnb|garage|future|hardstyle|breakbeat|big beat|2-step|bassline|uk funky|jungle|club|dance/i },
-  { id: 'rock', name: 'Rock', color: '#e61e32', re: /\brock\b|grunge|punk|emo|post-hardcore|shoegaze|britpop/i },
-  { id: 'indie', name: 'Indie & Alternative', color: '#1e3264', re: /indie|alternat|alt\.|bedroom|lo-?fi|dream pop|art pop|art rock/i },
-  { id: 'rnb', name: 'R&B & Soul', color: '#ba5d07', re: /r&b|rnb|\br\b|\bb\b|soul|neo.?soul|funk|motown|disco/i },
-  { id: 'kpop', name: 'K-Pop', color: '#e8115b', re: /k-?pop|korean|asian music/i },
-  { id: 'metal', name: 'Metal', color: '#503750', re: /metal|hardcore|deathcore|metalcore/i },
-  { id: 'country', name: 'Country', color: '#d84000', re: /country|americana|bluegrass/i },
-  { id: 'jazz', name: 'Jazz & Blues', color: '#477d95', re: /jazz|blues|swing|bebop/i },
-  { id: 'classical', name: 'Classical', color: '#7d4b32', re: /classical|orchestr|symphon|baroque|piano|opera|ballet|concerto|art song/i },
-  { id: 'latin', name: 'Latin', color: '#e1118c', re: /latin|reggaeton|salsa|bachata|cumbia|latino|español|espanol/i },
-  { id: 'reggae', name: 'Reggae & Dancehall', color: '#148a08', re: /reggae|dancehall|dub\b|ska|afrobeat|afro/i },
-  { id: 'folk', name: 'Folk & Acoustic', color: '#a56752', re: /folk|acoustic|singer.?songwriter|bardcore/i },
-  { id: 'chill', name: 'Chill & Ambient', color: '#0d73ec', re: /ambient|chill|downtempo|lounge|sleep|meditat|new age/i },
-  { id: 'soundtrack', name: 'Soundtracks', color: '#27856a', re: /soundtrack|score|film|bandes originales|anime|game|video game|ost/i },
+  { id: 'hiphop', name: 'Hip-Hop', color: '#4b7d9b' },
+  { id: 'pop', name: 'Pop', color: '#8d67ab' },
+  { id: 'electronic', name: 'Electronic', color: '#e13300' },
+  { id: 'rock', name: 'Rock', color: '#e61e32' },
+  { id: 'indie', name: 'Indie & Alternative', color: '#1e3264' },
+  { id: 'rnb', name: 'R&B & Soul', color: '#ba5d07' },
+  { id: 'kpop', name: 'K-Pop', color: '#e8115b' },
+  { id: 'metal', name: 'Metal', color: '#503750' },
+  { id: 'country', name: 'Country', color: '#d84000' },
+  { id: 'jazz', name: 'Jazz & Blues', color: '#477d95' },
+  { id: 'classical', name: 'Classical', color: '#7d4b32' },
+  { id: 'latin', name: 'Latin', color: '#e1118c' },
+  { id: 'reggae', name: 'Reggae & Dancehall', color: '#148a08' },
+  { id: 'folk', name: 'Folk & Acoustic', color: '#a56752' },
+  { id: 'chill', name: 'Chill & Ambient', color: '#0d73ec' },
+  { id: 'soundtrack', name: 'Soundtracks', color: '#27856a' },
 ];
+// One bucket per tag, decided by the tag's HEAD word (genre names are
+// modifier + head: "emo rap" is rap, "pop punk" is punk, "dance-pop" is pop).
+// Two-word heads ("trip hop", "drum and bass") are tried before one-word
+// ones, then a few regex rescues for foreign and odd spellings. Tags that are
+// years, track numbers or one-letter fragments are dropped.
+const HEADS = {
+  kpop: ['kpop', 'k pop', 'korean', 'k rap', 'k indie', 'k rock'],
+  hiphop: ['rap', 'hop', 'hiphop', 'trap', 'drill', 'grime', 'phonk', 'crunk', 'bounce', 'boom bap', 'plugg', 'rage', 'conscious', 'dirty south', 'rapcore'],
+  metal: ['metal', 'metalcore', 'deathcore', 'thrash', 'doom', 'sludge', 'nu metal', 'djent', 'grindcore'],
+  rock: ['rock', 'punk', 'grunge', 'emo', 'shoegaze', 'britpop', 'hardcore', 'post hardcore', 'psychedelic', 'psychedelia', 'stoner', 'new wave', 'post punk', 'pop punk', 'surf', 'prog', 'progressive', 'glam', 'roll', 'krautrock', 'psychobilly', 'aor', 'industrial', 'screamo', 'alternrock', 'rockabilly', 'merseybeat', 'psychadelic', 'gothic'],
+  electronic: ['electronic', 'electronica', 'electro', 'house', 'techno', 'trance', 'edm', 'dubstep', 'dnb', 'drum and bass', 'drum n bass', 'bass', 'drum', 'garage', 'breakbeat', 'breaks', 'breakstep', 'hardstyle', 'jungle', 'idm', 'step', 'dance', 'big beat', 'trip hop', 'glitch hop', 'synthwave', 'vaporwave', 'complextro', 'moombahton', 'hyperpop', 'glitch', 'brostep', 'eurodance', 'club', 'rave', 'wave', 'bassline', 'tech', 'electronique', 'elettronica', 'indietronica', 'funktronica', 'wonky', 'dj', 'hi nrg', 'nrg', 'electronica', 'boogie', 'electroclash', 'spacesynth', 'minimal', '댄스'],
+  chill: ['ambient', 'chill', 'chillout', 'chillwave', 'chillsynth', 'lo fi', 'lofi', 'downtempo', 'lounge', 'sleep', 'meditation', 'new age', 'relax', 'study', 'chillhop', 'beats', 'instrumental', 'mood'],
+  rnb: ['rnb', 'r b', 'r&b', 'soul', 'funk', 'motown', 'disco', 'neo soul', 'quiet storm', 'r', 'b', 'rhythm and blues', 'rhythm & blues', 'rhythm n blues', 'new jack swing'],
+  country: ['country', 'americana', 'bluegrass', 'honky tonk', 'western', 'outlaw'],
+  jazz: ['jazz', 'blues', 'swing', 'bebop', 'fusion', 'bossa nova', 'big band', 'ragtime', 'dixieland', 'j fusion'],
+  classical: ['classical', 'orchestral', 'orchestra', 'symphony', 'symphonic', 'baroque', 'opera', 'piano', 'concerto', 'chamber', 'choral', 'romantic', 'romanticism', 'impressionism', 'neoclassical', 'ballet', 'art song', 'klassik', 'etude', 'early', 'minimalism'],
+  soundtrack: ['soundtrack', 'soundtracks', 'ost', 'score', 'scores', 'film', 'films', 'movie', 'movies', 'anime', 'game', 'games', 'video game', 'musical', 'musicals', 'broadway', 'stage', 'screen', 'themes', 'tv', 'jeux video', 'juegos', 'peliculas', 'bandas sonoras', 'bandes originales', 'bande originale', 'cinematic'],
+  latin: ['latin', 'latino', 'reggaeton', 'salsa', 'bachata', 'cumbia', 'corrido', 'corridos', 'banda', 'mariachi', 'tango', 'flamenco', 'urbano', 'espanol', 'brasileira', 'mpb', 'samba', 'bolero', 'merengue', 'dembow', 'sertanejo', 'pagode', 'mambo', 'latin music'],
+  reggae: ['reggae', 'dancehall', 'ska', 'dub', 'afrobeat', 'afrobeats', 'afro', 'amapiano', 'afropop', 'highlife', 'soca', 'calypso', 'roots', 'ragga', 'kizomba'],
+  folk: ['folk', 'acoustic', 'singer songwriter', 'songwriter', 'celtic', 'traditional', 'bardcore'],
+  indie: ['indie', 'alternative', 'alt', 'alternativa', 'alternativo', 'alternatif et inde', 'inde', 'bedroom', 'experimental', 'twee', 'jangle', 'indiepop'],
+  pop: ['pop', 'electropop', 'synthpop', 'dance pop', 'teen pop', 'europop', 'j pop', 'jpop', 'schlager', 'adult contemporary', 'easy listening', 'singer', 'ballad', 'ballads', 'vocal', 'vocalists', 'contemporary', 'mainstream', 'top 40', 'chanson', 'chanson francaise', 'variete', 'boy band', 'idol', 'christmas', 'holiday', 'worship', 'christian', 'gospel', 'oldies', 'neo mellow', 'mellow', 'pop?', '팝', 'christmas'],
+};
+const ORDER = ['kpop', 'hiphop', 'metal', 'rnb', 'reggae', 'latin', 'country', 'jazz', 'classical', 'soundtrack', 'chill', 'folk', 'rock', 'electronic', 'indie', 'pop'];
+const RESCUE = [
+  [/\bk[\s-]?pop\b|\bkorean\b/, 'kpop'],
+  [/\bhip[\s-]?hop\b|\brap\b/, 'hiphop'],
+  [/metal/, 'metal'],
+  [/\br\s*(&|and|n)\s*b\b|\brnb\b|\bsoul\b/, 'rnb'],
+  [/\bfilm\w*\b|\bgame\w*\b|\bjeux\b|\bjuegos\b|\bpel[ií]culas?\b|\bscore\w*\b|\bscreen\b|\bmusical\w*\b|\bsoundtrack\w*\b|\bcin[eé]ma\w*\b|\bost\b/, 'soundtrack'],
+  [/\breggae\w*\b|\bdancehall\b|\bafro\w*\b/, 'reggae'],
+  [/\blatin\w*\b|\bbrasil\w*\b|\bespa[ñn]ol\b|\bmexican\w*\b/, 'latin'],
+  [/\bcountry\b/, 'country'],
+  [/\bjazz\b|\bblues\b/, 'jazz'],
+  [/\bclassic(al|a|o)\b|\borchestr\w*\b|\bsymphon\w*\b|\bbaroque\b|\bopera\b/, 'classical'],
+  [/\bchill\w*\b|\bambient\b|\blo[\s-]?fi\b/, 'chill'],
+  [/\bfolk\b|\bacoustic\b|\bsongwriter\b/, 'folk'],
+  [/rock\b|\bpunk\b|\bgrunge\b|\bemo\b|\bpsychedel\w*\b|\bindustrial\b/, 'rock'],
+  [/electr[oó]n\w*|\bhouse\b|\btechno\b|\btrance\b|\bedm\b|\bdubstep\b|\bdance\b|\bdrum\b|\bbass\b|\bbreak\w*\b|танц/, 'electronic'],
+  [/\bind[eé]\b|\bindie\b|\balternati\w*\b|\balt\b|\bexperimental\b/, 'indie'],
+  [/pop\b|поп|\bgospel\b|\bchristian\b|\bballad\w*\b/, 'pop'],
+];
+// Modifiers that also file a tag under Indie & Alternative (an "indie rock"
+// track belongs on both the Rock and the Indie tile).
+const INDIE_MOD = /\b(indie|alternative|alt\.?|bedroom|dream|art|shoegaze|inde|indé|alternatif|experimental)\b/;
+const cleanGenre = (g) => String(g || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/^[\s"'\[\(«»]+|[\s"'\]\)«»]+$/g, '').replace(/«multiple values»/g, '').replace(/[_/+]+/g, ' ').replace(/\s+/g, ' ').replace(/\s?musi[cq]u?e?s?$/, '').replace(/^r'?n'?b$/, 'rnb').trim();
+function bucketsOf(raw) {
+  const g = cleanGenre(raw);
+  if (!g) return [];
+  if (g === 'r' || g === 'b') return ['rnb']; // "R&B" split by the tag delimiter
+  if (/\d/.test(g) && !/\b2[\s-]?step\b|\b(60|70|80|90)s\b|\btop 40\b/.test(g)) return []; // years, track numbers, "5+ wochen"
+  if (g.replace(/[^a-zЀ-ӿ]/g, '').length < 3) return [];
+  const words = g.split(/[\s-]+/);
+  const head1 = words[words.length - 1], head2 = words.slice(-2).join(' '), head3 = words.slice(-3).join(' ');
+  let b = null;
+  for (const k of ORDER) if (HEADS[k].includes(head3) || HEADS[k].includes(head2)) { b = k; break; }
+  if (!b) for (const k of ORDER) if (HEADS[k].includes(head1)) { b = k; break; }
+  if (!b) for (const [re, k] of RESCUE) if (re.test(g)) { b = k; break; }
+  if (!b) return [];
+  // A generic head with a stronger family in the modifier.
+  if (b === 'pop' && /\bk[\s-]?pop\b|\bkorean\b/.test(g)) b = 'kpop';
+  else if (b === 'pop' && /\bpunk\b/.test(g)) b = 'rock';
+  else if (b === 'rock' && /\bmetal\b/.test(g)) b = 'metal';
+  else if (b === 'hiphop' && /\btrip\b|\bglitch\b/.test(g)) b = 'electronic';
+  else if (b === 'jazz' && /\brhythm\b/.test(g)) b = 'rnb';
+  const out = [b];
+  if (b !== 'indie' && INDIE_MOD.test(g)) out.push('indie');
+  return out;
+}
 let browseCache = { at: 0, tiles: null };
 async function browse() {
   if (browseCache.tiles && Date.now() - browseCache.at < 10 * 60 * 1000) return browseCache.tiles;
@@ -302,7 +371,7 @@ async function browse() {
   const dist = facets.facetDistribution?.genres || {};
   const tiles = [];
   for (const b of BUCKETS) {
-    const genres = Object.keys(dist).filter((g) => b.re.test(g));
+    const genres = Object.keys(dist).filter((g) => bucketsOf(g).includes(b.id));
     const count = genres.reduce((n, g) => n + dist[g], 0);
     if (count < 15) continue;
     const filter = `genres IN [${genres.map((g) => JSON.stringify(g)).join(', ')}]`;

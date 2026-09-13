@@ -750,7 +750,6 @@ input[type="range"]:disabled { opacity: .4; }
 .theme-color code { color: var(--fg-dim); font-size: 12px; }
 
 /* ---------- search ---------- */
-.search-took { color: var(--fg-dim); font-size: 12px; margin-left: 8px; }
 .trackrow.hi, .topresult.hi { background: var(--tint-hi); outline: 1px solid var(--tint-press); }
 .lyric-snippet { display: flex; align-items: center; gap: 8px; color: var(--fg-dim); font-size: 12px; line-height: 16px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .lyric-snippet > :not(.lyric-tag) { overflow: hidden; text-overflow: ellipsis; }
@@ -876,3 +875,16 @@ button:disabled { cursor: default; }
 /* The top strip of the now-playing view still drags the window (buttons excepted). */
 .fs-top { -webkit-app-region: drag; }
 .fs-top button, .fs-top .ctxmenu, .fs-top .ctxmenu * { -webkit-app-region: no-drag; }
+
+/* Playlist "Recommended" (Spotify: heading + subline, plain rows without a
+   number, an outlined Add pill on the right, Refresh underneath). */
+.reco { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--tint); }
+.reco-head { padding: 0 16px 12px; }
+.reco-head h2 { margin: 0; font-size: 24px; font-weight: 700; }
+.reco-head p { margin: 4px 0 0; color: var(--fg-dim); font-size: 14px; }
+.reco-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.reco-row .trackrow-like, .reco-row .trackrow-dur { display: none; }
+.reco-add { padding: 6px 16px; border-radius: 500px; border: 1px solid var(--fg-dim); color: var(--fg); font-weight: 700; font-size: 14px; margin-right: 16px; background: transparent; }
+.reco-add:hover { border-color: var(--fg); transform: scale(1.04); }
+.reco-refresh { color: var(--fg-dim); font-size: 14px; font-weight: 700; padding: 14px 16px; }
+.reco-refresh:hover { color: var(--fg); }
