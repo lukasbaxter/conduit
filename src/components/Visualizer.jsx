@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-// The visualizer has two engines: a graphic-EQ family (audioMotion-analyzer,
-// the spectrum engine Feishin ships) and Milkdrop (butterchurn). Settings
-// come from the full-screen tab's ⋯ menu and persist in localStorage.
+// The visualizer is a graphic-EQ family (audioMotion-analyzer, the spectrum
+// engine Feishin ships). Settings come from the full-screen tab's ⋯ menu and
+// live in the account's prefs.
 //
 // Audio source: the local <audio> element when this device plays. When the
 // sound is on a speaker or another client, a silent shadow copy of the same
@@ -18,31 +18,17 @@ export const EQ_STYLES = [
   { id: 'radial', name: 'Radial', opts: { mode: 5, radial: true, spinSpeed: 1, showPeaks: true, barSpace: .2, mirror: 0, reflexRatio: 0, ledBars: false, fillAlpha: 1, lineWidth: 0 } },
 ];
 export const GRADIENTS = ['prism', 'classic', 'rainbow', 'orangered', 'steelblue'];
-// `preset` is the Milkdrop preset last chosen; it stays until the user picks
-// another (no timed cycling).
-export const DEFAULT_VIZ = { engine: 'eq', style: 'line', gradient: 'prism', favorites: [], favOnly: false, preset: '' };
-// Only presets that actually listen to the music are offered. A preset is
-// reactive when its equations/shaders read the audio levels several times, or
-// at least once while also drawing a visible base waveform.
-const AUDIO_VARS = /\b(bass|mid|treb|bass_att|mid_att|treb_att|vol|vol_att)\b/g;
-export function isReactivePreset(preset) {
-  const refs = (JSON.stringify(preset).match(AUDIO_VARS) || []).length;
-  const wave = preset?.baseVals?.wave_a ?? 0;
-  return refs >= 3 || (refs >= 1 && wave >= 0.1);
-}
+export const DEFAULT_VIZ = { style: 'line', gradient: 'prism' };
 export function loadVizSettings() {
   try { return { ...DEFAULT_VIZ, ...JSON.parse(localStorage.getItem('conduit.viz') || '{}') }; } catch { return { ...DEFAULT_VIZ }; }
 }
 
-export default function Visualizer({ player, active, jf, settings, nextPresetSignal = 0, onPreset, controls, sharedViz, onShareViz }) {
-  const canvasRef = useRef(null);
+export default function Visualizer({ player, active, jf, settings }) {
   const boxRef = useRef(null);
   const stageRef = useRef(null);
-  const vizRef = useRef(null);
   const amRef = useRef(null);
   const shadowRef = useRef(null); // { el, ctx, source, id }
   const [state, setState] = useState('loading'); // loading | ready | error
-  const [presetName, setPresetName] = useState('');
   // Sound comes out of this client only when it is the active player on its
   // own local output. Mirroring another client (a browser playing while you
   // look at the desktop app) counts as remote even if a paused local queue
@@ -50,7 +36,6 @@ export default function Visualizer({ player, active, jf, settings, nextPresetSig
   const local = !player.mirroring && player.device?.kind === 'local' && !!player.current;
   const trackId = player.nowPlayingId;
   const cfg = settings || DEFAULT_VIZ;
-  const cfgRef = useRef(cfg); cfgRef.current = cfg;
   const style = EQ_STYLES.find((x) => x.id === cfg.style) || EQ_STYLES[0];
 
   const shadow = () => {
@@ -95,7 +80,7 @@ export default function Visualizer({ player, active, jf, settings, nextPresetSig
 
   // Graphic EQ engine.
   useEffect(() => {
-    if (!active || cfg.engine !== 'eq') return undefined;
+    if (!active) return undefined;
     let alive = true;
     setState('loading');
     (async () => {
@@ -114,76 +99,17 @@ export default function Visualizer({ player, active, jf, settings, nextPresetSig
         });
         amRef.current = am;
         if (window.location.search.includes('debug')) window.__vizAm = am;
-        setPresetName(style.name);
         setState('ready');
       } catch (e) { console.error('visualizer', e); if (alive) setState('error'); }
     })();
     return () => { alive = false; try { amRef.current?.destroy(); } catch {} amRef.current = null; };
-  }, [active, local, cfg.engine, style.id, cfg.gradient]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, local, style.id, cfg.gradient]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Milkdrop engine.
-  const nextRef = useRef(null);
-  const followRef = useRef(null);
-  const sharedRef = useRef(sharedViz); sharedRef.current = sharedViz;
-  // Another client moved to a preset: show the same one here.
-  useEffect(() => { if (sharedViz?.preset) followRef.current?.(sharedViz.preset); }, [sharedViz]);
-  useEffect(() => {
-    if (!active || cfg.engine !== 'milkdrop') return undefined;
-    let alive = true, raf = 0;
-    setState('loading');
-    (async () => {
-      try {
-        const [bc, bcp] = await Promise.all([import('butterchurn'), import('butterchurn-presets')]);
-        const butterchurn = bc.default || bc;
-        const presets = (bcp.default || bcp).getPresets();
-        const names = Object.keys(presets).filter((n) => isReactivePreset(presets[n]));
-        const wa = graph();
-        if (!wa || !alive) { setState('error'); return; }
-        const canvas = canvasRef.current, box = boxRef.current;
-        const size = () => { const r = box.getBoundingClientRect(); canvas.width = r.width * devicePixelRatio; canvas.height = r.height * devicePixelRatio; return r; };
-        const r = size();
-        const viz = butterchurn.createVisualizer(wa.ctx, canvas, { width: r.width * devicePixelRatio, height: r.height * devicePixelRatio, pixelRatio: devicePixelRatio, textureRatio: 1 });
-        viz.connectAudio(wa.source);
-        // The pool is every preset, or only the saved favourites when asked.
-        const pool = () => { const f = (cfgRef.current.favOnly && cfgRef.current.favorites?.filter((n) => presets[n])) || []; return f.length ? f : names; };
-        let current = '';
-        // A preset stays until the user changes it (no timer). `share` is
-        // false when following another client or restoring the saved one.
-        const load = (name, blend, share = true) => {
-          if (!presets[name] || name === current) return;
-          current = name; viz.loadPreset(presets[name], blend); setPresetName(name); onPreset?.(name);
-          if (share) onShareViz?.(name);
-        };
-        // Start on what the account's other screens show, else the preset
-        // saved on the account, else pick one at random (once).
-        const shared = sharedRef.current;
-        const saved = cfgRef.current.preset;
-        if (shared?.preset && presets[shared.preset]) load(shared.preset, 0, false);
-        else if (saved && presets[saved]) load(saved, 0, false);
-        else { const start = pool(); load(start[Math.floor(Math.random() * start.length)], 0); }
-        nextRef.current = () => { const list = pool(); const i = list.indexOf(current); load(list[(i + 1) % list.length], 1.5); };
-        followRef.current = (name) => load(name, 1.5, false);
-        if (controls) controls.current = { next: () => nextRef.current?.(), load: (name) => load(name, 1.5), names };
-        let last = `${r.width}x${r.height}`;
-        const ro = new ResizeObserver(() => { const b2 = box.getBoundingClientRect(); const k = `${b2.width}x${b2.height}`; if (k === last) return; last = k; const rr = size(); viz.setRendererSize(rr.width * devicePixelRatio, rr.height * devicePixelRatio); });
-        ro.observe(box);
-        const frame = () => { if (!alive) return; viz.render(); raf = requestAnimationFrame(frame); };
-        raf = requestAnimationFrame(frame);
-        setState('ready');
-        vizRef.current = { viz, ro };
-      } catch (e) { console.error('visualizer', e); if (alive) setState('error'); }
-    })();
-    return () => { alive = false; cancelAnimationFrame(raf); vizRef.current?.ro?.disconnect?.(); vizRef.current = null; nextRef.current = null; followRef.current = null; if (controls) controls.current = null; onPreset?.(''); };
-  }, [active, local, cfg.engine]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (nextPresetSignal) nextRef.current?.(); }, [nextPresetSignal]);
 
-  const md = cfg.engine === 'milkdrop';
   return (
-    <div className="viz" ref={boxRef} onClick={() => md && nextRef.current?.()} title={md ? 'Click for the next preset' : undefined} style={{ cursor: md ? 'pointer' : 'default' }}>
-      <div ref={stageRef} className="viz-stage" style={{ display: md ? 'none' : 'block' }} />
-      <canvas ref={canvasRef} className="viz-canvas" style={{ display: md ? 'block' : 'none' }} />
+    <div className="viz" ref={boxRef}>
+      <div ref={stageRef} className="viz-stage" />
       {state === 'error' && <div className="viz-msg">The visualizer could not start here.</div>}
-      {state === 'ready' && md && presetName && <div className="viz-preset"><span>{presetName}</span></div>}
     </div>
   );
 }

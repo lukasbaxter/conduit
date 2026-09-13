@@ -105,10 +105,6 @@ export default function App() {
   // filling the app window. It never asks the OS for full screen itself; if
   // the window is already full screen it fills that.
   const [fullScreen, setFullScreen] = useState(false);
-  // The Milkdrop preset the account is showing right now, shared over the relay
-  // so every open visualizer is on the same picture.
-  const [sharedViz, setSharedViz] = useState(null);
-  const shareViz = (preset) => player.relay?.sendViz?.(preset); // the relay echoes it back, ordered
   const openFullScreen = () => setFullScreen(true);
   const closeFullScreen = () => setFullScreen(false);
   // Account settings: theme + playback quality. Loaded from Jellyfin, applied
@@ -317,7 +313,6 @@ export default function App() {
       onCommand: (cmd) => player.executeCommand(cmd),
       onQueue: (from, q) => player.applyRemoteQueue(from, q),
       onSession: (s) => player.applySession(s),
-      onViz: (v) => setSharedViz(v),
       onPrefs: (p) => {
         const next = { ...p, theme: { ...DEFAULT_THEME, ...(p.theme || {}) }, quality: p.quality || 'original' };
         delete next._libraryChanged;
@@ -800,7 +795,7 @@ pos=${Math.round(player.position)} playing=${player.playing} vol=${player.volume
         onFullScreen={openFullScreen}
       />
       <PlayingElsewhereBar player={player} />
-      {fullScreen && <FullScreen player={player} jf={jf} onClose={closeFullScreen} onOpenArtist={openArtistById} onLike={onLike} prefs={prefs} onUpdatePrefs={updatePrefs} sharedViz={sharedViz} onShareViz={shareViz} />}
+      {fullScreen && <FullScreen player={player} jf={jf} onClose={closeFullScreen} onOpenArtist={openArtistById} onLike={onLike} prefs={prefs} onUpdatePrefs={updatePrefs} />}
     </div>
   );
 }

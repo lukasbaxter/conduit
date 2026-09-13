@@ -29,7 +29,7 @@ function clientId() {
 }
 
 export class Relay {
-  constructor({ token, name, kind, canPlay = true, onRoster, onCommand, onQueue, onSession, onPrefs, onViz }) {
+  constructor({ token, name, kind, canPlay = true, onRoster, onCommand, onQueue, onSession, onPrefs }) {
     this.token = token;
     this.name = name;
     this.kind = kind; // 'desktop' | 'web' | 'mobile'
@@ -39,7 +39,6 @@ export class Relay {
     this.onQueue = onQueue || (() => {});
     this.onSession = onSession || (() => {});
     this.onPrefs = onPrefs || (() => {});
-    this.onViz = onViz || (() => {});
     this.id = clientId();
     this.ws = null;
     this.closed = false;
@@ -77,7 +76,6 @@ export class Relay {
         if (this._pending.queue) this.reportQueue(this._pending.queue);
       } else if (m.type === 'queue') this.onQueue(m.from, m.queue || null);
       else if (m.type === 'prefs') this.onPrefs(m.prefs || {});
-      else if (m.type === 'viz') this.onViz(m.viz || null);
       else if (m.type === 'session') this.onSession({ nowPlaying: m.nowPlaying, queue: m.queue || [], at: m.at || 0 });
       else if (m.type === 'roster') this.onRoster({ players: m.players || [], lanDevices: m.lanDevices || [], activeClientId: m.activeClientId || null });
       else if (m.type === 'command') {
@@ -120,7 +118,6 @@ export class Relay {
   // I just started playing here: make the user's other clients yield.
   claim() { this._claimed = true; this._send({ type: 'claim' }); }
   sendPrefs(prefs) { this._send({ type: 'prefs', prefs }); }
-  sendViz(preset) { this._send({ type: 'viz', preset }); }
 
   // Tell another client to do something.
   command(toClientId, command) {

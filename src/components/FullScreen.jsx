@@ -10,46 +10,23 @@ const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(
  * Spotify's full-screen player: blurred cover behind, tabs up top (Album /
  * Visualizer / Lyrics), the track and transport along the bottom.
  */
-export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, prefs, onUpdatePrefs, sharedViz, onShareViz }) {
+export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, prefs, onUpdatePrefs }) {
   const [tab, setTab] = useState(() => localStorage.getItem('conduit.fsTab') || 'album');
-  // Visualizer settings (engine, style, gradient, preset cycling, favourite
-  // presets) behind the tab's ⋯ menu. They live in the account's prefs, so a
-  // change here shows up on every signed-in client and survives a fresh
-  // machine; localStorage only carries a copy for the first paint.
+  // Visualizer settings (style, colours) behind the tab's ⋯ menu. They live
+  // in the account's prefs, so a change here shows up on every signed-in
+  // client and survives a fresh machine; localStorage only carries a copy for
+  // the first paint.
   const viz = { ...DEFAULT_VIZ, ...(prefs?.viz || loadVizSettings()) };
   const [vizMenu, setVizMenu] = useState(null);
-  const [nextPreset, setNextPreset] = useState(0);
-  const [preset, setPreset] = useState('');
-  const vizCtl = useRef(null);
-  const favs = viz.favorites || [];
-  const isFav = !!preset && favs.includes(preset);
-  const toggleFav = (name) => { if (!name) return; setV({ favorites: favs.includes(name) ? favs.filter((n) => n !== name) : [...favs, name] }); };
   const setV = (patch) => { const n = { ...viz, ...patch }; try { localStorage.setItem('conduit.viz', JSON.stringify(n)); } catch {} onUpdatePrefs?.({ viz: n }); };
   const vizItems = [
-    { label: 'Engine' },
-    { label: `Graphic EQ${viz.engine === 'eq' ? '  ✓' : ''}`, onClick: () => setV({ engine: 'eq' }) },
-    { label: `Milkdrop${viz.engine === 'milkdrop' ? '  ✓' : ''}`, onClick: () => setV({ engine: 'milkdrop' }) },
-    { sep: true },
-    ...(viz.engine === 'eq' ? [
-      { label: 'Style', sub: EQ_STYLES.map((s2) => ({ key: s2.id, label: `${s2.name}${viz.style === s2.id ? '  ✓' : ''}`, onClick: () => setV({ style: s2.id }) })) },
-      { label: 'Colours', sub: GRADIENTS.map((g) => ({ key: g, label: `${g[0].toUpperCase()}${g.slice(1)}${viz.gradient === g ? '  ✓' : ''}`, onClick: () => setV({ gradient: g }) })) },
-    ] : [
-      { label: 'Next preset', onClick: () => setNextPreset((n) => n + 1) },
-      { sep: true },
-      { label: isFav ? 'Remove from favourites' : 'Save preset to favourites', disabled: !preset, onClick: () => toggleFav(preset) },
-      { label: `Favourites only${viz.favOnly ? '  ✓' : ''}`, disabled: !favs.length, onClick: () => setV({ favOnly: !viz.favOnly }) },
-      ...(favs.length ? [{ label: `Favourites (${favs.length})`, sub: favs.map((n) => ({ key: n, label: `${n}${n === preset ? '  ✓' : ''}`, onClick: () => vizCtl.current?.load(n) })) }] : []),
-    ]),
+    { label: 'Style', sub: EQ_STYLES.map((s2) => ({ key: s2.id, label: `${s2.name}${viz.style === s2.id ? '  ✓' : ''}`, onClick: () => setV({ style: s2.id }) })) },
+    { label: 'Colours', sub: GRADIENTS.map((g) => ({ key: g, label: `${g[0].toUpperCase()}${g.slice(1)}${viz.gradient === g ? '  ✓' : ''}`, onClick: () => setV({ gradient: g }) })) },
   ];
   const { nowPlaying, playing, position, duration, shuffle, repeat } = player;
   const art = nowPlaying?.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: 1000 }) : nowPlaying?.artUrl || null;
   useEffect(() => { try { localStorage.setItem('conduit.fsTab', tab); } catch {} }, [tab]);
-  // Milkdrop takes the whole window (behind the tabs and transport); the EQ stays in its box.
-  const mdFull = tab === 'viz' && viz.engine === 'milkdrop';
-  // A preset the user picked here is shared live AND saved on the account, so
-  // the next open (any client) starts on it instead of a random one.
-  const sharePreset = (name) => { onShareViz?.(name); if (name && name !== viz.preset) setV({ preset: name }); };
-  const vizEl = <Visualizer player={player} jf={jf} active={tab === 'viz'} settings={viz} nextPresetSignal={nextPreset} onPreset={setPreset} controls={vizCtl} sharedViz={sharedViz} onShareViz={sharePreset} />;
+  const vizEl = <Visualizer player={player} jf={jf} active={tab === 'viz'} settings={viz} />;
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -57,9 +34,8 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
   }, [onClose]);
 
   return (
-    <div className={`fs ${mdFull ? 'md-full' : ''}`}>
+    <div className="fs">
       {art && tab !== 'viz' && <div className="fs-bg" style={{ backgroundImage: `url("${art}")` }} />}
-      {mdFull && <div className="fs-vizfull">{vizEl}</div>}
       <div className="fs-top">
         <div className="fs-from">{nowPlaying?.device?.name ? `Playing on ${nowPlaying.device.name}` : ''}</div>
         <div className="fs-tabs">
@@ -82,7 +58,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
 
       <div className="fs-stage">
         {tab === 'album' && (art ? <img className="fs-art" src={art} alt="" /> : <div className="fs-art ph" />)}
-        {tab === 'viz' && !mdFull && vizEl}
+        {tab === 'viz' && vizEl}
         {tab === 'lyrics' && <div className="fs-lyrics"><Lyrics player={player} jf={jf} /></div>}
       </div>
 

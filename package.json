@@ -16,8 +16,6 @@
   "dependencies": {
     "audiomotion-analyzer": "^4.5.4",
     "bonjour-service": "^1.2.1",
-    "butterchurn": "^2.6.7",
-    "butterchurn-presets": "^2.4.7",
     "castv2-client": "^1.2.0"
   },
   "devDependencies": {

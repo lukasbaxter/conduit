@@ -35,9 +35,11 @@ leftovers listed at the bottom.
   live clock ref (`clockRef`, position + elapsed), 0.35 s tolerance, 500 ms
   tick, snaps on `loadedmetadata`, and streams the ORIGINAL file
   (`jf.streamUrl`) instead of a transcode so seeks are exact.
-- Milkdrop: preset cycling removed (no timer, "Cycle presets" menu item gone).
-  The preset the user picks is saved on the account (`prefs.viz.preset`) and
-  restored on the next open; live sync across clients unchanged.
+- Milkdrop REMOVED entirely (Lukas does not like it): butterchurn packages
+  uninstalled, engine choice gone (the ⋯ menu is Style / Colours only), the
+  relay `viz` message + `vizState` and the client `sharedViz`/`sendViz`
+  plumbing deleted, `.fs-vizfull`/`.md-full`/`.viz-preset` CSS gone. Stale
+  `engine`/`preset`/`favorites` keys left in `prefs.viz` are ignored.
 
 ## Shipped 2026-09-12 (now-playing view + visualizer; deployed, relay redeployed)
 - Now-playing view (`src/components/FullScreen.jsx`) no longer asks the OS for
