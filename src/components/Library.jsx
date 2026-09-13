@@ -1014,10 +1014,14 @@ export default function Library({
                   <img src={jf.imageUrl(top.kind === 'Song' ? (top.item.AlbumId || top.item.Id) : top.item.Id, { maxHeight: 200 })} alt="" />
                   <div>
                     <h3>{top.item.Name}</h3>
-                    <div className="kind">
-                      {top.kind === 'Song' ? (top.item.Artists?.join(', ') || '') : (top.item.AlbumArtist || '')}
-                      <b>{top.kind}</b>
-                    </div>
+                    {/* The round portrait already says "artist"; the pill only
+                        earns its place on the square kinds. */}
+                    {top.kind !== 'Artist' && (
+                      <div className="kind">
+                        {top.kind === 'Song' ? (top.item.Artists?.join(', ') || '') : (top.item.AlbumArtist || '')}
+                        <b>{top.kind}</b>
+                      </div>
+                    )}
                   </div>
                   <button className="card-play" onClick={(e) => { e.stopPropagation(); top.kind === 'Song' ? player.playQueue(r.tracks, Math.max(0, r.tracks.findIndex((t) => t.Id === top.item.Id))) : playItem(top.item); }}>
                     <PlayGlyph />
@@ -1046,7 +1050,7 @@ export default function Library({
               <div className="shelf-head"><h2>Artists</h2></div>
               <div className="grid">
                 {r.artists.map((a) => (
-                  <Card key={a.Id} title={a.Name} round
+                  <Card key={a.Id} title={a.Name} subtitle="Artist" round
                     image={jf.imageUrl(a.Id, { maxHeight: 320 })} onOpen={() => openArtist(a)} onPlay={() => startMix(a)} />
                 ))}
               </div>

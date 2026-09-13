@@ -51,8 +51,11 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
           ))}
           {vizMenu && <ContextMenu x={vizMenu.x} y={vizMenu.y} items={vizItems} onClose={() => setVizMenu(null)} />}
         </div>
-        <button className="fs-close" onClick={onClose} title="Close">
-          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M6.53 9.47a.75.75 0 0 1 0 1.06l-2.72 2.72h1.018a.75.75 0 0 1 0 1.5H1.25v-3.579a.75.75 0 0 1 1.5 0v1.018l2.72-2.72a.75.75 0 0 1 1.06 0zm2.94-2.94a.75.75 0 0 1 0-1.06l2.72-2.72h-1.018a.75.75 0 1 1 0-1.5h3.578v3.579a.75.75 0 0 1-1.5 0V3.81l-2.72 2.72a.75.75 0 0 1-1.06 0z" /></svg>
+        {/* Arrows pointing IN (collapse), the mirror of the footer's expand glyph. */}
+        <button className="fs-close" onClick={onClose} title="Exit now playing view">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M14.5 1.5 9.5 6.5M9.5 2.75V6.5h3.75M1.5 14.5l5-5M6.5 13.25V9.5H2.75" />
+          </svg>
         </button>
       </div>
 
