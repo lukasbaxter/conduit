@@ -1161,3 +1161,36 @@ button:disabled { cursor: default; }
 .sf-skel-row { display: flex; height: 36px; align-items: center; margin-bottom: 4px; }
 .sf-right { margin-left: auto; }
 @keyframes sfpulse { 50% { opacity: .5; } }
+
+/* stats.fm app extras: delta badges, per-day cards + line charts, segmented control */
+.sf-delta { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 700; vertical-align: middle; padding: 1px 6px; border-radius: 6px; background: #18181c; }
+.sf-delta.up { color: #1ed760; }
+.sf-delta.down { color: #f87171; }
+.sf-delta.zero { color: #a3a3a3; }
+.sf-avg-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.sf-avg-card { background: #18181c; border-radius: 12px; padding: 14px 16px; }
+.sf-avg-card h3 { color: #1ed760; font-size: 20px; }
+.sf-avg-card span { color: #fff; font-size: 13px; }
+.sf-charts { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 1024px) { .sf-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.sf-chart { position: relative; background: #18181c; border-radius: 12px; padding: 12px 12px 8px; }
+.sf-chart-head { display: flex; justify-content: space-between; align-items: center; padding: 0 4px 4px; }
+.sf-chart-svg { width: 100%; height: auto; display: block; cursor: crosshair; }
+.sf-chart-grid { stroke: rgba(255,255,255,.06); stroke-width: 1; }
+.sf-chart-tick { fill: #727272; font-size: 11px; font-weight: 500; }
+.sf-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.sf-line.streams { stroke: #1ed760; }
+.sf-line.minutes { stroke: #1ed760; opacity: .45; }
+.sf-crosshair { stroke: rgba(255,255,255,.35); stroke-width: 1; stroke-dasharray: 3 3; }
+.sf-dot-streams { fill: #1ed760; stroke: #18181c; stroke-width: 2; }
+.sf-dot-minutes { fill: #1ed760; opacity: .6; stroke: #18181c; stroke-width: 2; }
+.sf-tip { position: absolute; top: 40px; transform: translateX(-50%); background: #111112; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; pointer-events: none; white-space: nowrap; font-size: 12px; z-index: 5; }
+.sf-tip b { color: #fff; font-size: 12px; }
+.sf-legend { display: flex; gap: 16px; justify-content: center; padding: 6px 0 2px; font-size: 12px; }
+.sf-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sf-legend i { width: 8px; height: 8px; border-radius: 50%; background: #1ed760; display: inline-block; }
+.sf-legend i.minutes { opacity: .45; }
+.sf-segmented { display: flex; gap: 4px; margin-top: 12px; background: #18181c; border-radius: 9999px; padding: 4px; width: max-content; }
+.sf-segmented button { padding: 6px 16px; border-radius: 9999px; color: #a3a3a3; font-weight: 500; font-size: 14px; }
+.sf-segmented button.on { color: #1ed760; background: #111112; }
+.sf-clock-hour { fill: #727272; font-size: 12px; font-weight: 500; }

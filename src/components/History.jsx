@@ -157,7 +157,86 @@ function Clock({ values, format }) {
       {values.map((v, i) => (
         <path key={i} d={wedge(i, Math.max(0, (v / max) * R))} className="sf-clock-wedge"><title>{`${label(i)}: ${format(v)}`}</title></path>
       ))}
+      {[[0, C, 14], [6, 310, C + 4], [12, C, 314], [18, 10, C + 4]].map(([h, x, y]) => <text key={h} x={x} y={y} className="sf-clock-hour" textAnchor="middle">{h}</text>)}
     </svg>
+  );
+}
+
+// Delta badge next to a stat value: "+18%" green / "-3%" red vs the previous
+// window of the same length (stats.fm's mobile cards).
+function Delta({ now, before }) {
+  if (before == null || (!before && !now)) return null;
+  const pct = before ? Math.round(((now - before) / before) * 100) : 100;
+  if (!pct) return <span className="sf-delta zero">0%</span>;
+  return <span className={`sf-delta ${pct > 0 ? 'up' : 'down'}`}>{pct > 0 ? '+' : ''}{pct}%</span>;
+}
+
+// Nice axis ticks: 0 .. a rounded max in 3-4 steps.
+function ticksFor(max) {
+  if (max <= 0) return [0, 1];
+  const raw = max / 3;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((v) => v >= raw) || mag * 10;
+  const out = []; for (let v = 0; v <= max + step * 0.999; v += step) out.push(Math.round(v * 100) / 100);
+  return out;
+}
+const shortDay = (iso) => { const d = new Date(`${iso}T00:00:00`); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
+
+// The "Daily" / "Cumulative" line charts: two thin lines (streams bright green,
+// minutes the same green at half opacity), 3-4 y ticks, x labels ~8 across,
+// a hover crosshair with both values, legend dots underneath.
+function LineChart({ title, points, cumulative = false }) {
+  const [hover, setHover] = useState(null);
+  const W = 640, H = 220, PL = 44, PR = 12, PT = 12, PB = 28;
+  const rows = points.map((p, i) => ({ ...p })); // {label, streams, minutes}
+  if (cumulative) { let a = 0, b = 0; for (const r of rows) { a += r.streams; b += r.minutes; r.streams = a; r.minutes = b; } }
+  const n = rows.length;
+  const max = Math.max(1, ...rows.map((r) => Math.max(r.streams, r.minutes)));
+  const ticks = ticksFor(max);
+  const top = ticks[ticks.length - 1];
+  const x = (i) => PL + (n > 1 ? (i / (n - 1)) * (W - PL - PR) : (W - PL - PR) / 2);
+  const y = (v) => PT + (1 - v / top) * (H - PT - PB);
+  const path = (k) => rows.map((r, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(r[k]).toFixed(1)}`).join(' ');
+  const every = Math.max(1, Math.ceil(n / 8));
+  const onMove = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const px = ((e.clientX - r.left) / r.width) * W;
+    const i = n > 1 ? Math.round(((px - PL) / (W - PL - PR)) * (n - 1)) : 0;
+    setHover(Math.max(0, Math.min(n - 1, i)));
+  };
+  const h = hover != null ? rows[hover] : null;
+  return (
+    <div className="sf-chart">
+      <div className="sf-chart-head"><h4>{title}</h4></div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="sf-chart-svg" onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img">
+        {ticks.map((t) => (
+          <g key={t}>
+            <line x1={PL} x2={W - PR} y1={y(t)} y2={y(t)} className="sf-chart-grid" />
+            <text x={PL - 8} y={y(t) + 4} className="sf-chart-tick" textAnchor="end">{fmtN(t)}</text>
+          </g>
+        ))}
+        {rows.map((r, i) => (i % every === 0 || i === n - 1) && n > 1 && (
+          <text key={r.label} x={x(i)} y={H - 8} className="sf-chart-tick" textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>{r.label}</text>
+        ))}
+        {n > 0 && <path d={path('minutes')} className="sf-line minutes" />}
+        {n > 0 && <path d={path('streams')} className="sf-line streams" />}
+        {h && (
+          <g>
+            <line x1={x(hover)} x2={x(hover)} y1={PT} y2={H - PB} className="sf-crosshair" />
+            <circle cx={x(hover)} cy={y(h.streams)} r={4} className="sf-dot-streams" />
+            <circle cx={x(hover)} cy={y(h.minutes)} r={4} className="sf-dot-minutes" />
+          </g>
+        )}
+      </svg>
+      {h && (
+        <div className="sf-tip" style={{ left: `${(x(hover) / W) * 100}%` }}>
+          <b>{h.label}</b>
+          <span>{fmtN(h.streams)} stream{h.streams === 1 ? '' : 's'}</span>
+          <span>{fmtN(h.minutes)} minute{h.minutes === 1 ? '' : 's'} streamed</span>
+        </div>
+      )}
+      <div className="sf-legend"><span><i className="streams" />streams</span><span><i className="minutes" />minutes streamed</span></div>
+    </div>
   );
 }
 
@@ -169,6 +248,7 @@ export default function History({ jf, player, me, onOpenArtist, onOpenAlbum, onO
   const [showAll, setShowAll] = useState(false);
   const [more, setMore] = useState(false);
   const [done, setDone] = useState(false);
+  const [gran, setGran] = useState('day'); // per-day charts: day / week / month buckets
   useEffect(() => { try { localStorage.setItem('conduit.histRange2', range); } catch {} }, [range]);
   useEffect(() => {
     if (data[range]) return undefined;
@@ -291,8 +371,8 @@ export default function History({ jf, player, me, onOpenArtist, onOpenAlbum, onO
           <div className="sf-listbox-wrap"><RangeListbox value={range} onChange={setRange} /></div>
           {st?.connected ? (
             <ul className="sf-stats">
-              {[['streams', fmtN(st.streams)], ['minutes streamed', fmtN(st.minutes)], ['hours streamed', fmtN(Math.round(st.minutes / 60))], ['different tracks', fmtN(st.uniqueTracks)], ['different artists', fmtN(st.uniqueArtists)], ['different albums', fmtN(st.uniqueAlbums)]].map(([label, value]) => (
-                <li key={label}><h3 className="sf-truncate">{value}</h3><span className="sf-stat-label">{label}</span></li>
+              {[['streams', st.streams, st.prev?.streams], ['minutes streamed', st.minutes, st.prev?.minutes], ['hours streamed', Math.round(st.minutes / 60), st.prev ? Math.round(st.prev.minutes / 60) : null], ['days streamed', st.daysStreamed, st.prev?.daysStreamed], ['different tracks', st.uniqueTracks, st.prev?.uniqueTracks], ['different artists', st.uniqueArtists, st.prev?.uniqueArtists], ['different albums', st.uniqueAlbums, st.prev?.uniqueAlbums]].map(([label, value, before]) => (
+                <li key={label}><h3 className="sf-truncate">{fmtN(value)}<Delta now={value} before={before} /></h3><span className="sf-stat-label">{label}</span></li>
               ))}
             </ul>
           ) : st && !st.error && !st.connected ? (
@@ -319,6 +399,42 @@ export default function History({ jf, player, me, onOpenArtist, onOpenAlbum, onO
             <Section title="Top tracks" description={desc('top tracks')} tools={tracks.tools}>{tracks.body}</Section>
             <Section title="Top artists" description={desc('top artists')} tools={artists.tools}>{artists.body}</Section>
             <Section title="Top albums" description={desc('top albums')} tools={albums.tools}>{albums.body}</Section>
+            <Section title="Streams and minutes streamed per day" description={desc('listening over time')}>
+              {(() => {
+                const days = st.perDay || [];
+                const streamed = days.filter((d) => d.count > 0).length || 1;
+                // Bucket by day / week / month for the segmented control.
+                const bucket = (rows, mode) => {
+                  if (mode === 'day') return rows.map((d) => ({ label: shortDay(d.day), streams: d.count, minutes: d.minutes }));
+                  const out = new Map();
+                  for (const d of rows) {
+                    const dt = new Date(`${d.day}T00:00:00`);
+                    const key = mode === 'month' ? `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}` : (() => { const m = new Date(dt); m.setDate(dt.getDate() - ((dt.getDay() + 6) % 7)); return m.toISOString().slice(0, 10); })();
+                    const cur = out.get(key) || { label: mode === 'month' ? dt.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }) : shortDay(key), streams: 0, minutes: 0 };
+                    cur.streams += d.count; cur.minutes += d.minutes; out.set(key, cur);
+                  }
+                  return [...out.values()];
+                };
+                const rows = bucket(days, gran);
+                return (
+                  <>
+                    <div className="sf-avg-cards">
+                      <div className="sf-avg-card"><h3>{fmtN(Math.round(st.streams / streamed))}</h3><span>average streams per day</span></div>
+                      <div className="sf-avg-card"><h3>{fmtN(Math.round(st.minutes / streamed))}</h3><span>average minutes per day</span></div>
+                    </div>
+                    <div className="sf-charts">
+                      <LineChart title="Daily" points={rows} />
+                      <LineChart title="Cumulative" points={rows} cumulative />
+                    </div>
+                    <div className="sf-segmented" role="tablist">
+                      {[['day', 'day'], ['week', 'week'], ['month', 'month']].map(([k, label]) => (
+                        <button key={k} role="tab" aria-selected={gran === k} className={gran === k ? 'on' : ''} onClick={() => setGran(k)}>{label}</button>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+            </Section>
             <Section title="Listening clocks" description={desc('listening habits throughout the day')}>
               <div className="sf-clocks">
                 <div className="sf-clock-box"><Clock values={st.byHour} format={(v) => streams(v)} /><p>streams</p></div>

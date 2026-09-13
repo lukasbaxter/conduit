@@ -612,9 +612,16 @@ function historyStats(st, range, tzo = 0) {
   const since = span === Infinity ? 0 : now - span;
   const rows = st.listens.filter((l) => l.ts >= since);
   const secs = (l) => l.dur || st.match[listenKey(l)]?.dur || 210;
+  // The same-length window before this one, for the "+18%" deltas on the cards.
+  const prev = span === Infinity ? null : (() => {
+    const pr = st.listens.filter((l) => l.ts >= since - span && l.ts < since);
+    const t = new Set(), a = new Set(), al = new Set(), d = new Set(); let sec = 0;
+    for (const l of pr) { sec += secs(l); t.add(listenKey(l)); a.add(norm((l.artist || '').split(/,|&| feat\.? | ft\.? /i)[0])); if (l.album) al.add(norm(l.album)); d.add(local(l.ts).toISOString().slice(0, 10)); }
+    return { streams: pr.length, minutes: Math.round(sec / 60), uniqueTracks: t.size, uniqueArtists: a.size, uniqueAlbums: al.size, daysStreamed: d.size };
+  })();
   const artists = new Map(), tracks = new Map(), albums = new Map(), genres = new Map();
   const byHour = new Array(24).fill(0), byHourSeconds = new Array(24).fill(0), byDow = new Array(7).fill(0);
-  const days = new Map();
+  const days = new Map(), daySeconds = new Map();
   let seconds = 0;
   for (const l of rows) {
     const s2 = secs(l); seconds += s2;
@@ -627,17 +634,17 @@ function historyStats(st, range, tzo = 0) {
     for (const g of m?.genres || []) genres.set(g, (genres.get(g) || 0) + 1);
     const d = local(l.ts);
     byHour[d.getUTCHours()] += 1; byHourSeconds[d.getUTCHours()] += s2; byDow[d.getUTCDay()] += 1;
-    const dk = d.toISOString().slice(0, 10); days.set(dk, (days.get(dk) || 0) + 1);
+    const dk = d.toISOString().slice(0, 10); days.set(dk, (days.get(dk) || 0) + 1); daySeconds.set(dk, (daySeconds.get(dk) || 0) + s2);
   }
   const top = (map, n = 50) => [...map.values()].sort((x, y) => y.count - x.count || y.seconds - x.seconds).slice(0, n);
   // Streams per day for the chart: the range's days (capped at 365), oldest first.
   const nDays = span === Infinity ? Math.min(365, rows.length ? Math.ceil((now - rows[rows.length - 1].ts) / 86400) + 1 : 1) : Math.min(365, Math.ceil(span / 86400));
   const perDay = [];
-  for (let i = nDays - 1; i >= 0; i -= 1) { const dk = local(now - i * 86400).toISOString().slice(0, 10); perDay.push({ day: dk, count: days.get(dk) || 0 }); }
+  for (let i = nDays - 1; i >= 0; i -= 1) { const dk = local(now - i * 86400).toISOString().slice(0, 10); perDay.push({ day: dk, count: days.get(dk) || 0, minutes: Math.round((daySeconds.get(dk) || 0) / 60) }); }
   const firstTs = st.listens.length ? st.listens[st.listens.length - 1].ts : null;
   return {
     range, since: since || firstTs, streams: rows.length, minutes: Math.round(seconds / 60),
-    uniqueTracks: tracks.size, uniqueArtists: artists.size, uniqueAlbums: albums.size,
+    uniqueTracks: tracks.size, uniqueArtists: artists.size, uniqueAlbums: albums.size, daysStreamed: days.size, prev,
     topArtists: top(artists), topTracks: top(tracks), topAlbums: top(albums),
     topGenres: [...genres.entries()].map(([id, count]) => ({ id, name: (BUCKETS.find((b) => b.id === id) || {}).name || id, count })).sort((x, y) => y.count - x.count).slice(0, 8),
     byHour, byHourSeconds, byDow, perDay,
