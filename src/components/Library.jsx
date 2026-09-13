@@ -475,7 +475,7 @@ export default function Library({
     }
 
     if (kind === 'History') {
-      return <History jf={jf} player={player} onOpenArtist={onOpenArtistById} onOpenAlbum={onOpenAlbumById} onOpenSettings={onOpenSettings} />;
+      return <History jf={jf} player={player} me={me} onOpenArtist={onOpenArtistById} onOpenAlbum={onOpenAlbumById} onOpenSettings={onOpenSettings} />;
     }
     if (kind === 'Settings') {
       const theme = { ...DEFAULT_THEME, ...(prefs?.theme || {}) };

@@ -1,45 +1,175 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { history as relayHistory } from '../api/search.js';
-import { PlayGlyph } from './TrackRow.jsx';
 
-// The profile menu's History page: stats.fm for this account. Every number
-// comes from ListenBrainz through the relay (Conduit plays, the Jellyfin
-// backfill and LB's Spotify import all land there), matched to the library
-// for art and playback where the song exists here.
-const RANGES = [['4w', 'Last 4 weeks'], ['6m', 'Last 6 months'], ['1y', 'Last year'], ['all', 'Lifetime']];
-const fmtN = (n) => (n ?? 0).toLocaleString();
-const ago = (ts) => {
+// The profile menu's History page, built to stats.fm's user page: its
+// Tailwind tokens (background #111112, foreground #18181c, primary #1ed760,
+// grey #a3a3a3 / #727272), its Container widths, the same sections in the
+// same order with the same class recipes (see HANDOFF.md "History tab").
+// Every number comes from ListenBrainz through the relay (Conduit plays, the
+// Jellyfin backfill and LB's Spotify import all land there), matched to the
+// library for art and playback where the song exists here.
+
+// Range labels and the section-description suffix, verbatim from stats.fm.
+const RANGES = [
+  ['today', 'today', 'from today'],
+  ['week', 'this week', 'from this week'],
+  ['4w', '4 weeks', 'from the past 4 weeks'],
+  ['6m', '6 months', 'from the past 6 months'],
+  ['year', String(new Date().getFullYear()), 'from this year'],
+  ['all', 'lifetime', ''],
+];
+const fmtN = (n) => (n ?? 0).toLocaleString('en-US');
+const LL = (ts) => new Date(ts * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+const fromNow = (ts) => {
   const s = Math.max(0, Math.floor(Date.now() / 1000 - ts));
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
-  if (s < 7 * 86400) return `${Math.floor(s / 86400)} d ago`;
-  return new Date(ts * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: s > 300 * 86400 ? 'numeric' : undefined });
+  const u = (n, w) => `${n} ${w}${n === 1 ? '' : 's'} ago`;
+  if (s < 45) return 'a few seconds ago';
+  if (s < 90) return 'a minute ago';
+  if (s < 2700) return u(Math.round(s / 60), 'minute');
+  if (s < 5400) return 'an hour ago';
+  if (s < 79200) return u(Math.round(s / 3600), 'hour');
+  if (s < 129600) return 'a day ago';
+  if (s < 2246400) return u(Math.round(s / 86400), 'day');
+  if (s < 3888000) return 'a month ago';
+  if (s < 27993600) return u(Math.round(s / 2592000), 'month');
+  if (s < 47260800) return 'a year ago';
+  return u(Math.round(s / 31536000), 'year');
 };
-const hourLabel = (h) => (h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`);
-const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const fullDate = (ts) => new Date(ts * 1000).toLocaleString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+const hm = (secs) => { const h = Math.floor(secs / 3600), m = Math.round((secs % 3600) / 60); return h ? `${h}h ${m}m` : `${m}m`; };
 
-// One-series bar strip: a div per bar, height = share of the max, hover title.
-function Bars({ values, labels, titles, every = 1 }) {
-  const max = Math.max(1, ...values);
+// stats.fm's toolbar icons (Material: grid_on, navigate_before, navigate_next, more_horiz, check, unfold_more).
+const I = {
+  grid: <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM8 20H4v-4h4v4zm0-6H4v-4h4v4zm0-6H4V4h4v4zm6 12h-4v-4h4v4zm0-6h-4v-4h4v4zm0-6h-4V4h4v4zm6 12h-4v-4h4v4zm0-6h-4v-4h4v4zm0-6h-4V4h4v4z" /></svg>,
+  prev: <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z" /></svg>,
+  next: <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" /></svg>,
+  more: <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" /></svg>,
+  check: <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" /></svg>,
+  updown: <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a.75.75 0 0 1 .55.24l3.25 3.5a.75.75 0 1 1-1.1 1.02L10 4.852 7.3 7.76a.75.75 0 0 1-1.1-1.02l3.25-3.5A.75.75 0 0 1 10 3zm-3.76 9.2a.75.75 0 0 1 1.06.04l2.7 2.908 2.7-2.908a.75.75 0 1 1 1.1 1.02l-3.25 3.5a.75.75 0 0 1-1.1 0l-3.25-3.5a.75.75 0 0 1 .04-1.06z" clipRule="evenodd" /></svg>,
+  musicOff: <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.27 3 3 4.27l9 9v.28c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4v-1.73L19.73 21 21 19.73 4.27 3zM14 7h4V3h-6v5.18l2 2z" /></svg>,
+};
+
+// Headless-UI style listbox: `relative mt-1 w-72`, button `rounded-lg bg-foreground py-2 pl-3 pr-10 shadow-md`.
+function RangeListbox({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const h = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+  const cur = RANGES.find((r) => r[0] === value) || RANGES[2];
   return (
-    <div className="hbars" style={{ '--n': values.length }}>
-      {values.map((v, i) => (
-        <div key={i} className="hbar" title={titles ? titles[i] : `${labels?.[i] ?? i}: ${fmtN(v)}`}>
-          <i style={{ height: `${Math.max(v ? 3 : 1, (v / max) * 100)}%` }} />
-          {labels && i % every === 0 && <span>{labels[i]}</span>}
-        </div>
-      ))}
+    <div className="sf-listbox" ref={ref}>
+      <button className="sf-listbox-btn" onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open}>
+        <span className="sf-truncate">{cur[1]}</span>
+        <span className="sf-listbox-chev">{I.updown}</span>
+      </button>
+      {open && (
+        <ul className="sf-listbox-opts" role="listbox">
+          {RANGES.map(([k, label]) => (
+            <li key={k} role="option" aria-selected={k === value} className={`sf-listbox-opt ${k === value ? 'selected' : ''}`} onClick={() => { onChange(k); setOpen(false); }}>
+              {k === value && <span className="sf-listbox-check">{I.check}</span>}
+              <span className="sf-truncate">{label}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
-export default function History({ jf, player, onOpenArtist, onOpenAlbum, onOpenSettings }) {
-  const [range, setRange] = useState(() => localStorage.getItem('conduit.histRange') || '4w');
-  const [data, setData] = useState({}); // range -> stats | { error }
+// stats.fm's Section: sticky header (h2 + grey description) with a round-button
+// toolbar on the right. The carousel toolbar comes from the child via `tools`.
+function Section({ title, description, tools, children }) {
+  return (
+    <section className="sf-section">
+      <header className="sf-section-head">
+        <div className="sf-section-titles">
+          <h2>{title}</h2>
+          <p className="sf-section-desc">{description}</p>
+        </div>
+        {tools && <div className="sf-toolbar">{tools}</div>}
+      </header>
+      <main>{children}</main>
+    </section>
+  );
+}
+const ToolBtn = ({ children, onClick, disabled, label }) => (
+  <button className="sf-toolbtn" onClick={onClick} disabled={disabled} aria-label={label} title={label}>{children}</button>
+);
+
+// The carousel: an overflow-hidden viewport, a w-max single-row grid moved
+// with translateX by whole items (160 + 16px), 300ms ease-in-out. Grid mode
+// wraps every item instead. On touch screens the row also scrolls natively.
+function Carousel({ items, itemHeight, render, empty }) {
+  const viewport = useRef(null);
+  const [page, setPage] = useState(0);
+  const [perPage, setPerPage] = useState(4);
+  const [grid, setGrid] = useState(false);
+  useLayoutEffect(() => {
+    const el = viewport.current; if (!el) return undefined;
+    const measure = () => setPerPage(Math.max(1, Math.floor(el.clientWidth / 176)));
+    measure();
+    const ro = new ResizeObserver(measure); ro.observe(el);
+    return () => ro.disconnect();
+  }, [items.length, grid]);
+  useEffect(() => { setPage(0); }, [items]);
+  const pages = Math.max(1, Math.ceil(items.length / perPage));
+  const tools = (
+    <>
+      <ToolBtn label={grid ? 'Show as carousel' : 'Show as grid'} onClick={() => setGrid((v) => !v)}><span className={grid ? 'on' : ''}>{I.grid}</span></ToolBtn>
+      {!grid && <ToolBtn label="Go to previous slide" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}><span className={page === 0 ? '' : 'on'}>{I.prev}</span></ToolBtn>}
+      {!grid && <ToolBtn label="Go to next slide" disabled={page >= pages - 1} onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}><span className={page >= pages - 1 ? '' : 'on'}>{I.next}</span></ToolBtn>}
+    </>
+  );
+  const body = !items.length ? (
+    <div className="sf-empty"><p>{empty || 'Not enough data to complete this list'}</p></div>
+  ) : grid ? (
+    <ul className="sf-carousel-grid">{items.map((it, i) => <li key={i}>{render(it, i)}</li>)}</ul>
+  ) : (
+    <div className="sf-carousel" ref={viewport}>
+      <ul className="sf-carousel-row" style={{ transform: `translateX(-${page * perPage * 176}px)` }}>
+        {items.map((it, i) => <li key={i} style={{ height: itemHeight }}>{render(it, i)}</li>)}
+      </ul>
+    </div>
+  );
+  return { tools, body };
+}
+
+// Listening clock: ApexCharts polarArea reproduced in SVG -- 24 equal-angle
+// wedges whose radius follows the value, 2px page-colour strokes, 1px spokes,
+// no rings, no axis, "13:00 - 14:00: 123 streams" tooltips.
+function Clock({ values, format }) {
+  const R = 150, C = 160;
+  const max = Math.max(1, ...values);
+  const pt = (angle, r) => [C + r * Math.cos(angle), C + r * Math.sin(angle)];
+  const wedge = (i, r) => {
+    const a0 = -Math.PI / 2 + (i * Math.PI) / 12, a1 = a0 + Math.PI / 12;
+    const [x0, y0] = pt(a0, r), [x1, y1] = pt(a1, r);
+    return `M${C} ${C} L${x0} ${y0} A${r} ${r} 0 0 1 ${x1} ${y1} Z`;
+  };
+  const label = (i) => `${String(i).padStart(2, '0')}:00 - ${String((i + 1) % 24).padStart(2, '0')}:00`;
+  return (
+    <svg className="sf-clock" viewBox="0 0 320 320" role="img">
+      {values.map((_, i) => { const [x, y] = pt(-Math.PI / 2 + (i * Math.PI) / 12, R); return <line key={i} x1={C} y1={C} x2={x} y2={y} className="sf-clock-spoke" />; })}
+      {values.map((v, i) => (
+        <path key={i} d={wedge(i, Math.max(0, (v / max) * R))} className="sf-clock-wedge"><title>{`${label(i)}: ${format(v)}`}</title></path>
+      ))}
+    </svg>
+  );
+}
+
+export default function History({ jf, player, me, onOpenArtist, onOpenAlbum, onOpenSettings }) {
+  const name = me?.Name || 'You';
+  const [range, setRange] = useState(() => localStorage.getItem('conduit.histRange2') || '4w');
+  const [data, setData] = useState({});
   const [recent, setRecent] = useState(null);
+  const [showAll, setShowAll] = useState(false);
   const [more, setMore] = useState(false);
-  useEffect(() => { try { localStorage.setItem('conduit.histRange', range); } catch {} }, [range]);
+  const [done, setDone] = useState(false);
+  useEffect(() => { try { localStorage.setItem('conduit.histRange2', range); } catch {} }, [range]);
   useEffect(() => {
     if (data[range]) return undefined;
     let alive = true;
@@ -54,166 +184,180 @@ export default function History({ jf, player, onOpenArtist, onOpenAlbum, onOpenS
     return () => { alive = false; };
   }, [jf]); // eslint-disable-line react-hooks/exhaustive-deps
   const loadMore = async () => {
-    if (!recent?.length) return;
+    if (!recent?.length || more) return;
     setMore(true);
-    try { const r = await relayHistory(jf, { recent: 1, before: recent[recent.length - 1].ts }); setRecent((cur) => [...(cur || []), ...(r.listens || [])]); }
+    try { const r = await relayHistory(jf, { recent: 1, before: recent[recent.length - 1].ts }); if (!r.listens?.length) setDone(true); setRecent((cur) => [...(cur || []), ...(r.listens || [])]); }
     catch { /* keep what we have */ }
     setMore(false);
   };
+  // Infinite scroll once "show all" is open: the .content panel scrolls, not the window.
+  const endRef = useRef(null);
+  useEffect(() => {
+    if (!showAll || done) return undefined;
+    const el = endRef.current; if (!el) return undefined;
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) loadMore(); }, { root: el.closest('.content'), rootMargin: '2000px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [showAll, done, recent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const st = data[range];
-  // Play a history row: the matched library track, then the rest of the list
-  // that exists here, so next/previous walk the chart.
+  const suffix = (RANGES.find((r) => r[0] === range) || RANGES[2])[2];
+  // Own profile: stats.fm says "Your top tracks from the past 4 weeks".
+  const desc = (what) => `Your ${what}${suffix ? ` ${suffix}` : ''}`;
+
   const playRow = async (rows, idx) => {
     const ids = rows.filter((r) => r.id).map((r) => r.id);
-    const start = ids.indexOf(rows[idx].id);
-    if (start < 0) return;
+    if (!rows[idx].id) return;
     const items = await jf.itemsByIds(ids.slice(0, 100));
     const at = items.findIndex((t) => t.Id === rows[idx].id);
     if (at >= 0) player.playQueue(items, at, null);
   };
+  const cover = (r, size = 320) => (r.albumId || r.id ? jf.imageUrl(r.albumId || r.id, { maxHeight: size }) : null);
+  const minutes = (secs) => fmtN(Math.floor(secs / 60));
+  const streams = (n) => `${fmtN(n)} stream${n === 1 ? '' : 's'}`;
 
-  const art = (r, size = 80) => (r.albumId || r.id) ? jf.imageUrl(r.albumId || r.id, { maxHeight: size }) : null;
-  const Row = ({ r, i, rows, sub, count }) => (
-    <div className={`hrow ${r.id ? 'playable' : ''} ${player.nowPlayingId && r.id === player.nowPlayingId ? 'active' : ''}`} onDoubleClick={() => r.id && playRow(rows, i)}>
-      <span className="hrow-n">{i + 1}</span>
-      <button className="hrow-art" onClick={() => r.id && playRow(rows, i)} title={r.id ? 'Play' : 'Not in your library'} disabled={!r.id}>
-        {art(r) ? <img src={art(r)} alt="" loading="lazy" /> : <span className="ph" />}
-        {r.id && <span className="hrow-play"><PlayGlyph size={14} /></span>}
-      </button>
-      <span className="hrow-text">
-        <span className="hrow-title">{r.name}</span>
-        <small>{sub}</small>
-      </span>
-      <span className="hrow-count">{count}</span>
+  // Cards, class for class from stats.fm's TrackCard / ArtistCard / AlbumCard.
+  const trackCard = (t, i) => (
+    <div className="sf-track-card">
+      <a role="button" tabIndex={0} onClick={() => playRow(st.topTracks, i)} title={t.id ? 'Play' : 'Not in your library'}>
+        <div className="sf-square">{cover(t) ? <img src={cover(t)} alt="" loading="lazy" width={160} height={160} /> : <div className="sf-ph" />}</div>
+        <h4 className="sf-clamp2">{i + 1}. {t.name}</h4>
+      </a>
+      <p className="sf-clamp2" title={`${minutes(t.seconds)} minutes • ${streams(t.count)}`}>
+        {minutes(t.seconds)} minutes • {streams(t.count)} • <span>{t.artistId ? <a role="button" tabIndex={0} className="sf-artist-link" onClick={() => onOpenArtist(t.artistId)}>{t.artist}</a> : t.artist}</span>
+      </p>
     </div>
   );
+  const artistCard = (a, i) => (
+    <a role="button" tabIndex={0} className="sf-artist-card" onClick={() => a.artistId && onOpenArtist(a.artistId)}>
+      <div className="sf-avatar" style={{ width: 160, height: 160 }}>{a.artistId ? <img src={jf.imageUrl(a.artistId, { maxHeight: 320 })} alt="" loading="lazy" /> : <p>{(a.name || '?').slice(0, 1).toUpperCase()}</p>}</div>
+      <div className="sf-artist-text">
+        <h4 className="sf-clamp2">{i + 1}. {a.name}</h4>
+        <p className="sf-clamp2 sf-tight">{minutes(a.seconds)} minutes • {streams(a.count)}</p>
+      </div>
+    </a>
+  );
+  const albumCard = (a, i) => (
+    <a role="button" tabIndex={0} className="sf-album-card" onClick={() => a.albumId && onOpenAlbum(a.albumId)}>
+      <div className="sf-square">{a.albumId ? <img src={jf.imageUrl(a.albumId, { maxHeight: 320 })} alt="" loading="lazy" width={160} height={160} /> : <div className="sf-ph" />}</div>
+      <div className="sf-album-text">
+        <h4 className="sf-clamp2">{i + 1}. {a.name}</h4>
+        <p className="sf-truncate">{minutes(a.seconds)} minutes • {streams(a.count)}</p>
+      </div>
+    </a>
+  );
 
+  const tracks = Carousel({ items: st?.topTracks || [], itemHeight: 276, render: trackCard });
+  const artists = Carousel({ items: st?.topArtists || [], itemHeight: 262, render: artistCard });
+  const albums = Carousel({ items: st?.topAlbums || [], itemHeight: 255, render: albumCard });
+
+  // Recent streams grouped by calendar day, newest first, with a sticky day label.
+  const shownRecent = showAll ? (recent || []) : (recent || []).slice(0, 8);
+  const groups = [];
+  for (const l of shownRecent) { const day = LL(l.ts); const g = groups[groups.length - 1]; if (g && g.day === day) g.rows.push(l); else groups.push({ day, rows: [l] }); }
+
+  const avatar = jf.userImageUrl({ maxHeight: 384 });
   return (
-    <div className="content">
-      <div className="pad history">
-        <header className="history-head">
-          <div>
-            <div className="kind">Profile</div>
-            <h1>Listening history</h1>
-            {st?.connected && <p className="hero-meta">{fmtN(st.total)} streams on ListenBrainz{st.firstTs ? ` since ${new Date(st.firstTs * 1000).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}` : ''}{st.sources?.spotify ? ` · ${fmtN(st.sources.spotify)} imported from Spotify` : ''}</p>}
-          </div>
-          <div className="pills">
-            {RANGES.map(([k, label]) => <button key={k} className={`pill ${range === k ? 'on' : ''}`} onClick={() => setRange(k)}>{label}</button>)}
-          </div>
-        </header>
+    <div className="content sf">
+      {/* Hero band: bg-foreground pt-20; container; avatar 192 with a 2px page ring; name h1 extrabold. */}
+      <div className="sf-hero">
+        <div className="sf-container">
+          <section className="sf-profile">
+            <div className="sf-avatar-ring">
+              <div className="sf-avatar" style={{ width: 192, height: 192 }}>
+                <img src={avatar} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'grid'; }} />
+                <p style={{ display: 'none' }}>{name.slice(0, 1).toUpperCase()}</p>
+              </div>
+            </div>
+            <div className="sf-profile-text">
+              <span className="sf-name-row"><h1>{name}</h1></span>
+              <span className="sf-handle">@{(me?.Name || '').toLowerCase()}</span>
+              {st?.connected && (
+                <div className="sf-friends">
+                  <span>{fmtN(st.total)} streams</span>
+                  {st.sources?.spotify ? <><span className="sf-dot-wrap"><span className="sf-dot" /></span><span>{fmtN(st.sources.spotify)} from Spotify</span></> : null}
+                  <span className="sf-dot-wrap"><span className="sf-dot" /></span>
+                  <button className="sf-textbtn" onClick={onOpenSettings}>Edit profile</button>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      </div>
 
-        {!st && <p className="placeholder-note">Loading your history&hellip; the first open pulls everything from ListenBrainz, which can take a minute.</p>}
-        {st?.error && <p className="placeholder-note">Could not load history: {st.error}</p>}
-        {st && !st.error && !st.connected && (
-          <div className="history-connect">
-            <p>Your history lives on ListenBrainz. Connect your account under Settings &rsaquo; Scrobbling and every play (here, and Spotify if you link it there) starts counting.</p>
-            <button className="btn-secondary" onClick={onOpenSettings}>Open Settings</button>
-          </div>
-        )}
+      <div className="sf-container sf-body">
+        {/* Range listbox (right on desktop) + the six text-only stat cards. */}
+        <section className="sf-stats-row">
+          <div className="sf-listbox-wrap"><RangeListbox value={range} onChange={setRange} /></div>
+          {st?.connected ? (
+            <ul className="sf-stats">
+              {[['streams', fmtN(st.streams)], ['minutes streamed', fmtN(st.minutes)], ['hours streamed', fmtN(Math.round(st.minutes / 60))], ['different tracks', fmtN(st.uniqueTracks)], ['different artists', fmtN(st.uniqueArtists)], ['different albums', fmtN(st.uniqueAlbums)]].map(([label, value]) => (
+                <li key={label}><h3 className="sf-truncate">{value}</h3><span className="sf-stat-label">{label}</span></li>
+              ))}
+            </ul>
+          ) : st && !st.error && !st.connected ? (
+            <div className="sf-gate">
+              <div className="sf-blur">
+                <ul className="sf-stats">{['minutes streamed', 'hours streamed', 'streams'].map((l) => <li key={l}><h3>?</h3><span className="sf-stat-label">{l}</span></li>)}</ul>
+              </div>
+              <div className="sf-gate-msg"><p>Connect ListenBrainz under Settings › Scrobbling to see your streaming history</p><button className="sf-textbtn" onClick={onOpenSettings}>Open settings</button></div>
+            </div>
+          ) : st?.error ? (
+            <p className="sf-grey">Could not load history: {st.error}</p>
+          ) : (
+            <ul className="sf-stats">{[0, 1, 2, 3, 4, 5].map((i) => <li key={i}><div className="sf-skel-row"><span className="sf-skel-text" style={{ width: '50%', height: 28 }} /></div><span className="sf-skel-text" style={{ width: '70%' }} /></li>)}</ul>
+          )}
+        </section>
 
         {st?.connected && (
           <>
-            <div className="stat-tiles">
-              {[['Streams', st.streams], ['Minutes', st.minutes], ['Hours', Math.round(st.minutes / 60)], ['Tracks', st.uniqueTracks], ['Artists', st.uniqueArtists], ['Albums', st.uniqueAlbums]].map(([k, v]) => (
-                <div key={k} className="stat-tile"><b>{fmtN(v)}</b><span>{k}</span></div>
-              ))}
-            </div>
-            {st.streams === 0 && <p className="placeholder-note">Nothing in this range yet.</p>}
-
-            {st.topTracks.length > 0 && (
-              <section>
-                <div className="shelf-head"><h2>Top tracks</h2></div>
-                <div className="hlist">
-                  {st.topTracks.slice(0, 10).map((r, i) => <Row key={`${r.name}|${r.artist}`} r={r} i={i} rows={st.topTracks} sub={r.artistId ? <span className="rowlink" role="button" onClick={() => onOpenArtist(r.artistId)}>{r.artist}</span> : r.artist} count={`${fmtN(r.count)} streams · ${fmtN(Math.round(r.seconds / 60))} min`} />)}
-                </div>
-              </section>
-            )}
-
-            {st.topArtists.length > 0 && (
-              <section>
-                <div className="shelf-head"><h2>Top artists</h2></div>
-                <div className="shelf">
-                  {st.topArtists.slice(0, 10).map((a, i) => (
-                    <div key={a.name} className="card round" role="button" tabIndex={0} onClick={() => a.artistId && onOpenArtist(a.artistId)} style={{ cursor: a.artistId ? 'pointer' : 'default' }}>
-                      <div className="card-art">{a.artistId ? <img src={jf.imageUrl(a.artistId, { maxHeight: 320 })} alt="" loading="lazy" /> : <div className="ph" />}<span className="card-rank">{i + 1}</span></div>
-                      <div className="card-title">{a.name}</div>
-                      <div className="card-sub">{fmtN(a.count)} streams · {fmtN(Math.round(a.seconds / 60))} min</div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {st.topAlbums.length > 0 && (
-              <section>
-                <div className="shelf-head"><h2>Top albums</h2></div>
-                <div className="shelf">
-                  {st.topAlbums.slice(0, 10).map((a, i) => (
-                    <div key={`${a.name}|${a.artist}`} className="card" role="button" tabIndex={0} onClick={() => a.albumId && onOpenAlbum(a.albumId)} style={{ cursor: a.albumId ? 'pointer' : 'default' }}>
-                      <div className="card-art">{a.albumId ? <img src={jf.imageUrl(a.albumId, { maxHeight: 320 })} alt="" loading="lazy" /> : <div className="ph" />}<span className="card-rank">{i + 1}</span></div>
-                      <div className="card-title">{a.name}</div>
-                      <div className="card-sub">{a.artist} · {fmtN(a.count)} streams</div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            <div className="history-grid">
-              {st.topGenres.length > 0 && (
-                <section>
-                  <div className="shelf-head"><h2>Top genres</h2></div>
-                  <div className="genre-bars">
-                    {st.topGenres.map((g) => (
-                      <div key={g.id} className="genre-bar" title={`${g.name}: ${fmtN(g.count)} streams`}>
-                        <span>{g.name}</span>
-                        <i style={{ width: `${(g.count / st.topGenres[0].count) * 100}%` }} />
-                        <b>{fmtN(g.count)}</b>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-              <section>
-                <div className="shelf-head"><h2>Listening clock</h2></div>
-                <p className="shelf-sub">Streams by hour of the day</p>
-                <Bars values={st.byHour} labels={st.byHour.map((_, h) => hourLabel(h))} every={6} />
-              </section>
-              <section>
-                <div className="shelf-head"><h2>By weekday</h2></div>
-                <p className="shelf-sub">Streams by day of the week</p>
-                <Bars values={st.byDow} labels={DOW} />
-              </section>
-            </div>
-
-            {st.perDay.length > 1 && (
-              <section>
-                <div className="shelf-head"><h2>Streams per day</h2></div>
-                <Bars values={st.perDay.map((d) => d.count)} titles={st.perDay.map((d) => `${d.day}: ${fmtN(d.count)}`)} labels={st.perDay.map((d) => d.day.slice(5))} every={Math.max(1, Math.round(st.perDay.length / 8))} />
-              </section>
-            )}
-
-            <section>
-              <div className="shelf-head"><h2>Recent streams</h2></div>
-              <div className="hlist">
-                {(recent || []).map((r, i) => (
-                  <div key={`${r.ts}-${i}`} className={`hrow norank ${r.id ? 'playable' : ''}`} onDoubleClick={() => r.id && playRow(recent.map((x) => ({ ...x, name: x.track })), i)}>
-                    <button className="hrow-art" onClick={() => r.id && playRow(recent.map((x) => ({ ...x, name: x.track })), i)} title={r.id ? 'Play' : 'Not in your library'} disabled={!r.id}>
-                      {art(r) ? <img src={art(r)} alt="" loading="lazy" /> : <span className="ph" />}
-                      {r.id && <span className="hrow-play"><PlayGlyph size={14} /></span>}
-                    </button>
-                    <span className="hrow-text">
-                      <span className="hrow-title">{r.track}</span>
-                      <small>{r.artistId ? <span className="rowlink" role="button" onClick={() => onOpenArtist(r.artistId)}>{r.artist}</span> : r.artist}{r.album ? ` · ${r.album}` : ''}</small>
-                    </span>
-                    <span className="hrow-count">{r.src === 'spotify' ? <span className="hsrc">Spotify</span> : null}{ago(r.ts)}</span>
-                  </div>
-                ))}
-                {recent === null && <p className="placeholder-note">Loading&hellip;</p>}
-                {recent?.length > 0 && <button className="seemore" onClick={loadMore} disabled={more}>{more ? 'Loading…' : 'Load more'}</button>}
+            <Section title="Top genres" description={desc('top genres')}>
+              {st.topGenres.length ? (
+                <ul className="sf-chips">{st.topGenres.map((g) => <li key={g.id} className="sf-chip"><a>{g.name.toLowerCase()}</a></li>)}</ul>
+              ) : <div className="sf-empty"><p>Not enough data to complete this list</p></div>}
+            </Section>
+            <Section title="Top tracks" description={desc('top tracks')} tools={tracks.tools}>{tracks.body}</Section>
+            <Section title="Top artists" description={desc('top artists')} tools={artists.tools}>{artists.body}</Section>
+            <Section title="Top albums" description={desc('top albums')} tools={albums.tools}>{albums.body}</Section>
+            <Section title="Listening clocks" description={desc('listening habits throughout the day')}>
+              <div className="sf-clocks">
+                <div className="sf-clock-box"><Clock values={st.byHour} format={(v) => streams(v)} /><p>streams</p></div>
+                <div className="sf-clock-box"><Clock values={st.byHourSeconds || st.byHour} format={(v) => (st.byHourSeconds ? hm(v) : streams(v))} /><p>minutes streamed</p></div>
               </div>
-            </section>
+            </Section>
+            <Section title="Recent streams" description="Your recently played tracks">
+              {recent === null ? (
+                <ul className="sf-streams">{[0, 1, 2, 3].map((i) => <li key={i} className="sf-stream-skel"><span className="sf-skel-img" /><span className="sf-skel-text" style={{ width: '15rem' }} /><span className="sf-skel-text sf-right" style={{ width: '4rem' }} /></li>)}</ul>
+              ) : recent.length === 0 ? (
+                <div className="sf-empty sf-empty-icon">{I.musicOff}<p>Looks like you don't have any recent streams</p></div>
+              ) : (
+                <>
+                  {groups.map((g) => (
+                    <React.Fragment key={g.day}>
+                      <p className="sf-day">{g.day}</p>
+                      {g.rows.map((r, i) => (
+                        <a key={`${r.ts}-${i}`} role="button" tabIndex={0} className="sf-stream" onClick={() => r.id && playRow(recent.map((x) => ({ ...x, name: x.track })), recent.indexOf(r))} title={r.id ? 'Play' : 'Not in your library'}>
+                          <div className="sf-stream-row">
+                            <div className="sf-stream-main">
+                              <div className="sf-stream-img">{cover(r, 96) ? <img src={cover(r, 96)} alt="" loading="lazy" width={48} height={48} /> : <div className="sf-ph" />}</div>
+                              <div className="sf-stream-text">
+                                <h4 className="sf-truncate">{r.track}</h4>
+                                <p className="sf-truncate">{[r.artist, r.album, r.src === 'spotify' ? 'Spotify' : null].filter(Boolean).join(' • ')}</p>
+                              </div>
+                            </div>
+                            <p className="sf-stream-time" title={fullDate(r.ts)}>{fromNow(r.ts)}</p>
+                          </div>
+                          <hr />
+                        </a>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                  {!showAll && recent.length > 8 && <a role="button" tabIndex={0} className="sf-showall" onClick={() => setShowAll(true)}>show all</a>}
+                  {showAll && !done && <div ref={endRef} className="sf-spinner-wrap">{more && <span className="sf-spinner" />}</div>}
+                  {showAll && done && <div className="sf-empty sf-empty-icon"><p>No streams to load!</p></div>}
+                </>
+              )}
+            </Section>
           </>
         )}
       </div>

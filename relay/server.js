@@ -596,18 +596,24 @@ async function syncHistory(uid, lb) {
   histSyncing.set(uid, job);
   return job;
 }
-const RANGES = { '4w': 28 * 86400, '6m': 183 * 86400, '1y': 365 * 86400, all: Infinity };
+// stats.fm's ranges: today / this week / 4 weeks / 6 months / this year / lifetime.
+const RANGES = { '4w': 28 * 86400, '6m': 183 * 86400, '1y': 365 * 86400, week: 7 * 86400, all: Infinity };
 function historyStats(st, range, tzo = 0) {
   // tzo = the client's getTimezoneOffset() (minutes west of UTC), so hours and
   // days are the listener's, not the container's.
   const local = (ts) => new Date((ts - tzo * 60) * 1000);
   const now = Math.floor(Date.now() / 1000);
-  const span = RANGES[range] ?? RANGES.all;
+  let span = RANGES[range] ?? RANGES.all;
+  if (range === 'today' || range === 'year') {
+    // Since local midnight / local Jan 1.
+    const d = local(now); const start = range === 'today' ? Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) : Date.UTC(d.getUTCFullYear(), 0, 1);
+    span = now - (Math.floor(start / 1000) + tzo * 60);
+  }
   const since = span === Infinity ? 0 : now - span;
   const rows = st.listens.filter((l) => l.ts >= since);
   const secs = (l) => l.dur || st.match[listenKey(l)]?.dur || 210;
   const artists = new Map(), tracks = new Map(), albums = new Map(), genres = new Map();
-  const byHour = new Array(24).fill(0), byDow = new Array(7).fill(0);
+  const byHour = new Array(24).fill(0), byHourSeconds = new Array(24).fill(0), byDow = new Array(7).fill(0);
   const days = new Map();
   let seconds = 0;
   for (const l of rows) {
@@ -620,7 +626,7 @@ function historyStats(st, range, tzo = 0) {
     if (l.album) { const alk = `${ak}|${norm(l.album)}`; const al = albums.get(alk) || { name: l.album, artist: an, count: 0, seconds: 0, albumId: m?.albumId || null }; al.count += 1; al.seconds += s2; if (!al.albumId && m?.albumId) al.albumId = m.albumId; albums.set(alk, al); }
     for (const g of m?.genres || []) genres.set(g, (genres.get(g) || 0) + 1);
     const d = local(l.ts);
-    byHour[d.getUTCHours()] += 1; byDow[d.getUTCDay()] += 1;
+    byHour[d.getUTCHours()] += 1; byHourSeconds[d.getUTCHours()] += s2; byDow[d.getUTCDay()] += 1;
     const dk = d.toISOString().slice(0, 10); days.set(dk, (days.get(dk) || 0) + 1);
   }
   const top = (map, n = 50) => [...map.values()].sort((x, y) => y.count - x.count || y.seconds - x.seconds).slice(0, n);
@@ -634,7 +640,7 @@ function historyStats(st, range, tzo = 0) {
     uniqueTracks: tracks.size, uniqueArtists: artists.size, uniqueAlbums: albums.size,
     topArtists: top(artists), topTracks: top(tracks), topAlbums: top(albums),
     topGenres: [...genres.entries()].map(([id, count]) => ({ id, name: (BUCKETS.find((b) => b.id === id) || {}).name || id, count })).sort((x, y) => y.count - x.count).slice(0, 8),
-    byHour, byDow, perDay,
+    byHour, byHourSeconds, byDow, perDay,
     sources: rows.reduce((o, l) => { o[l.src] = (o[l.src] || 0) + 1; return o; }, {}),
     total: st.listens.length, firstTs, syncedAt: st.syncedAt, user: st.user,
   };
