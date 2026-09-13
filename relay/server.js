@@ -396,6 +396,41 @@ async function similarArtists(artistId, name) {
   return v;
 }
 
+// The artist page's Popular rows in real-world order. Deezer's top-100 for the
+// artist (no key needed) is matched by title against the library's tracks for
+// that artist; ranked titles come first in Deezer's order, one row per title
+// (the most played copy wins), then everything else by local plays. The
+// library's own play counts are too sparse to rank a catalogue on their own.
+const popularCache = new Map(); // artistId -> { at, v }
+async function popularTracks(artistId, name) {
+  const c = popularCache.get(artistId);
+  if (c && Date.now() - c.at < 24 * 60 * 60 * 1000) return c.v;
+  const lib = await meiliOne('tracks', { q: '', limit: 500, filter: `artistIds = "${artistId}"`, attributesToRetrieve: ['id', 'name', 'plays'] }).catch(() => ({ hits: [] }));
+  let order = [];
+  try {
+    const s = await fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=5`, { signal: AbortSignal.timeout(8000) }).then((r) => r.json());
+    const dz = (s.data || []).find((a) => norm(a.name) === norm(name)) || (s.data || [])[0];
+    if (dz) {
+      const top = await fetch(`https://api.deezer.com/artist/${dz.id}/top?limit=100`, { signal: AbortSignal.timeout(8000) }).then((r) => r.json());
+      order = (top.data || []).map((t) => [normTitle(t.title_short || t.title), normTitle(t.title)]);
+    }
+  } catch { /* Deezer down: plays only */ }
+  const rank = new Map();
+  order.forEach((keys, i) => keys.forEach((k) => { if (k && !rank.has(k)) rank.set(k, i); }));
+  const keyOf = (t) => normTitle(t.name);
+  const best = new Map(); // title key -> best library copy
+  for (const t of lib.hits || []) {
+    const k = keyOf(t);
+    const cur = best.get(k);
+    if (!cur || (t.plays || 0) > (cur.plays || 0)) best.set(k, t);
+  }
+  const rows = [...best.entries()].map(([k, t]) => ({ id: t.id, r: rank.has(k) ? rank.get(k) : Infinity, plays: t.plays || 0 }));
+  rows.sort((a, b) => (a.r - b.r) || (b.plays - a.plays));
+  const v = { ids: rows.map((r) => r.id), ranked: rows.filter((r) => r.r !== Infinity).length, source: order.length ? 'deezer' : 'plays' };
+  popularCache.set(artistId, { at: Date.now(), v });
+  return v;
+}
+
 async function requestAlbum(albumId) {
   const r = await fetch(`${MUSIC_REQUESTS}/api/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ album_id: albumId }), signal: AbortSignal.timeout(20000) });
   const j = await r.json().catch(() => ({}));
@@ -409,7 +444,7 @@ const server = http.createServer(async (req, res) => {
   if (req.url === '/healthz') { res.writeHead(200); res.end('ok'); return; }
   const url = new URL(req.url, 'http://x');
   const path = url.pathname.replace(/^\/relay/, '');
-  if (path === '/discography' || path === '/radar' || path === '/request' || path === '/similar') {
+  if (path === '/discography' || path === '/radar' || path === '/request' || path === '/similar' || path === '/popular') {
     const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, X-Emby-Token, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }
     try {
@@ -419,6 +454,7 @@ const server = http.createServer(async (req, res) => {
       if (path === '/discography') out = await discography(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '');
       else if (path === '/radar') out = { releases: await releaseRadar() };
       else if (path === '/similar') out = { artists: await similarArtists(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '') };
+      else if (path === '/popular') out = await popularTracks(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '');
       else {
         let body = ''; for await (const chunk of req) body += chunk;
         const { album_id } = JSON.parse(body || '{}');

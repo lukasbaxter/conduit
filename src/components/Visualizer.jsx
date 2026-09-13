@@ -18,7 +18,9 @@ export const EQ_STYLES = [
   { id: 'radial', name: 'Radial', opts: { mode: 5, radial: true, spinSpeed: 1, showPeaks: true, barSpace: .2, mirror: 0, reflexRatio: 0, ledBars: false, fillAlpha: 1, lineWidth: 0 } },
 ];
 export const GRADIENTS = ['prism', 'classic', 'rainbow', 'orangered', 'steelblue'];
-export const DEFAULT_VIZ = { engine: 'eq', style: 'line', gradient: 'prism', cycle: true, favorites: [], favOnly: false };
+// `preset` is the Milkdrop preset last chosen; it stays until the user picks
+// another (no timed cycling).
+export const DEFAULT_VIZ = { engine: 'eq', style: 'line', gradient: 'prism', favorites: [], favOnly: false, preset: '' };
 // Only presets that actually listen to the music are offered. A preset is
 // reactive when its equations/shaders read the audio levels several times, or
 // at least once while also drawing a visible base waveform.
@@ -61,20 +63,33 @@ export default function Visualizer({ player, active, jf, settings, nextPresetSig
     return shadowRef.current;
   };
   useEffect(() => () => { const sh = shadowRef.current; if (sh) { sh.el.pause(); sh.el.src = ''; sh.ctx.close?.(); shadowRef.current = null; } }, []);
+  // The session playhead as a live clock: the position the player last
+  // reported plus the time since. The sync tick below reads THIS, never a
+  // position captured when the effect ran -- that copy stood still while the
+  // shadow ran on, so every couple of seconds it was dragged back to it and
+  // the picture jerked behind the speaker.
+  const clockRef = useRef({ pos: 0, at: Date.now(), playing: false });
+  clockRef.current = { pos: player.position || 0, at: Date.now(), playing: !!player.playing };
   useEffect(() => {
     if (!active || local) { const sh = shadowRef.current; if (sh) sh.el.pause(); return undefined; }
     const sh = shadow();
-    if (trackId && sh.id !== trackId && jf) { sh.id = trackId; sh.el.src = jf.playbackUrl(trackId); }
+    // The original file (byte-range seekable), not a transcode: seeking a live
+    // transcode is unreliable and the analyser does not care about bitrate.
+    if (trackId && sh.id !== trackId && jf) { sh.id = trackId; sh.el.src = jf.streamUrl(trackId); }
+    const want = () => { const c = clockRef.current; return c.pos + (c.playing ? (Date.now() - c.at) / 1000 : 0); };
     const tick = () => {
-      const want = player.position || 0;
-      if (Math.abs((sh.el.currentTime || 0) - want) > 1.5) { try { sh.el.currentTime = want; } catch { /* not seekable yet */ } }
+      const w = want();
+      if (Math.abs((sh.el.currentTime || 0) - w) > 0.35) { try { sh.el.currentTime = w; } catch { /* not seekable yet */ } }
       if (player.playing && sh.el.paused) sh.el.play().catch(() => {});
       if (!player.playing && !sh.el.paused) sh.el.pause();
     };
+    // Snap as soon as the element can seek, instead of waiting for the next tick.
+    const onReady = () => tick();
+    sh.el.addEventListener('loadedmetadata', onReady);
     tick();
-    const t = setInterval(tick, 1000);
-    return () => clearInterval(t);
-  }, [active, local, trackId, player.playing, Math.floor(player.position / 5)]); // eslint-disable-line react-hooks/exhaustive-deps
+    const t = setInterval(tick, 500);
+    return () => { clearInterval(t); sh.el.removeEventListener('loadedmetadata', onReady); };
+  }, [active, local, trackId, player.playing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const graph = () => { const wa = local ? player.webAudio() : shadow(); wa?.ctx?.resume?.(); return wa; };
 
@@ -114,7 +129,7 @@ export default function Visualizer({ player, active, jf, settings, nextPresetSig
   useEffect(() => { if (sharedViz?.preset) followRef.current?.(sharedViz.preset); }, [sharedViz]);
   useEffect(() => {
     if (!active || cfg.engine !== 'milkdrop') return undefined;
-    let alive = true, raf = 0, cycle = 0;
+    let alive = true, raf = 0;
     setState('loading');
     (async () => {
       try {
@@ -132,18 +147,19 @@ export default function Visualizer({ player, active, jf, settings, nextPresetSig
         // The pool is every preset, or only the saved favourites when asked.
         const pool = () => { const f = (cfgRef.current.favOnly && cfgRef.current.favorites?.filter((n) => presets[n])) || []; return f.length ? f : names; };
         let current = '';
-        // Cycling is a resettable timer so a preset arriving from another client
-        // restarts the wait here instead of stacking a second advance on top.
-        const arm = () => { clearTimeout(cycle); if (cfgRef.current.cycle) cycle = setTimeout(() => nextRef.current?.(), 25000 + Math.random() * 3000); };
+        // A preset stays until the user changes it (no timer). `share` is
+        // false when following another client or restoring the saved one.
         const load = (name, blend, share = true) => {
           if (!presets[name] || name === current) return;
           current = name; viz.loadPreset(presets[name], blend); setPresetName(name); onPreset?.(name);
           if (share) onShareViz?.(name);
-          arm();
         };
-        // Start on what the account's other screens show, else pick at random.
+        // Start on what the account's other screens show, else the preset
+        // saved on the account, else pick one at random (once).
         const shared = sharedRef.current;
+        const saved = cfgRef.current.preset;
         if (shared?.preset && presets[shared.preset]) load(shared.preset, 0, false);
+        else if (saved && presets[saved]) load(saved, 0, false);
         else { const start = pool(); load(start[Math.floor(Math.random() * start.length)], 0); }
         nextRef.current = () => { const list = pool(); const i = list.indexOf(current); load(list[(i + 1) % list.length], 1.5); };
         followRef.current = (name) => load(name, 1.5, false);
@@ -157,8 +173,8 @@ export default function Visualizer({ player, active, jf, settings, nextPresetSig
         vizRef.current = { viz, ro };
       } catch (e) { console.error('visualizer', e); if (alive) setState('error'); }
     })();
-    return () => { alive = false; cancelAnimationFrame(raf); clearTimeout(cycle); vizRef.current?.ro?.disconnect?.(); vizRef.current = null; nextRef.current = null; followRef.current = null; if (controls) controls.current = null; onPreset?.(''); };
-  }, [active, local, cfg.engine, cfg.cycle]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { alive = false; cancelAnimationFrame(raf); vizRef.current?.ro?.disconnect?.(); vizRef.current = null; nextRef.current = null; followRef.current = null; if (controls) controls.current = null; onPreset?.(''); };
+  }, [active, local, cfg.engine]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (nextPresetSignal) nextRef.current?.(); }, [nextPresetSignal]);
 
   const md = cfg.engine === 'milkdrop';

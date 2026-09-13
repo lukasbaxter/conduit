@@ -114,7 +114,11 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 }
 .sidebar { display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
 .content { overflow-y: auto; position: relative; }
-.rightpanel { display: flex; flex-direction: column; overflow: hidden; }
+.rightpanel { display: flex; flex-direction: column; overflow: hidden; position: relative; }
+/* Lyrics mode: the cover, blurred and darkened, behind the panel (same recipe as .fs-bg). */
+.panel-bg { position: absolute; inset: -60px; background-size: cover; background-position: center; filter: blur(60px) brightness(.35) saturate(1.2); transform: scale(1.1); pointer-events: none; }
+.rightpanel.with-bg > :not(.panel-bg) { position: relative; }
+.rightpanel.with-bg .tabs { border-bottom-color: rgba(255,255,255,.15); }
 
 /* ---------- left rail ---------- */
 
@@ -536,6 +540,8 @@ input[type="range"]:disabled { opacity: .4; }
 .player-right { display: flex; align-items: center; justify-content: flex-end; gap: 4px; min-width: 180px; padding-right: 8px; }
 .player-right .icon-btn, .player-right .devicebtn { width: 32px; height: 32px; display: grid; place-items: center; padding: 0; color: #ffffffb3; }
 .player-right .icon-btn:hover, .player-right .devicebtn:hover { color: var(--fg); }
+/* Lit (lyrics / queue panel open): green, above the footer's dim override. */
+.player-right .icon-btn.on, .player-right .icon-btn.on:hover { color: var(--accent); }
 .player-volume { display: flex; align-items: center; gap: 4px; color: #ffffffb3; width: 128px; }
 .player-volume .vol-ico { width: 32px; height: 32px; display: grid; place-items: center; padding: 0; color: inherit; }
 .player-volume input { width: 93px; }
@@ -668,7 +674,8 @@ input[type="range"]:disabled { opacity: .4; }
 .npbars i { transform-origin: bottom; }
 
 /* inline links inside rows (artist names, album) */
-.rowlink { padding: 0; font: inherit; color: inherit; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.rowlink { padding: 0; font: inherit; color: inherit; text-align: left; white-space: nowrap; }
+.rowlink:focus-visible { outline: 1px solid var(--fg); outline-offset: 2px; border-radius: 2px; }
 .rowlink:hover { color: var(--fg); text-decoration: underline; }
 
 /* Spotify's "See more" under Popular: small, bold, subdued, left-aligned with the rows. */

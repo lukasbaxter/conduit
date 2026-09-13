@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArtistLinks, PlayGlyph } from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
+import { ctxItemId } from '../api/context.js';
 
 const Close = () => (
   <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
@@ -122,7 +123,7 @@ function Queue({ player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlis
     let alive = true;
     if (!contextId || contextId === 'liked') { setCtxName(contextId === 'liked' ? 'Liked Songs' : null); return undefined; }
     if (String(contextId).startsWith('browse:')) { setCtxName(null); return undefined; }
-    jf.itemById(contextId).then((it) => { if (alive) setCtxName(it?.Name || null); }).catch(() => { if (alive) setCtxName(null); });
+    jf.itemById(ctxItemId(contextId)).then((it) => { if (alive) setCtxName(it?.Name || null); }).catch(() => { if (alive) setCtxName(null); });
     return () => { alive = false; };
   }, [contextId, jf]);
   const [drag, setDrag] = useState(null); // absolute queue index being dragged
@@ -273,8 +274,12 @@ export function Lyrics({ player, jf }) {
 
 export default function RightPanel({ mode, onClose, onMode, player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlists }) {
   const titles = { npv: 'Now playing', queue: 'Queue', lyrics: 'Lyrics' };
+  // Lyrics sit on the blurred cover, like the now-playing view does.
+  const np = player.nowPlaying;
+  const bg = mode === 'lyrics' ? (np?.artId ? jf.imageUrl(np.artId, { maxHeight: 640 }) : np?.artUrl || null) : null;
   return (
-    <aside className="rightpanel">
+    <aside className={`rightpanel ${bg ? 'with-bg' : ''}`}>
+      {bg && <div className="panel-bg" style={{ backgroundImage: `url("${bg}")` }} />}
       <div className="panel-header">
         <button className="icon-btn" onClick={onClose} title="Close panel"><Close /></button>
         <span className="title">{titles[mode]}</span>

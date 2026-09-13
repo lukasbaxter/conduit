@@ -117,7 +117,7 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
 
   const playAlbum = async (a) => {
     const { items } = await jf.tracks({ albumId: a.Id });
-    if (items.length) player.playQueue(items, 0);
+    if (items.length) player.playQueue(items, 0, a.Id);
   };
   const playMix = async (seed) => {
     const items = await jf.instantMix(seed.Id);
@@ -125,11 +125,11 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
   };
   const playLiked = async () => {
     const { items } = await jf.favoriteTracks();
-    if (items.length) player.playQueue(items, 0);
+    if (items.length) player.playQueue(items, 0, 'liked');
   };
   const playPlaylist = async (p) => {
     const { items } = await jf.playlistTracks(p.Id);
-    if (items.length) player.playQueue(items, 0);
+    if (items.length) player.playQueue(items, 0, p.Id);
   };
 
   // Shortcuts: Liked Songs first, then recent albums and playlists, to 8.

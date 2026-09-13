@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import TrackRow, { PlayGlyph, PauseGlyph, Heart, ShuffleGlyph, LikedCover } from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
+import { ctxOf } from '../api/context.js';
 import { vibrantColor } from '../api/colors.js';
 import { QUALITIES, THEME_PRESETS, DEFAULT_THEME, themeEquals } from '../api/prefs.js';
 import { search as relaySearch, browse as relayBrowse, discography as relayDiscography, similar as relaySimilar, requestAlbum as relayRequest, radar as relayRadar } from '../api/search.js';
@@ -292,7 +293,7 @@ export default function Library({
       if (it.Type === 'MusicArtist') ({ items } = await jf.tracks({ artistId: it.Id, limit: 200 }));
       else if (it.Type === 'Playlist') ({ items } = await jf.playlistTracks(it.Id));
       else ({ items } = await jf.tracks({ albumId: it.Id }));
-      if (items.length) player.playQueue(items, 0);
+      if (items.length) player.playQueue(items, 0, ctxOf(it));
     } catch (e) { setErr(e.message); }
   };
 
@@ -654,7 +655,7 @@ export default function Library({
 
         <div className="actions">
           {(() => {
-            const here = player.contextId === item.Id;
+            const here = player.contextId === ctxOf(item);
             const showPause = here && player.playing;
             const shuffled = player.shuffle !== 'off';
             const all = (fn) => tracks.length && fn(tracks);
@@ -675,7 +676,7 @@ export default function Library({
               <>
                 <button
                   className="bigplay"
-                  onClick={() => (here ? player.toggle() : tracks.length && player.playQueue(tracks, 0, item.Id))}
+                  onClick={() => (here ? player.toggle() : tracks.length && player.playQueue(tracks, 0, ctxOf(item)))}
                   title={showPause ? 'Pause' : 'Play'}
                 >
                   {showPause ? <PauseGlyph size={24} /> : <PlayGlyph size={24} />}
@@ -734,7 +735,7 @@ export default function Library({
                 {/* Spotify's Popular rows: 40px cover next to the number
                     (chunk_xpui-routes-artist: flex:0 0 40px, radius 4px),
                     title only, no artist line. */}
-                {tracks.slice(0, popularExpanded ? 10 : 5).map((t, i) => <TrackRow key={t.Id} {...rowProps(tracks, i, { showArt: true, hideArtists: true }, item.Id)} />)}
+                {tracks.slice(0, popularExpanded ? 10 : 5).map((t, i) => <TrackRow key={t.Id} {...rowProps(tracks, i, { showArt: true, hideArtists: true }, ctxOf(item))} />)}
               </div>
               {tracks.length > 5 && (
                 <button className="seemore" onClick={() => setPopularExpanded((v) => !v)}>
@@ -1045,7 +1046,7 @@ export default function Library({
               <div className="shelf-head"><h2>Artists</h2></div>
               <div className="grid">
                 {r.artists.map((a) => (
-                  <Card key={a.Id} title={a.Name} subtitle="Artist" round
+                  <Card key={a.Id} title={a.Name} round
                     image={jf.imageUrl(a.Id, { maxHeight: 320 })} onOpen={() => openArtist(a)} onPlay={() => startMix(a)} />
                 ))}
               </div>

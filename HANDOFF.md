@@ -4,6 +4,41 @@ Pick-up notes for the next session. Open: the HTTPS/DNS fix (still blocking the
 phone PWA), the rest of the Liked Songs audit (#2.2-2.5), and a few library
 leftovers listed at the bottom.
 
+## Shipped 2026-09-13 (deployed to :8748, relay redeployed, probed headless)
+- Search: no "Artist" subtitle under artist cards.
+- Row artist links are inline SPANS (`ArtistLinks` in TrackRow.jsx), not
+  buttons. An inline-block button that spilled past the ellipsized artist
+  line was hidden whole by the ellipsis but stayed clickable in the blank
+  space (narrow window, "Daft Punk, ..." opened Pharrell). Inline text
+  ellipsizes per character and the clipped part is not hit-testable.
+- Lyrics side panel: blurred cover behind it (`.panel-bg`, same recipe as
+  `.fs-bg`); footer mic/queue icons actually turn green when their panel is
+  open (`.player-right .icon-btn` used to override `.icon-btn.on`).
+- NEXT always lands on a track (manual skip at the end of the queue, in
+  `advance()` in usePlayer.js): repeat all / context (playlist, album, liked,
+  mix) -> `restart()` (reshuffled from the original order when shuffle is on,
+  never opening on the track that just played); artist context -> `moreOfArtist()`
+  (the rest of the artist shuffled, then an instant mix off the artist);
+  no context (song clicked in search, radio) -> `smartNext(true)` instant mix.
+  A track ENDING on its own still parks at the end as before (no auto-loop).
+  Artist contexts are `artist:<id>` (`src/api/context.js`: ctxOf/ctxItemId);
+  Home's album/playlist/liked plays now pass a context too.
+- Artist page Popular = real popularity: relay `GET /popular?artistId&name`
+  (Deezer artist top-100 matched by `normTitle` to the library's tracks for
+  that artist, one row per title = the most played copy, then the rest by
+  plays; cached 24h). `openArtistById` reorders the tracks by those ids
+  (search limit raised 50 -> 150 so ranked tracks with 0 plays are present).
+  5 rows, "See more" -> 10 (unchanged).
+- Visualizer on a speaker: the shadow stream's sync tick read `player.position`
+  captured when the effect ran (refreshed only every 5 s), so it dragged the
+  shadow back ~1.5 s every couple of seconds -> picture behind the node. Now a
+  live clock ref (`clockRef`, position + elapsed), 0.35 s tolerance, 500 ms
+  tick, snaps on `loadedmetadata`, and streams the ORIGINAL file
+  (`jf.streamUrl`) instead of a transcode so seeks are exact.
+- Milkdrop: preset cycling removed (no timer, "Cycle presets" menu item gone).
+  The preset the user picks is saved on the account (`prefs.viz.preset`) and
+  restored on the next open; live sync across clients unchanged.
+
 ## Shipped 2026-09-12 (now-playing view + visualizer; deployed, relay redeployed)
 - Now-playing view (`src/components/FullScreen.jsx`) no longer asks the OS for
   full screen: the expand button fills the app window; if the window is

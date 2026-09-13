@@ -9,7 +9,7 @@ import RightPanel from './components/RightPanel.jsx';
 import FullScreen from './components/FullScreen.jsx';
 import { downloadTrack } from './api/download.js';
 import { applyTheme, DEFAULT_THEME } from './api/prefs.js';
-import { search as relaySearch } from './api/search.js';
+import { search as relaySearch, popular as relayPopular } from './api/search.js';
 
 // Everything goes through music.baxtergroup.io (Let's Encrypt on the origin,
 // Cloudflare proxy deliberately off -- it throttles the audio). The browser
@@ -426,13 +426,27 @@ export default function App() {
     const alive = () => true;
     // Jellyfin's ArtistIds join takes ~1.7 s here; the search index answers the
     // same question (this artist's tracks, most played first) in ~20 ms.
-    const fast = relaySearch(jf, '', { filter: `artistIds = "${artistId}"`, limit: 50 }).then((r) => r.tracks).catch(() => null);
-    jf.itemById(artistId).then((meta) => { if (alive() && meta) setDetail((d) => (d && d.item?.Id === artistId ? { ...d, item: meta } : d)); }).catch(() => {});
+    const fast = relaySearch(jf, '', { filter: `artistIds = "${artistId}"`, limit: 150 }).then((r) => r.tracks).catch(() => null);
+    const metaP = jf.itemById(artistId).then((meta) => { if (alive() && meta) setDetail((d) => (d && d.item?.Id === artistId ? { ...d, item: meta } : d)); return meta; }).catch(() => null);
     jf.artistAlbums(artistId).then((a) => setDetail((d) => (d && d.item?.Id === artistId ? { ...d, albums: a.items } : d))).catch(() => {});
     try {
       let tracks = await fast;
       if (!tracks || !tracks.length) tracks = (await jf.tracks({ artistId, limit: 200 })).items;
       setDetail((d) => (d && d.item?.Id === artistId ? { ...d, tracks, loading: false } : d));
+      // Popular = real-world order (Deezer top tracks matched to the library),
+      // one row per title; the rest of the artist's tracks follow by plays.
+      const name = known?.Name || (await metaP)?.Name;
+      if (name) {
+        const pop = await relayPopular(jf, artistId, name).catch(() => null);
+        if (pop?.ids?.length) {
+          const pos = new Map(pop.ids.map((id, i) => [id, i]));
+          const known2 = tracks.filter((t) => pos.has(t.Id)).sort((a, b) => pos.get(a.Id) - pos.get(b.Id));
+          const seen = new Set(known2.map((t) => t.Id));
+          const rest = tracks.filter((t) => !seen.has(t.Id));
+          const ordered = [...known2, ...rest];
+          setDetail((d) => (d && d.item?.Id === artistId ? { ...d, tracks: ordered, popular: pop.ranked } : d));
+        }
+      }
     } catch { setDetail((d) => (d && d.item?.Id === artistId ? { ...d, loading: false } : d)); }
   };
 

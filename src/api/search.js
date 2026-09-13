@@ -77,6 +77,8 @@ async function relayGet(jf, path, params = {}, timeout = 30000) {
 // Every release Spotify lists for an artist, flagged with what the library has.
 export const discography = (jf, artistId, name) => relayGet(jf, '/discography', { artistId, name });
 export const similar = (jf, artistId, name) => relayGet(jf, '/similar', { artistId, name }, 15000);
+// The artist's tracks in popularity order (Deezer top-100 matched to the library), as ids.
+export const popular = (jf, artistId, name) => relayGet(jf, '/popular', { artistId, name }, 15000);
 export const radar = (jf) => relayGet(jf, '/radar', {}, 120000);
 export async function requestAlbum(jf, albumId) {
   const res = await fetch(`${relayBase()}/request`, { method: 'POST', headers: { 'X-Emby-Token': jf.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ album_id: albumId }), signal: AbortSignal.timeout(30000) });

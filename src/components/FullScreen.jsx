@@ -35,7 +35,6 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
       { label: 'Colours', sub: GRADIENTS.map((g) => ({ key: g, label: `${g[0].toUpperCase()}${g.slice(1)}${viz.gradient === g ? '  ✓' : ''}`, onClick: () => setV({ gradient: g }) })) },
     ] : [
       { label: 'Next preset', onClick: () => setNextPreset((n) => n + 1) },
-      { label: `Cycle presets${viz.cycle ? '  ✓' : ''}`, onClick: () => setV({ cycle: !viz.cycle }) },
       { sep: true },
       { label: isFav ? 'Remove from favourites' : 'Save preset to favourites', disabled: !preset, onClick: () => toggleFav(preset) },
       { label: `Favourites only${viz.favOnly ? '  ✓' : ''}`, disabled: !favs.length, onClick: () => setV({ favOnly: !viz.favOnly }) },
@@ -47,7 +46,10 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
   useEffect(() => { try { localStorage.setItem('conduit.fsTab', tab); } catch {} }, [tab]);
   // Milkdrop takes the whole window (behind the tabs and transport); the EQ stays in its box.
   const mdFull = tab === 'viz' && viz.engine === 'milkdrop';
-  const vizEl = <Visualizer player={player} jf={jf} active={tab === 'viz'} settings={viz} nextPresetSignal={nextPreset} onPreset={setPreset} controls={vizCtl} sharedViz={sharedViz} onShareViz={onShareViz} />;
+  // A preset the user picked here is shared live AND saved on the account, so
+  // the next open (any client) starts on it instead of a random one.
+  const sharePreset = (name) => { onShareViz?.(name); if (name && name !== viz.preset) setV({ preset: name }); };
+  const vizEl = <Visualizer player={player} jf={jf} active={tab === 'viz'} settings={viz} nextPresetSignal={nextPreset} onPreset={setPreset} controls={vizCtl} sharedViz={sharedViz} onShareViz={sharePreset} />;
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);

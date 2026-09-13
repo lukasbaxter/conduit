@@ -21,6 +21,10 @@ export const ShuffleGlyph = ({ size = 16 }) => (
   </svg>
 );
 // "A, B, C" where each name is its own link (footer, now-playing view, rows).
+// The links are INLINE spans, not buttons: an inline-block button that spills
+// past an ellipsized line is hidden whole by the ellipsis yet stays clickable
+// in the blank space after it, so a narrow row opened an artist you could not
+// see. Inline text ellipsizes character by character and clips its hit area.
 export function ArtistLinks({ artists, fallback = '', onOpen, className = 'rowlink' }) {
   const list = (artists || []).filter((a) => a && a.Name);
   if (!list.length) return <>{fallback}</>;
@@ -29,7 +33,11 @@ export function ArtistLinks({ artists, fallback = '', onOpen, className = 'rowli
       {list.map((a, i) => (
         <React.Fragment key={a.Id || a.Name}>
           {a.Id && onOpen ? (
-            <button className={className} onClick={(e) => { e.stopPropagation(); onOpen(a.Id); }}>{a.Name}</button>
+            <span
+              className={className} role="button" tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); onOpen(a.Id); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onOpen(a.Id); } }}
+            >{a.Name}</span>
           ) : a.Name}
           {i < list.length - 1 ? ', ' : ''}
         </React.Fragment>
@@ -168,15 +176,7 @@ export default function TrackRow({
         {/* On an artist's own page the artist line is redundant; Spotify's
             Popular rows show the title alone. */}
         {!hideArtists && <small>
-          {(track.ArtistItems?.length ? track.ArtistItems : (track.Artists || []).map((n2) => ({ Name: n2 }))).map((a, i, arr) => (
-            <React.Fragment key={a.Id || a.Name}>
-              {a.Id && onOpenArtist ? (
-                <button className="rowlink" onClick={(e) => { e.stopPropagation(); onOpenArtist(a.Id); }}>{a.Name}</button>
-              ) : a.Name}
-              {i < arr.length - 1 ? ', ' : ''}
-            </React.Fragment>
-          ))}
-          {!track.ArtistItems?.length && !track.Artists?.length ? (track.AlbumArtist || '') : ''}
+          <ArtistLinks artists={artistsOf} fallback={track.AlbumArtist || ''} onOpen={onOpenArtist} />
         </small>}
         {/* A lyric match: the line that matched, with the words lit. */}
         {snippet && (

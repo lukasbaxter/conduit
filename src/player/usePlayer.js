@@ -95,6 +95,7 @@ export function usePlayer(jf) {
   // the house's current playback instead of claiming nothing is on.
   const [external, setExternal] = useState(null);
   const [contextId, setContextId] = useState(null);
+  const contextRef = useRef(null);
   const [roster, setRoster] = useState({ players: [], lanDevices: [] });
   // Queues published by my other clients, keyed by clientId. The active
   // player's is what the queue panel shows while mirroring.
@@ -180,6 +181,7 @@ export function usePlayer(jf) {
 
   useEffect(() => { deviceRef.current = device; }, [device]);
   useEffect(() => { repeatRef.current = repeat; }, [repeat]);
+  useEffect(() => { contextRef.current = contextId; }, [contextId]);
   useEffect(() => { shuffleRef.current = shuffle; }, [shuffle]);
   useEffect(() => { positionRef.current = position; }, [position]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
@@ -499,10 +501,13 @@ export function usePlayer(jf) {
   );
 
   // Smart shuffle: the queue ran out, so extend it with songs similar to the
-  // current track (a Jellyfin instant mix) and keep playing.
-  const smartNext = useCallback(async () => {
+  // current track (a Jellyfin instant mix) and keep playing. `orRestart` is
+  // the fallback when nothing similar exists (a manual skip must still land
+  // on a track); the default parks at the end.
+  const smartNext = useCallback(async (orRestart = false) => {
     const cur = queueRef.current[indexRef.current];
-    if (!cur || !jf) return skipTo(queueRef.current.length);
+    const giveUp = () => skipTo(orRestart ? 0 : queueRef.current.length);
+    if (!cur || !jf) return giveUp();
     try {
       const q = new URLSearchParams({ userId: jf.userId, Limit: '25', Fields: 'ArtistItems,AlbumArtists,UserData' });
       const data = await jf._fetch(`/Items/${cur.Id}/InstantMix?${q}`);
@@ -511,29 +516,69 @@ export function usePlayer(jf) {
       const fresh = (data.Items || []).filter((t) => t.UserData?.Likes !== false);
       let pick = fresh.filter((t) => !have.has(t.Id));
       if (!pick.length) pick = fresh.filter((t) => t.Id !== cur.Id);
-      if (!pick.length) return skipTo(queueRef.current.length);
+      if (!pick.length) return giveUp();
       const merged = [...queueRef.current, ...pick];
       setQueue(merged); queueRef.current = merged;
       await skipTo(indexRef.current + 1);
     } catch {
-      await skipTo(queueRef.current.length);
+      await giveUp();
     }
   }, [jf, skipTo]);
 
+  // Start the context over. With shuffle on, a fresh order (not the same
+  // scramble again), never opening on the track that just played.
+  const restart = useCallback(async () => {
+    const q = queueRef.current;
+    if (shuffleRef.current !== 'off' && q.length > 1) {
+      const last = q[indexRef.current];
+      const base = (originalQueueRef.current.length ? originalQueueRef.current : q).filter((t) => !t._queued);
+      let order = shuffled(base);
+      if (order.length > 1 && last && order[0].Id === last.Id) order = [...order.slice(1), order[0]];
+      setQueue(order); queueRef.current = order;
+    }
+    return skipTo(0);
+  }, [skipTo]);
+
+  // Played from an artist page: more of that artist. Everything by them that
+  // is not in the queue yet, shuffled; when that runs dry, an instant mix off
+  // the artist; failing both, the queue starts over.
+  const moreOfArtist = useCallback(async (artistId) => {
+    if (!jf) return restart();
+    try {
+      const have = new Set(queueRef.current.map((t) => t.Id));
+      let pick = shuffled((await jf.tracks({ artistId, limit: 500 })).items.filter((t) => !have.has(t.Id) && t.UserData?.Likes !== false));
+      if (!pick.length) pick = (await jf.instantMix(artistId, 25)).filter((t) => !have.has(t.Id));
+      if (!pick.length) return restart();
+      const merged = [...queueRef.current, ...pick];
+      setQueue(merged); queueRef.current = merged;
+      originalQueueRef.current = [...originalQueueRef.current, ...pick];
+      return skipTo(indexRef.current + 1);
+    } catch {
+      return restart();
+    }
+  }, [jf, skipTo, restart]);
+
   // Advance the queue. `auto` is true for a track that ended on its own (vs. a
-  // manual skip). At the end of the queue, honour repeat / smart shuffle instead
-  // of just stopping.
+  // manual skip). At the end of the queue, honour repeat / smart shuffle; a
+  // MANUAL skip must always land on another track: a playlist or album starts
+  // over (reshuffled if shuffle is on), an artist context plays more of the
+  // artist, and a bare queue (a song clicked in search, a radio) continues
+  // with similar songs.
   const advance = useCallback(async (auto = false) => {
     const q = queueRef.current;
     const i = indexRef.current;
     if (auto && repeatRef.current === 'one') return skipTo(i); // replay the track
     if (i + 1 < q.length) return skipTo(i + 1);
     // Nothing left.
-    if (repeatRef.current === 'all') return skipTo(0);
+    if (repeatRef.current === 'all') return restart();
     if (repeatRef.current === 'one') return skipTo(i);
-    if (shuffleRef.current === 'smart') return smartNext();
-    return skipTo(q.length); // falls into the stop branch
-  }, [skipTo, smartNext]);
+    if (shuffleRef.current === 'smart') return smartNext(!auto);
+    if (auto) return skipTo(q.length); // falls into the stop branch (parks on the last track)
+    const ctx = contextRef.current;
+    if (ctx && String(ctx).startsWith('artist:')) return moreOfArtist(String(ctx).slice(7));
+    if (ctx) return restart();
+    return smartNext(true);
+  }, [skipTo, smartNext, restart, moreOfArtist]);
   useEffect(() => { advanceRef.current = advance; }, [advance]);
 
   // Both route to the active player while mirroring: the queue lives there.
