@@ -1273,7 +1273,4 @@ button:disabled { cursor: default; }
 .sf-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .sf-legend i { width: 8px; height: 8px; border-radius: 50%; background: #1ed760; display: inline-block; }
 .sf-legend i.minutes { opacity: .45; }
-.sf-segmented { display: flex; gap: 4px; margin-top: 12px; background: #181818; border-radius: 9999px; padding: 4px; width: max-content; }
-.sf-segmented button { padding: 6px 16px; border-radius: 9999px; color: #a3a3a3; font-weight: 500; font-size: 14px; }
-.sf-segmented button.on { color: #1ed760; background: #111111; }
 .sf-clock-hour { fill: #727272; font-size: 12px; font-weight: 500; }

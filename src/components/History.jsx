@@ -248,7 +248,6 @@ export default function History({ jf, player, me, onOpenArtist, onOpenAlbum, onO
   const [showAll, setShowAll] = useState(false);
   const [more, setMore] = useState(false);
   const [done, setDone] = useState(false);
-  const [gran, setGran] = useState('day'); // per-day charts: day / week / month buckets
   useEffect(() => { try { localStorage.setItem('conduit.histRange2', range); } catch {} }, [range]);
   useEffect(() => {
     if (data[range]) return undefined;
@@ -415,7 +414,8 @@ export default function History({ jf, player, me, onOpenArtist, onOpenAlbum, onO
                   }
                   return [...out.values()];
                 };
-                const rows = bucket(days, gran);
+                // Granularity follows the range picker: days up to 6 months, weeks for a year, months for lifetime.
+                const rows = bucket(days, days.length > 200 ? 'month' : days.length > 60 ? 'week' : 'day');
                 return (
                   <>
                     <div className="sf-avg-cards">
@@ -425,11 +425,6 @@ export default function History({ jf, player, me, onOpenArtist, onOpenAlbum, onO
                     <div className="sf-charts">
                       <LineChart title="Daily" points={rows} />
                       <LineChart title="Cumulative" points={rows} cumulative />
-                    </div>
-                    <div className="sf-segmented" role="tablist">
-                      {[['day', 'day'], ['week', 'week'], ['month', 'month']].map(([k, label]) => (
-                        <button key={k} role="tab" aria-selected={gran === k} className={gran === k ? 'on' : ''} onClick={() => setGran(k)}>{label}</button>
-                      ))}
                     </div>
                   </>
                 );
