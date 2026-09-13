@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { history as relayHistory } from '../api/search.js';
 
 // The profile menu's History page, built to stats.fm's user page: its
-// Tailwind tokens (background #111112, foreground #18181c, primary #1ed760,
+// Tailwind tokens (background #111111, foreground #181818, primary #1ed760,
 // grey #a3a3a3 / #727272), its Container widths, the same sections in the
 // same order with the same class recipes (see HANDOFF.md "History tab").
 // Every number comes from ListenBrainz through the relay (Conduit plays, the
