@@ -888,3 +888,45 @@ button:disabled { cursor: default; }
 .reco-add:hover { border-color: var(--fg); transform: scale(1.04); }
 .reco-refresh { color: var(--fg-dim); font-size: 14px; font-weight: 700; padding: 14px 16px; }
 .reco-refresh:hover { color: var(--fg); }
+
+/* ---------- listening history (stats.fm) ---------- */
+.history-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+.history-head h1 { margin: 4px 0 8px; font-size: 40px; font-weight: 800; letter-spacing: -1px; }
+.history-head .kind { font-size: 14px; color: var(--fg-dim); }
+.history-head .hero-meta { margin: 0; }
+.history section { margin-bottom: 32px; }
+.history-connect { background: var(--bg-elevated); border-radius: var(--r-panel); padding: 20px; max-width: 560px; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+.history-connect p { margin: 0; color: var(--fg-dim); }
+.stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 32px; }
+.stat-tile { background: var(--bg-elevated); border-radius: var(--r-panel); padding: 16px; display: flex; flex-direction: column; gap: 4px; }
+.stat-tile b { font-size: 28px; font-weight: 800; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+.stat-tile span { color: var(--fg-dim); font-size: 13px; }
+.hlist { display: flex; flex-direction: column; }
+.hrow { display: grid; grid-template-columns: 24px 40px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 6px 8px; border-radius: var(--r-art); min-height: 52px; }
+.hrow:hover { background: var(--tint-hi); }
+.hrow.norank { grid-template-columns: 40px minmax(0, 1fr) auto; }
+.hrow-n { color: var(--fg-dim); font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; }
+.hrow-art { position: relative; width: 40px; height: 40px; padding: 0; flex: none; }
+.hrow-art img, .hrow-art .ph { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; background: var(--card-hover); display: block; }
+.hrow-art:disabled { cursor: default; }
+.hrow-play { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; background: rgba(0,0,0,.55); border-radius: 4px; opacity: 0; transition: opacity .12s; }
+.hrow.playable:hover .hrow-play { opacity: 1; }
+.hrow-text { min-width: 0; display: flex; flex-direction: column; }
+.hrow-title { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hrow.active .hrow-title { color: var(--accent); }
+.hrow-text small { color: var(--fg-dim); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hrow-count { color: var(--fg-dim); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 8px; }
+.hsrc { font-size: 11px; padding: 2px 8px; border-radius: 500px; background: var(--tint); color: var(--fg-dim); }
+.card-rank { position: absolute; left: 8px; top: 8px; background: rgba(0,0,0,.65); color: #fff; font-size: 12px; font-weight: 700; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; }
+.history .card-art { position: relative; }
+.history-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+.genre-bars { display: flex; flex-direction: column; gap: 8px; }
+.genre-bar { display: grid; grid-template-columns: 140px minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 14px; }
+.genre-bar span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.genre-bar i { display: block; height: 10px; border-radius: 4px; background: var(--accent); min-width: 4px; }
+.genre-bar b { color: var(--fg-dim); font-weight: 400; font-size: 13px; font-variant-numeric: tabular-nums; }
+.hbars { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; height: 120px; align-items: end; padding-bottom: 18px; position: relative; }
+.hbar { position: relative; height: 100%; display: flex; align-items: flex-end; }
+.hbar i { display: block; width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; opacity: .85; }
+.hbar:hover i { opacity: 1; }
+.hbar span { position: absolute; top: 100%; left: 0; margin-top: 4px; font-size: 11px; color: var(--fg-dim); white-space: nowrap; }

@@ -123,6 +123,7 @@ function networkOf(req) {
 // history is what feeds Explo's Weekly Exploration / Daily Jams.
 const lbTokens = new Map();   // uid -> { user, token } | null
 const lbSeen = new Map();     // clientId -> { itemId, startedAt, sent }
+const lbLast = new Map();     // uid -> { itemId, at }: the last listen submitted for the account
 async function lbTokenFor(self) {
   if (lbTokens.has(self.uid)) return lbTokens.get(self.uid);
   try {
@@ -150,6 +151,12 @@ async function maybeScrobble(self, np) {
   if (dur < 30) return;
   if (pos >= Math.min(240, dur / 2)) {
     st.sent = true;
+    // Per ACCOUNT, not per socket: a reconnect (new client id) or a handoff
+    // mid-song must not scrobble the same play twice. A replay counts again
+    // only once the song could actually have finished.
+    const last = lbLast.get(self.uid);
+    if (last && last.itemId === np.itemId && Date.now() - last.at < Math.max(60, dur * 0.9) * 1000) return;
+    lbLast.set(self.uid, { itemId: np.itemId, at: Date.now() });
     const lb = await lbTokenFor(self);
     if (lb) submitListen(lb, np).catch((e) => console.error('listenbrainz', e.message));
   }
@@ -499,6 +506,161 @@ async function popularTracks(artistId, name) {
   return v;
 }
 
+// --- listening history (stats.fm-style) ------------------------------------
+// ListenBrainz is the union of everything the account has played: the relay
+// scrobbles Conduit plays there, the backfill seeded Jellyfin's play history,
+// and LB's own Spotify connector imports Spotify listens. LB's stats endpoints
+// are computed on a slow schedule (204 for weeks on a new account), so the
+// relay mirrors the raw listens to /data and computes the numbers itself.
+// Each listen is matched to a library track once (Meili) for art and playback.
+const HISTORY_DIR = process.env.SESSIONS_FILE ? process.env.SESSIONS_FILE.replace(/[^/]+$/, '') : null;
+const histCache = new Map(); // uid -> store
+const histSyncing = new Map(); // uid -> Promise
+function histFile(uid) { return HISTORY_DIR ? `${HISTORY_DIR}history-${uid}.json` : null; }
+function loadHist(uid) {
+  if (histCache.has(uid)) return histCache.get(uid);
+  let st = { user: null, listens: [], match: {}, syncedAt: 0, complete: false };
+  const f = histFile(uid);
+  try { if (f && fs.existsSync(f)) st = { ...st, ...JSON.parse(fs.readFileSync(f, 'utf8')) }; } catch (e) { console.error('history load', e.message); }
+  histCache.set(uid, st);
+  return st;
+}
+function saveHist(uid) {
+  const f = histFile(uid); if (!f) return;
+  try { fs.writeFileSync(f, JSON.stringify(histCache.get(uid))); } catch (e) { console.error('history save', e.message); }
+}
+const lbGet = async (path, token) => {
+  const r = await fetch(`https://api.listenbrainz.org/1${path}`, { headers: token ? { Authorization: `Token ${token}` } : {}, signal: AbortSignal.timeout(15000) });
+  if (r.status === 429) { await new Promise((ok) => setTimeout(ok, 3000)); return lbGet(path, token); }
+  if (!r.ok) throw new Error(`listenbrainz ${r.status}`);
+  return r.json();
+};
+function slimListen(l) {
+  const m = l.track_metadata || {}, ai = m.additional_info || {};
+  const dur = ai.duration_ms ? Math.round(ai.duration_ms / 1000) : ai.duration ? Math.round(ai.duration) : null;
+  const src = /spotify/i.test(ai.music_service || ai.origin_url || '') || ai.spotify_id ? 'spotify' : (ai.submission_client || ai.media_player || '').toLowerCase().includes('conduit') ? 'conduit' : 'other';
+  return { ts: l.listened_at, artist: m.artist_name || '', track: m.track_name || '', album: m.release_name || '', dur, src };
+}
+const listenKey = (l) => `${norm((l.artist || '').split(/,|&| feat\.? | ft\.? /i)[0])}|${normTitle(l.track)}`;
+// Pull everything newer than what we have (or the whole history the first
+// time), then match the new keys against the library.
+async function syncHistory(uid, lb) {
+  if (histSyncing.has(uid)) return histSyncing.get(uid);
+  const job = (async () => {
+    const st = loadHist(uid);
+    if (lb.user !== st.user) { st.user = lb.user; st.listens = []; st.complete = false; }
+    const seen = new Set(st.listens.map((l) => `${l.ts}|${l.track}`));
+    const add = (rows) => { let n = 0; for (const raw of rows) { const l = slimListen(raw); const k = `${l.ts}|${l.track}`; if (!seen.has(k)) { seen.add(k); st.listens.push(l); n += 1; } } return n; };
+    if (!st.complete) {
+      // Backfill: walk back from now in pages of 1000 until LB has nothing older.
+      let maxTs = Math.floor(Date.now() / 1000) + 60;
+      for (let i = 0; i < 200; i += 1) {
+        const p = await lbGet(`/user/${encodeURIComponent(lb.user)}/listens?count=250&max_ts=${maxTs}`, lb.token);
+        const rows = p.payload?.listens || [];
+        add(rows);
+        if (rows.length < 250) break;
+        maxTs = Math.min(...rows.map((r) => r.listened_at));
+      }
+      st.complete = true;
+    } else {
+      for (let i = 0; i < 50; i += 1) {
+        const latest = st.listens.reduce((m, l) => Math.max(m, l.ts), 0);
+        const p = await lbGet(`/user/${encodeURIComponent(lb.user)}/listens?count=250&min_ts=${latest}`, lb.token);
+        const rows = p.payload?.listens || [];
+        const n = add(rows);
+        if (rows.length < 250 || n === 0) break;
+      }
+    }
+    st.listens.sort((a, b) => b.ts - a.ts);
+    // Match unseen keys to the library in batches of 60 Meili queries.
+    const keys = [...new Set(st.listens.map(listenKey))].filter((k) => !(k in st.match));
+    for (let i = 0; i < keys.length; i += 60) {
+      const batch = keys.slice(i, i + 60);
+      const byKey = new Map(); for (const l of st.listens) { const k = listenKey(l); if (batch.includes(k) && !byKey.has(k)) byKey.set(k, l); }
+      const qs = batch.map((k) => { const l = byKey.get(k); return { indexUid: 'tracks', q: `${l.track} ${(l.artist || '').split(/,|&/)[0]}`.slice(0, 200), limit: 5, attributesToRetrieve: ['id', 'name', 'artists', 'artistIds', 'albumId', 'album', 'durationTicks', 'genres'] }; });
+      try {
+        const r = await fetch(`${MEILI}/multi-search`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MEILI_KEY}` }, body: JSON.stringify({ queries: qs }), signal: AbortSignal.timeout(8000) });
+        const res = r.ok ? (await r.json()).results : [];
+        batch.forEach((k, j) => {
+          const l = byKey.get(k); const want = normTitle(l.track); const wa = norm((l.artist || '').split(/,|&| feat\.? | ft\.? /i)[0]);
+          const hit = (res[j]?.hits || []).find((h) => normTitle(h.name) === want && (h.artists || []).some((a) => norm(a) === wa))
+            || (res[j]?.hits || []).find((h) => normTitle(h.name) === want);
+          st.match[k] = hit ? { id: hit.id, albumId: hit.albumId || null, artistId: (hit.artistIds || [])[0] || null, dur: hit.durationTicks ? Math.round(hit.durationTicks / 1e7) : null, genres: [...new Set((hit.genres || []).flatMap(bucketsOf))] } : null;
+        });
+      } catch (e) { console.error('history match', e.message); break; }
+    }
+    st.syncedAt = Date.now();
+    saveHist(uid);
+    return st;
+  })().finally(() => histSyncing.delete(uid));
+  histSyncing.set(uid, job);
+  return job;
+}
+const RANGES = { '4w': 28 * 86400, '6m': 183 * 86400, '1y': 365 * 86400, all: Infinity };
+function historyStats(st, range, tzo = 0) {
+  // tzo = the client's getTimezoneOffset() (minutes west of UTC), so hours and
+  // days are the listener's, not the container's.
+  const local = (ts) => new Date((ts - tzo * 60) * 1000);
+  const now = Math.floor(Date.now() / 1000);
+  const span = RANGES[range] ?? RANGES.all;
+  const since = span === Infinity ? 0 : now - span;
+  const rows = st.listens.filter((l) => l.ts >= since);
+  const secs = (l) => l.dur || st.match[listenKey(l)]?.dur || 210;
+  const artists = new Map(), tracks = new Map(), albums = new Map(), genres = new Map();
+  const byHour = new Array(24).fill(0), byDow = new Array(7).fill(0);
+  const days = new Map();
+  let seconds = 0;
+  for (const l of rows) {
+    const s2 = secs(l); seconds += s2;
+    const k = listenKey(l), m = st.match[k] || null;
+    const an = (l.artist || '').split(/,|&| feat\.? | ft\.? /i)[0].trim() || l.artist || 'Unknown';
+    const ak = norm(an);
+    const a = artists.get(ak) || { name: an, count: 0, seconds: 0, artistId: m?.artistId || null }; a.count += 1; a.seconds += s2; if (!a.artistId && m?.artistId) a.artistId = m.artistId; artists.set(ak, a);
+    const t = tracks.get(k) || { name: l.track, artist: an, album: l.album, count: 0, seconds: 0, id: m?.id || null, albumId: m?.albumId || null, artistId: m?.artistId || null }; t.count += 1; t.seconds += s2; tracks.set(k, t);
+    if (l.album) { const alk = `${ak}|${norm(l.album)}`; const al = albums.get(alk) || { name: l.album, artist: an, count: 0, seconds: 0, albumId: m?.albumId || null }; al.count += 1; al.seconds += s2; if (!al.albumId && m?.albumId) al.albumId = m.albumId; albums.set(alk, al); }
+    for (const g of m?.genres || []) genres.set(g, (genres.get(g) || 0) + 1);
+    const d = local(l.ts);
+    byHour[d.getUTCHours()] += 1; byDow[d.getUTCDay()] += 1;
+    const dk = d.toISOString().slice(0, 10); days.set(dk, (days.get(dk) || 0) + 1);
+  }
+  const top = (map, n = 50) => [...map.values()].sort((x, y) => y.count - x.count || y.seconds - x.seconds).slice(0, n);
+  // Streams per day for the chart: the range's days (capped at 365), oldest first.
+  const nDays = span === Infinity ? Math.min(365, rows.length ? Math.ceil((now - rows[rows.length - 1].ts) / 86400) + 1 : 1) : Math.min(365, Math.ceil(span / 86400));
+  const perDay = [];
+  for (let i = nDays - 1; i >= 0; i -= 1) { const dk = local(now - i * 86400).toISOString().slice(0, 10); perDay.push({ day: dk, count: days.get(dk) || 0 }); }
+  const firstTs = st.listens.length ? st.listens[st.listens.length - 1].ts : null;
+  return {
+    range, since: since || firstTs, streams: rows.length, minutes: Math.round(seconds / 60),
+    uniqueTracks: tracks.size, uniqueArtists: artists.size, uniqueAlbums: albums.size,
+    topArtists: top(artists), topTracks: top(tracks), topAlbums: top(albums),
+    topGenres: [...genres.entries()].map(([id, count]) => ({ id, name: (BUCKETS.find((b) => b.id === id) || {}).name || id, count })).sort((x, y) => y.count - x.count).slice(0, 8),
+    byHour, byDow, perDay,
+    sources: rows.reduce((o, l) => { o[l.src] = (o[l.src] || 0) + 1; return o; }, {}),
+    total: st.listens.length, firstTs, syncedAt: st.syncedAt, user: st.user,
+  };
+}
+function historyRecent(st, before, limit = 60) {
+  const out = [];
+  for (const l of st.listens) {
+    if (before && l.ts >= before) continue;
+    const m = st.match[listenKey(l)] || null;
+    out.push({ ...l, id: m?.id || null, albumId: m?.albumId || null, artistId: m?.artistId || null });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+// GET /history?range= -> stats; GET /history?recent=1&before=<ts> -> a page of listens.
+async function history(self, url) {
+  const lb = await lbTokenFor(self);
+  if (!lb || !lb.user) return { connected: false };
+  const st = loadHist(self.uid);
+  const stale = Date.now() - (st.syncedAt || 0) > 3 * 60 * 1000;
+  if (!st.complete) await syncHistory(self.uid, lb); // first open waits for the backfill
+  else if (stale) syncHistory(self.uid, lb).catch((e) => console.error('history sync', e.message)); // later opens: serve now, refresh behind
+  if (url.searchParams.get('recent')) return { connected: true, listens: historyRecent(st, Number(url.searchParams.get('before')) || 0) };
+  return { connected: true, ...historyStats(st, url.searchParams.get('range') || '4w', Number(url.searchParams.get('tzo')) || 0) };
+}
+
 async function requestAlbum(albumId) {
   const r = await fetch(`${MUSIC_REQUESTS}/api/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ album_id: albumId }), signal: AbortSignal.timeout(20000) });
   const j = await r.json().catch(() => ({}));
@@ -512,14 +674,16 @@ const server = http.createServer(async (req, res) => {
   if (req.url === '/healthz') { res.writeHead(200); res.end('ok'); return; }
   const url = new URL(req.url, 'http://x');
   const path = url.pathname.replace(/^\/relay/, '');
-  if (path === '/discography' || path === '/radar' || path === '/request' || path === '/similar' || path === '/popular') {
+  if (path === '/discography' || path === '/radar' || path === '/request' || path === '/similar' || path === '/popular' || path === '/history') {
     const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, X-Emby-Token, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }
     try {
       const token = tokenOf(req);
-      if (!token || !(await whoIs(token))) { res.writeHead(401, cors); res.end('{"error":"unauthorized"}'); return; }
+      const who = token ? await whoIs(token) : null;
+      if (!who) { res.writeHead(401, cors); res.end('{"error":"unauthorized"}'); return; }
       let out;
-      if (path === '/discography') out = await discography(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '');
+      if (path === '/history') out = await history({ uid: who.id, token }, url);
+      else if (path === '/discography') out = await discography(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '');
       else if (path === '/radar') out = { releases: await releaseRadar() };
       else if (path === '/similar') out = { artists: await similarArtists(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '') };
       else if (path === '/popular') out = await popularTracks(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '');

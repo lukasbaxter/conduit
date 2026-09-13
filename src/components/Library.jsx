@@ -6,6 +6,7 @@ import { vibrantColor } from '../api/colors.js';
 import { QUALITIES, THEME_PRESETS, DEFAULT_THEME, themeEquals } from '../api/prefs.js';
 import { search as relaySearch, browse as relayBrowse, discography as relayDiscography, similar as relaySimilar, requestAlbum as relayRequest, radar as relayRadar } from '../api/search.js';
 import Home from './Home.jsx';
+import History from './History.jsx';
 import FittedTitle from './FittedTitle.jsx';
 import VirtualList from './VirtualList.jsx';
 
@@ -118,7 +119,7 @@ export default function Library({
   onLike, onAddTo, onNewPlaylist, onRemoveFromPlaylist, onReorder, onOpenPlaylist, onOpenLiked, likedCount,
   onOpenArtistById, onOpenAlbumById, onExclude, onDownload,
   seeAll, setSeeAll, onEditPlaylist, onDeletePlaylist, me, onView, onOpenProfile,
-  prefs, onUpdatePrefs, onUploadAvatar, avatarV, onFollowAlbum,
+  prefs, onUpdatePrefs, onUploadAvatar, avatarV, onFollowAlbum, onOpenSettings,
 }) {
   const [results, setResults] = useState(null);
   // Keyboard navigation in search: -1 = nothing, 0 = Top result, 1.. = songs.
@@ -473,6 +474,9 @@ export default function Library({
       );
     }
 
+    if (kind === 'History') {
+      return <History jf={jf} player={player} onOpenArtist={onOpenArtistById} onOpenAlbum={onOpenAlbumById} onOpenSettings={onOpenSettings} />;
+    }
     if (kind === 'Settings') {
       const theme = { ...DEFAULT_THEME, ...(prefs?.theme || {}) };
       const setColor = (k, v) => onUpdatePrefs({ theme: { ...theme, [k]: v } });

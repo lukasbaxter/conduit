@@ -485,6 +485,11 @@ export default function App() {
     } catch { setDetail((d) => (d && d.item?.Id === 'profile' ? { ...d, loading: false } : d)); }
   };
 
+  const openHistory = () => {
+    setView('home');
+    setDetail({ item: { Id: 'history', Name: 'Listening history', Type: 'History' }, tracks: [], kind: 'History', loading: false });
+  };
+
   const openLiked = async () => {
     const item = { Id: LIKED_ID, Name: 'Liked Songs', Type: 'Playlist' };
     // Navigate NOW with whatever we have; a 500-track fetch is not something to
@@ -667,6 +672,7 @@ export default function App() {
                 <button className="who" onClick={() => { setUserMenu(false); openProfile(); }}>{me?.Name || 'Signed in'}</button>
                 <div className="sub">{jf.baseUrl.replace(/^https?:\/\//, '')}</div>
                 <button onClick={() => { setUserMenu(false); openProfile(); }}>Profile</button>
+                <button onClick={() => { setUserMenu(false); openHistory(); }}>History</button>
                 <button onClick={() => { setUserMenu(false); openSettings(); }}>Settings</button>
                 <button onClick={signOut}>Log out</button>
               </div>
@@ -737,6 +743,7 @@ export default function App() {
           onDeletePlaylist={onDeletePlaylist}
           me={me}
           onOpenProfile={openProfile}
+          onOpenSettings={openSettings}
           prefs={prefs}
           onUpdatePrefs={updatePrefs}
           onUploadAvatar={onUploadAvatar}

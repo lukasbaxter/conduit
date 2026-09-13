@@ -4,6 +4,38 @@ Pick-up notes for the next session. Open: the HTTPS/DNS fix (still blocking the
 phone PWA), the rest of the Liked Songs audit (#2.2-2.5), and a few library
 leftovers listed at the bottom.
 
+## Shipped 2026-09-13 (later; deployed, relay redeployed)
+- Genre browse fixed: `bucketsOf(tag)` in relay/server.js files each of the
+  600 raw genre tags under ONE bucket by its HEAD word ("Emo Rap" is rap,
+  "Pop Punk" is punk, "Dance-Pop" is pop), two-word heads first ("trip hop",
+  "drum and bass"), regex rescues for foreign spellings, and years / track
+  numbers / one-letter fragments dropped. Tags with an indie/alternative
+  modifier ALSO file under Indie. The old per-bucket substring regexes
+  (`emo` -> Rock) are gone. Remaining unbucketed: ~1.1k tracks of junk tags.
+- Search: the "N ms" counter is hidden (kept in the DOM, `hidden`, because
+  test/search.test.mjs waits on `.search-took`).
+- Playlist "Recommended" (Spotify's bottom-of-playlist section): 10 songs from
+  instant mixes off 3 random members of the playlist, interleaved, minus what
+  is already in it; outlined Add pill (row disappears, `onAddTo`), Refresh
+  reseeds. Not on Liked Songs or Daily Mixes. `reco`/`recoGen` state in Library.jsx.
+- HISTORY tab (profile menu -> History; `src/components/History.jsx`, kind
+  'History'): stats.fm for the account. Relay `GET /history?range=4w|6m|1y|all&tzo=`
+  mirrors the account's ListenBrainz listens to `/data/history-<uid>.json`
+  (first open backfills everything in pages of 250 -- LB times out on 1000 --
+  ~90 s for 2k listens; later opens serve at once and refresh behind if older
+  than 3 min), matches each distinct artist|title to a library track through
+  Meili once (`match` map in the store: id/albumId/artistId/duration/genre
+  buckets) and computes streams, minutes, unique counts, top tracks / artists
+  / albums, top genres, listening clock, weekday, streams per day (client
+  timezone via `tzo`), and `sources` (conduit vs spotify -- LB's Spotify
+  connector imports count automatically). `?recent=1&before=<ts>` pages the
+  raw listens. Rows with a library match play (`jf.itemsByIds`). Users without
+  a LB token get a "connect in Settings" card. LB's own stats endpoints
+  return 204 on this account, which is why the relay computes them.
+- Scrobble dedupe: `lbLast` per ACCOUNT -- the same item is not submitted
+  twice within 90% of its length (a socket reconnect or handoff used to
+  double-scrobble: "the fatalist" x2 62 s apart).
+
 ## Shipped 2026-09-13 (deployed to :8748, relay redeployed, probed headless)
 - Search: no "Artist" subtitle under artist cards.
 - Row artist links are inline SPANS (`ArtistLinks` in TrackRow.jsx), not

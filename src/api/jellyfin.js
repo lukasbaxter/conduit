@@ -400,6 +400,15 @@ export class Jellyfin {
   }
 
   // Fetch a single item (album, artist, track) by id.
+  // Several items in one request (history rows -> playable tracks).
+  async itemsByIds(ids) {
+    if (!ids.length) return [];
+    const q = new URLSearchParams({ Ids: ids.join(','), Fields: 'ParentId,ArtistItems,AlbumArtists,UserData', userId: this.userId });
+    const data = await this._fetch(`/Items?${q}`);
+    const by = new Map((data.Items || []).map((t) => [t.Id, t]));
+    return ids.map((id) => by.get(id)).filter(Boolean);
+  }
+
   itemById(id) {
     return this._cached(`item:${id}`, () => this._itemById(id));
   }
