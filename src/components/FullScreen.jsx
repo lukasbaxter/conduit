@@ -3,6 +3,8 @@ import { Lyrics } from './RightPanel.jsx';
 import Visualizer, { EQ_STYLES, GRADIENTS, DEFAULT_VIZ, loadVizSettings } from './Visualizer.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import { ArtistLinks, PlayGlyph, PauseGlyph, ShuffleGlyph } from './TrackRow.jsx';
+import { vibrantColor } from '../api/colors.js';
+import { ctxItemId } from '../api/context.js';
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
@@ -10,7 +12,7 @@ const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(
  * Spotify's full-screen player: blurred cover behind, tabs up top (Album /
  * Visualizer / Lyrics), the track and transport along the bottom.
  */
-export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, prefs, onUpdatePrefs }) {
+export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, prefs, onUpdatePrefs, onPanel }) {
   const [tab, setTab] = useState(() => localStorage.getItem('conduit.fsTab') || 'album');
   // Visualizer settings (style, colours) behind the tab's ⋯ menu. They live
   // in the account's prefs, so a change here shows up on every signed-in
@@ -26,6 +28,21 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
   const { nowPlaying, playing, position, duration, shuffle, repeat } = player;
   const art = nowPlaying?.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: 1000 }) : nowPlaying?.artUrl || null;
   useEffect(() => { try { localStorage.setItem('conduit.fsTab', tab); } catch {} }, [tab]);
+  // Phone: Spotify's now-playing is a gradient of the cover's colour (no
+  // blur) with "PLAYING FROM PLAYLIST / name" up top. Both read here; the
+  // desktop CSS ignores them.
+  const [np, setNp] = useState(null);
+  useEffect(() => { let alive = true; if (!art) { setNp(null); return undefined; } vibrantColor(art).then((rgb) => { if (alive) setNp(rgb ? `rgb(${rgb.join(',')})` : null); }); return () => { alive = false; }; }, [art]);
+  const [from, setFrom] = useState(null); // { kind, name }
+  useEffect(() => {
+    const ctx = player.contextId; let alive = true;
+    if (!ctx) { setFrom(null); return undefined; }
+    if (ctx === 'liked') { setFrom({ kind: 'PLAYING FROM LIKED SONGS', name: 'Liked Songs' }); return undefined; }
+    if (String(ctx).startsWith('mix:')) { setFrom({ kind: 'PLAYING FROM DAILY MIX', name: '' }); return undefined; }
+    if (String(ctx).startsWith('browse:')) { setFrom({ kind: 'PLAYING FROM GENRE', name: '' }); return undefined; }
+    jf.itemById(ctxItemId(ctx)).then((it) => { if (!alive || !it) return; const kind = it.Type === 'MusicArtist' ? 'ARTIST' : it.Type === 'MusicAlbum' ? 'ALBUM' : 'PLAYLIST'; setFrom({ kind: `PLAYING FROM ${kind}`, name: it.Name }); }).catch(() => {});
+    return () => { alive = false; };
+  }, [player.contextId, jf]);
   const vizEl = <Visualizer player={player} jf={jf} active={tab === 'viz'} settings={viz} />;
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -34,10 +51,16 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
   }, [onClose]);
 
   return (
-    <div className="fs">
+    <div className="fs" style={np ? { '--np': np } : undefined}>
       {art && tab !== 'viz' && <div className="fs-bg" style={{ backgroundImage: `url("${art}")` }} />}
       <div className="fs-top">
-        <div className="fs-from">{nowPlaying?.device?.name ? `Playing on ${nowPlaying.device.name}` : ''}</div>
+        <button className="fs-chevron" onClick={onClose} title="Close" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2.793 8.043a1 1 0 0 1 1.414 0L12 15.836l7.793-7.793a1 1 0 1 1 1.414 1.414L12 18.664 2.793 9.457a1 1 0 0 1 0-1.414z" /></svg>
+        </button>
+        <div className="fs-from">
+          <span className="fs-from-desktop">{nowPlaying?.device?.name ? `Playing on ${nowPlaying.device.name}` : ''}</span>
+          {from && <span className="fs-from-phone"><small>{from.kind}</small><b>{from.name}</b></span>}
+        </div>
         <div className="fs-tabs">
           {[['album', 'Album'], ['lyrics', 'Lyrics'], ['viz', 'Visualizer']].map(([k, label]) => (
             <span key={k} className={`fs-tab ${tab === k ? 'on' : ''}`}>
@@ -91,6 +114,16 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
           <button className="fs-play" onClick={player.toggle} title={playing ? 'Pause' : 'Play'}>{playing ? <PauseGlyph size={26} /> : <PlayGlyph size={26} />}</button>
           <button onClick={player.next} title="Next"><svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor"><path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z" /></svg></button>
           <button className={`ctl-mode ${repeat && repeat !== 'off' ? 'on' : ''}`} onClick={player.cycleRepeat} title="Repeat"><svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor"><path d="M0 4.75A3.75 3.75 0 0 1 3.75 1h8.5A3.75 3.75 0 0 1 16 4.75v5a3.75 3.75 0 0 1-3.75 3.75H9.81l1.018 1.018a.75.75 0 1 1-1.06 1.06L6.939 12.75l2.829-2.828a.75.75 0 1 1 1.06 1.06L9.811 12h2.439a2.25 2.25 0 0 0 2.25-2.25v-5a2.25 2.25 0 0 0-2.25-2.25h-8.5A2.25 2.25 0 0 0 1.5 4.75v5A2.25 2.25 0 0 0 3.75 12H5v1.5H3.75A3.75 3.75 0 0 1 0 9.75v-5z" /></svg></button>
+        </div>
+        {/* Phone-only bottom row (Spotify: devices bottom-left, lyrics / queue bottom-right). */}
+        <div className="fs-phone-row">
+          <button onClick={() => { onClose(); onPanel?.('queue'); }} title="Queue" aria-label="Queue">
+            <svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor"><path d="M15 15H1v-1.5h14V15zm0-4.5H1V9h14v1.5zm-14-7A2.5 2.5 0 0 1 3.5 1h9a2.5 2.5 0 0 1 0 5h-9A2.5 2.5 0 0 1 1 3.5zm2.5-1a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2h-9z" /></svg>
+          </button>
+          <span />
+          <button className={tab === 'lyrics' ? 'on' : ''} onClick={() => setTab(tab === 'lyrics' ? 'album' : 'lyrics')} title="Lyrics" aria-label="Lyrics">
+            <svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor"><path d="M13.426 2.574a2.831 2.831 0 0 0-4.797 1.55l3.247 3.247a2.831 2.831 0 0 0 1.55-4.797zM10.5 8.118l-2.619-2.62A63303.13 63303.13 0 0 0 4.74 9.075L1 15l5.925-3.74 3.575-3.142z" /></svg>
+          </button>
         </div>
       </div>
     </div>

@@ -828,6 +828,7 @@ button:disabled { cursor: default; }
 .fs-tab.on:has(.fs-kebab) > button:first-child { padding-right: 8px; }
 .fs-kebab { width: 26px; height: 36px; display: grid; place-items: center; color: #ffffffb3; border-radius: 0 500px 500px 0; padding-right: 8px; }
 .fs-kebab:hover { color: #fff; }
+.fs-chevron, .fs-from-phone, .fs-phone-row, .mobile-back, .mobile-title { display: none; }
 .fs-close { justify-self: end; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #ffffffb3; background: rgba(0,0,0,.35); }
 .fs-close:hover { color: #fff; }
 .fs-stage { display: grid; place-items: center; min-height: 0; padding: 0 32px; }
@@ -945,78 +946,160 @@ button:disabled { cursor: default; }
 .hbar span { position: absolute; top: 100%; left: 0; margin-top: 4px; font-size: 11px; color: var(--fg-dim); white-space: nowrap; }
 
 /* ================= phone layout (<= 760px) =================
-   No sidebar: bottom tabs Home / Search / Library (the Library tab shows the
-   sidebar's list as a page), one column of content, a mini player that opens
-   the now-playing view on tap, queue/lyrics as full-screen sheets. */
+   Spotify iOS, from measured App Store / newsroom shots (see HANDOFF.md
+   "phone pass"): flat #121212 pages, 32pt avatar + 32pt chips up top (active
+   chip green with black text), 56pt shortcut tiles (#1e1e1e, art flush left,
+   13pt bold), 158pt shelf cards with square art, a 44pt WHITE search bar
+   (radius 4, black magnifier), Library rows with 64pt art on an 83pt pitch,
+   the mini player as a 56pt card tinted with the cover colour (8pt margins,
+   radius 6, 40pt art, devices + play at right, 2pt progress line along its
+   bottom), a 3-tab bar with 10pt labels under a transparent -> #121212
+   gradient, and detail pages with 250pt centred art, a 40pt green play at
+   the right of the action row, 48pt track art on a 64pt pitch, no numbers. */
 .tabbar { display: none; }
 @media (max-width: 760px) {
   body { min-width: 0; }
-  .app { grid-template-rows: 48px minmax(0, 1fr) auto auto; gap: 0; padding: 0; }
-  .navbar { height: 48px; padding: 0 8px 0 4px; }
-  .brand { display: none; }
+  .app { grid-template-rows: 48px minmax(0, 1fr) auto auto; gap: 0; padding: 0; background: var(--bg-base); }
+  .app.mobile-detail { grid-template-rows: minmax(0, 1fr) auto auto; }
+  .app.mobile-detail .navbar { display: none; }
+  .navbar { height: 48px; padding: 0 16px; gap: 8px; background: var(--bg-base); }
+  .brand, .navarrows { display: none; }
+  .navbar-right { margin-left: 0; order: -1; }
+  .avatar { width: 32px; height: 32px; font-size: 13px; }
+  .mobile-title { display: block; font-size: 24px; font-weight: 700; letter-spacing: -.3px; }
+  .avatarmenu { left: 0; right: auto; }
+  .mobile-back { display: grid; position: fixed; top: calc(12px + env(safe-area-inset-top)); left: 16px; z-index: 40; width: 32px; height: 32px; border-radius: 50%; background: rgba(0,0,0,.5); color: #fff; place-items: center; backdrop-filter: blur(6px); }
   .shell { grid-template-columns: minmax(0, 1fr) !important; }
   .shell .sidebar, .shell .rail-resizer, .shell .panel-spacer { display: none; }
   .shell.show-lib .sidebar { display: grid; }
   .shell.show-lib .content { display: none; }
   .sidebar, .content, .rightpanel { border-radius: 0; }
-  /* Queue / lyrics: a sheet over everything, closed with its own X. */
   .rightpanel { position: fixed; inset: 0; z-index: 150; }
   .shell.with-panel .content { display: none; }
 
-  /* Bottom tabs */
-  .tabbar {
-    display: grid; grid-template-columns: repeat(3, 1fr); background: #000;
-    padding: 6px 0 calc(6px + env(safe-area-inset-bottom)); order: 3;
-  }
-  .tabbar button { display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--fg-dim); font-size: 11px; font-weight: 500; padding: 4px 0; }
-  .tabbar button.on { color: var(--fg); }
+  /* Bottom tabs: 49pt + safe area, 24pt glyphs, 10pt labels, white / #a7a7a7. */
+  .tabbar { display: grid; grid-template-columns: repeat(3, 1fr); background: linear-gradient(transparent, var(--bg-base) 22%); padding: 6px 0 calc(4px + env(safe-area-inset-bottom)); order: 3; height: calc(49px + env(safe-area-inset-bottom)); align-items: start; }
+  .tabbar button { display: flex; flex-direction: column; align-items: center; gap: 2px; color: #a7a7a7; font-size: 10px; font-weight: 500; padding: 2px 0; }
+  .tabbar button svg { width: 24px; height: 24px; }
+  .tabbar button.on { color: #fff; }
 
-  /* Mini player: art, text, heart, play. Thin progress line along the bottom. */
-  .player { min-width: 0; padding: 0 8px; order: 2; }
-  .player-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; height: 60px; background: var(--card-hover); border-radius: 8px; padding: 0 8px; margin: 0 0 4px; position: relative; overflow: hidden; }
+  /* Mini player card. */
+  .player { min-width: 0; padding: 0 8px; order: 2; background: transparent; }
+  .player-row { grid-template-columns: minmax(0, 1fr) auto auto; gap: 0; height: 56px; background: color-mix(in srgb, var(--mini, #2a2a2a) 55%, #000); border-radius: 6px; padding: 0 16px 0 8px; margin: 0 0 8px; position: relative; overflow: hidden; }
   .player-now { min-width: 0; gap: 10px; }
-  .player-art { width: 42px; height: 42px; }
-  .player-title { font-size: 14px; font-weight: 600; }
-  .player-controls { width: auto; max-width: none; gap: 0; }
-  .player-buttons { gap: 4px; }
+  .player-art { width: 40px; height: 40px; border-radius: 4px; }
+  .player-title { font-size: 13px; font-weight: 600; }
+  .player-artist, .player-artist .linkish { font-size: 13px; color: rgba(255,255,255,.7); }
+  .player-now .trackrow-like { display: none; }
+  .player-right { display: flex; min-width: 0; padding: 0; gap: 0; order: 2; margin-right: 2px; }
+  .player-right > *:not(.devicepicker) { display: none; }
+  .player-right .devicebtn { color: #fff; }
+  .player-right .devicebtn.casting { color: var(--accent); }
+  .player-controls { width: auto; max-width: none; gap: 0; order: 3; }
+  .player-buttons { gap: 0; }
   .player-buttons .ctl-mode, .player-buttons button[title="Previous"], .player-buttons button[title="Next"] { display: none; }
-  .player-buttons .play { background: none; color: var(--fg); width: 40px; height: 40px; }
+  .player-buttons .play { background: none; color: #fff; width: 32px; height: 32px; }
   .player-buttons .play svg { width: 22px; height: 22px; }
   .player-seek { position: absolute; left: 8px; right: 8px; bottom: 0; width: auto; height: 2px; pointer-events: none; }
   .player-seek .t { display: none; }
-  .player-seek input[type="range"] { height: 2px; border-radius: 0; background: linear-gradient(to right, var(--fg) 0%, var(--fg) var(--pct,0%), #ffffff33 var(--pct,0%), #ffffff33 100%); }
+  .player-seek input[type="range"] { height: 2px; border-radius: 0; background: linear-gradient(to right, #fff 0%, #fff var(--pct,0%), rgba(255,255,255,.2) var(--pct,0%), rgba(255,255,255,.2) 100%); }
   .player-seek input[type="range"]::-webkit-slider-thumb { display: none; }
-  .player-right { display: none; }
-  .playing-elsewhere { margin: 0 -8px 4px; justify-content: center; }
+  .playing-elsewhere { margin: 0 -8px 8px; justify-content: center; }
 
-  /* Content */
+  /* Home: chips (active = green/black), 56pt shortcut tiles, 158pt cards. */
   .pad { padding: 8px 16px 24px; }
   .contentbar { padding: 8px 16px; }
-  .hero { flex-direction: column; align-items: flex-start; gap: 16px; padding: 16px; }
-  .hero .hero-cover img, .hero > img, .hero .liked-art { width: 160px; height: 160px; align-self: center; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  .pill { min-block-size: 32px; padding: 0 16px; font-size: 13px; background: var(--bg-elevated-hi); }
+  .pill.on { background: var(--accent); color: #000; }
+  .shortcuts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .shortcut { height: 56px; border-radius: 4px; background: #1e1e1e; }
+  .shortcut-art { width: 56px; height: 56px; border-radius: 4px 0 0 4px; }
+  .shortcut-title { font-size: 13px; padding: 0 8px 0 12px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.25; }
+  .shortcut .shortcut-play { display: none; }
+  .shelf-head h2, section > .shelf-head h2 { font-size: 24px; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .shelf { grid-auto-columns: 158px; gap: 16px; min-height: 0; scroll-snap-type: none; padding: 0 0 6px; }
+  .card { padding: 0; }
+  .card-art img, .card-art .ph { border-radius: 1px; box-shadow: none; }
+  .card.round .card-art img { border-radius: 50%; }
+  .card-title { font-size: 14px; font-weight: 700; margin-top: 4px; }
+  .card-sub { font-size: 13px; }
+  .card .card-play { display: none; }
+
+  /* Search: white 44pt bar, radius 4, black magnifier; Browse tiles ~100pt. */
+  .search { height: 44px; border-radius: 4px; background: #fff; color: #000; border: 0; padding-left: 48px; font-size: 16px; font-weight: 500;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M10.533 1.279c-5.18 0-9.407 4.14-9.407 9.279s4.226 9.279 9.407 9.279c2.234 0 4.29-.77 5.907-2.058l4.353 4.353a1 1 0 1 0 1.414-1.414l-4.344-4.344a9.157 9.157 0 0 0 2.077-5.816c0-5.14-4.226-9.28-9.407-9.28zm-7.407 9.279c0-4.006 3.302-7.28 7.407-7.28s7.407 3.274 7.407 7.28-3.302 7.279-7.407 7.279-7.407-3.273-7.407-7.28z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-size: 24px; background-position: 12px center; }
+  .search::placeholder { color: #121212; opacity: .85; }
+  .search:focus { border: 0; outline: none; }
+  .searchgrid { grid-template-columns: 1fr; }
+  .topresult h3 { font-size: 24px; }
+  .tile { aspect-ratio: auto; height: 100px; border-radius: 4px; padding: 12px; }
+  .tile span { font-size: 14px; }
+
+  /* Library page (the sidebar shown full width): 64pt art, 83pt pitch. */
+  .shell.show-lib .sidebar .nav { display: none; }
+  .libhead { display: none; }
+  .liblist { padding: 0 16px; }
+  .libitem { padding: 8px 0; gap: 16px; border-radius: 0; }
+  .libitem img, .libitem .ph, .libitem .liked-art { width: 64px; height: 64px; border-radius: 3px; }
+  .libitem-name { font-size: 16px; font-weight: 400; }
+  .libitem-sub { font-size: 13px; }
+
+  /* Detail pages: 250pt centred art, 24pt title, action row with a 40pt green play at the right. */
+  .hero { flex-direction: column; align-items: flex-start; gap: 12px; padding: calc(56px + env(safe-area-inset-top)) 16px 8px; }
+  .hero .hero-cover img, .hero > img, .hero .liked-art { width: 250px; height: 250px; align-self: center; border-radius: 4px; box-shadow: 0 16px 40px rgba(0,0,0,.5); }
   .hero .hero-cover, .hero .liked-art { align-self: center; }
-  .hero.artist .hero-cover, .hero.artist .hero-cover img { width: 140px; height: 140px; }
-  .hero h1 { font-size: 32px !important; letter-spacing: -1px; margin: 4px 0 8px; }
-  .hero.artist.with-banner { min-height: 260px; }
-  .actions { padding: 12px 16px; gap: 16px; }
-  /* Rows: art (when there is one), title/artist, dots. Hidden cells do not
-     take a column, so the template is just the visible ones. */
-  .trackrow { grid-template-columns: auto minmax(0, 1fr) 32px; gap: 0 12px; padding: 6px 8px; }
+  .hero h1 { font-size: 24px !important; letter-spacing: -.3px; margin: 8px 0 4px; }
+  .hero .kind { display: none; }
+  .hero p, .hero .hero-meta { font-size: 13px; }
+  .hero.artist { padding: 0; min-height: 300px; justify-content: flex-end; }
+  .hero.artist .hero-cover { display: none; }
+  .hero.artist > div { padding: 0 16px 12px; }
+  .hero.artist h1 { font-size: 40px !important; letter-spacing: -1px; }
+  .hero.artist.with-banner { min-height: 300px; background: linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(18,18,18,.95) 100%), var(--banner) center 25% / cover no-repeat; }
+  .actions { padding: 8px 16px 12px; gap: 12px; }
+  .actions .bigplay { order: 9; margin-left: auto; width: 40px; height: 40px; }
+  .actions .bigplay svg { width: 18px; height: 18px; }
+  .actions .iconbtn { width: 32px; height: 32px; }
+  .actions .btn-secondary { min-block-size: 32px; padding: 0 12px; font-size: 13px; }
+  .trackrow { grid-template-columns: auto minmax(0, 1fr) 32px; gap: 0 12px; padding: 8px 16px; min-height: 64px; }
   .trackrow:not(:has(.trackrow-art)) { grid-template-columns: minmax(0, 1fr) 32px; }
+  .trackrow-art { width: 48px; height: 48px; border-radius: 4px; }
+  .trackrow-name span { font-size: 16px; }
+  .trackrow-name small { font-size: 13px; color: #a7a7a7; }
   .trackrow-n, .trackrow-album, .trackrow-like, .trackrow-dur { display: none; }
   .trackrow-more { opacity: 1; }
   .trackhead { display: none !important; }
-  .shortcut-title { padding-right: 8px; }
-  .shortcut .shortcut-play { display: none; }
-  .shelf { scroll-snap-type: none; }
   .reco-add { margin-right: 8px; }
-  .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
-  .shelf { grid-auto-columns: 140px; min-height: 0; }
-  .searchgrid { grid-template-columns: 1fr; }
-  .topresult h3 { font-size: 24px; }
-  .fs-top { padding: 8px 12px; }
-  .fs-tabs { gap: 8px; }
-  .fs-art { max-width: min(78vw, 60vh); }
+
+  /* Now playing: gradient of the cover colour, chevron / "PLAYING FROM" / dots, 327pt art radius 8, 64pt play. */
+  .fs { background: linear-gradient(180deg, var(--np, #333) 0%, color-mix(in srgb, var(--np, #333) 70%, #000) 60%, #121212 100%); }
+  .fs-bg { display: none; }
+  .fs-top { grid-template-columns: auto 1fr auto; padding: calc(8px + env(safe-area-inset-top)) 24px 0; height: auto; gap: 12px; align-items: center; }
+  .fs-chevron { display: grid; place-items: center; width: 32px; height: 32px; color: #fff; margin-left: -6px; }
+  .fs-from { text-align: center; min-width: 0; }
+  .fs-from-desktop, .fs-tabs { display: none; }
+  .fs-from-phone { display: flex; flex-direction: column; align-items: center; line-height: 1.2; min-width: 0; }
+  .fs-from-phone small { font-size: 11px; letter-spacing: .08em; color: rgba(255,255,255,.7); text-transform: uppercase; }
+  .fs-from-phone b { font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw; }
+  .fs-close { width: 32px; height: 32px; background: none; margin-right: -6px; }
+  .fs-stage { padding: 16px 24px; }
+  .fs-art { max-width: 100%; width: 100%; border-radius: 8px; box-shadow: 0 16px 40px rgba(0,0,0,.45); }
+  .fs-lyrics { width: 100%; }
+  .fs-bottom { grid-template-columns: 1fr; gap: 12px; padding: 8px 24px calc(24px + env(safe-area-inset-bottom)); }
+  .fs-meta { gap: 12px; }
+  .fs-meta .fs-thumb { display: none; }
+  .fs-title { font-size: 24px; font-weight: 700; }
+  .fs-artist, .fs-artist .linkish { font-size: 16px; color: #b3b3b3; }
+  .fs-like { margin-left: auto; }
+  .fs-seek { grid-column: 1; grid-row: auto; font-size: 11px; }
+  .fs-controls { grid-column: 1; grid-row: auto; justify-content: space-between; gap: 0; padding: 4px 8px; }
+  .fs-controls .fs-play { width: 64px; height: 64px; }
+  .fs-controls .fs-play svg { width: 28px; height: 28px; }
+  .fs-phone-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; padding: 4px 0 0; color: #b3b3b3; }
+  .fs-phone-row button { color: #b3b3b3; padding: 8px; }
+  .fs-phone-row button.on { color: var(--accent); }
 }
 
 /* ================= History = stats.fm's user page =================

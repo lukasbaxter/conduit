@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import DevicePicker from './DevicePicker.jsx';
 import { Heart, ShuffleGlyph, ArtistLinks } from './TrackRow.jsx';
+import { vibrantColor } from '../api/colors.js';
 
 function fmt(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -65,6 +66,15 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
   // release. Committing on every change event fired a seek per pixel of drag,
   // which thrashed the speaker and made scrubbing unusable.
   const [scrub, setScrub] = useState(null);
+  // Spotify's mini player is a card tinted with the cover's colour; the desktop
+  // footer ignores this (black), the phone CSS reads --mini.
+  const [mini, setMini] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    if (!art) { setMini(null); return undefined; }
+    vibrantColor(art).then((rgb) => { if (alive) setMini(rgb ? `rgb(${rgb.join(',')})` : null); });
+    return () => { alive = false; };
+  }, [art]);
   const shown = scrub != null ? scrub : position;
   const pct = duration > 0 ? (shown / duration) * 100 : 0;
 
@@ -84,6 +94,7 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
 
       <div
         className="player-row"
+        style={mini ? { '--mini': mini } : undefined}
         // Phone: the bar is one big button into the now-playing view; its own
         // controls (play, heart, links) still win.
         onClick={(e) => { if (e.target.closest('button, input, a, [role=button]')) return; if (window.matchMedia('(max-width: 760px)').matches) onFullScreen?.(); }}

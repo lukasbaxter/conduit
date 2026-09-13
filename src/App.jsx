@@ -668,10 +668,20 @@ export default function App() {
   if (booting) return <div className="boot">Starting Conduit...</div>;
   if (!jf) return <Login onConnected={setJf} />;
 
+  // Phone chrome: root tabs show avatar + page title (Spotify's Home/Search/
+  // Library headers); detail pages hide the bar and float a back chevron.
+  const mobileDetail = isMobile && !mobileLib && (detail || seeAll);
+  const mobileTitle = mobileLib ? 'Your Library' : view === 'search' ? 'Search' : '';
   return (
-    <div className="app">
+    <div className={`app ${isMobile ? 'mobile' : ''} ${mobileDetail ? 'mobile-detail' : ''}`}>
+      {mobileDetail && (
+        <button className="mobile-back" onClick={goBack} title="Go back" aria-label="Go back">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.957 2.793a1 1 0 0 1 0 1.414L8.164 12l7.793 7.793a1 1 0 1 1-1.414 1.414L5.336 12l9.207-9.207a1 1 0 0 1 1.414 0z" /></svg>
+        </button>
+      )}
       <header className="navbar">
         <div className="brand">Conduit</div>
+        {isMobile && <div className="mobile-title">{mobileTitle}</div>}
         <div className="navarrows">
           <button className="navarrow" onClick={goBack} disabled={!canBack} title="Go back">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M11.03.47a.75.75 0 0 1 0 1.06L4.56 8l6.47 6.47a.75.75 0 1 1-1.06 1.06L2.44 8 9.97.47a.75.75 0 0 1 1.06 0z" /></svg>
@@ -836,7 +846,7 @@ pos=${Math.round(player.position)} playing=${player.playing} vol=${player.volume
         onFullScreen={openFullScreen}
       />
       <PlayingElsewhereBar player={player} />
-      {fullScreen && <FullScreen player={player} jf={jf} onClose={closeFullScreen} onOpenArtist={openArtistById} onLike={onLike} prefs={prefs} onUpdatePrefs={updatePrefs} />}
+      {fullScreen && <FullScreen player={player} jf={jf} onClose={closeFullScreen} onOpenArtist={openArtistById} onLike={onLike} prefs={prefs} onUpdatePrefs={updatePrefs} onPanel={setPanel} />}
     </div>
   );
 }
