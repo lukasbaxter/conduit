@@ -82,7 +82,12 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
         </div>
       )}
 
-      <div className="player-row">
+      <div
+        className="player-row"
+        // Phone: the bar is one big button into the now-playing view; its own
+        // controls (play, heart, links) still win.
+        onClick={(e) => { if (e.target.closest('button, input, a, [role=button]')) return; if (window.matchMedia('(max-width: 760px)').matches) onFullScreen?.(); }}
+      >
         <div className="player-now">
           {art ? (
             <img

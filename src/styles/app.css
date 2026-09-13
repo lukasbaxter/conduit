@@ -930,3 +930,81 @@ button:disabled { cursor: default; }
 .hbar i { display: block; width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; opacity: .85; }
 .hbar:hover i { opacity: 1; }
 .hbar span { position: absolute; top: 100%; left: 0; margin-top: 4px; font-size: 11px; color: var(--fg-dim); white-space: nowrap; }
+
+/* ================= phone layout (<= 760px) =================
+   No sidebar: bottom tabs Home / Search / Library (the Library tab shows the
+   sidebar's list as a page), one column of content, a mini player that opens
+   the now-playing view on tap, queue/lyrics as full-screen sheets. */
+.tabbar { display: none; }
+@media (max-width: 760px) {
+  body { min-width: 0; }
+  .app { grid-template-rows: 48px minmax(0, 1fr) auto auto; gap: 0; padding: 0; }
+  .navbar { height: 48px; padding: 0 8px 0 4px; }
+  .brand { display: none; }
+  .shell { grid-template-columns: minmax(0, 1fr) !important; }
+  .shell .sidebar, .shell .rail-resizer, .shell .panel-spacer { display: none; }
+  .shell.show-lib .sidebar { display: grid; }
+  .shell.show-lib .content { display: none; }
+  .sidebar, .content, .rightpanel { border-radius: 0; }
+  /* Queue / lyrics: a sheet over everything, closed with its own X. */
+  .rightpanel { position: fixed; inset: 0; z-index: 150; }
+  .shell.with-panel .content { display: none; }
+
+  /* Bottom tabs */
+  .tabbar {
+    display: grid; grid-template-columns: repeat(3, 1fr); background: #000;
+    padding: 6px 0 calc(6px + env(safe-area-inset-bottom)); order: 3;
+  }
+  .tabbar button { display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--fg-dim); font-size: 11px; font-weight: 500; padding: 4px 0; }
+  .tabbar button.on { color: var(--fg); }
+
+  /* Mini player: art, text, heart, play. Thin progress line along the bottom. */
+  .player { min-width: 0; padding: 0 8px; order: 2; }
+  .player-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; height: 60px; background: var(--card-hover); border-radius: 8px; padding: 0 8px; margin: 0 0 4px; position: relative; overflow: hidden; }
+  .player-now { min-width: 0; gap: 10px; }
+  .player-art { width: 42px; height: 42px; }
+  .player-title { font-size: 14px; font-weight: 600; }
+  .player-controls { width: auto; max-width: none; gap: 0; }
+  .player-buttons { gap: 4px; }
+  .player-buttons .ctl-mode, .player-buttons button[title="Previous"], .player-buttons button[title="Next"] { display: none; }
+  .player-buttons .play { background: none; color: var(--fg); width: 40px; height: 40px; }
+  .player-buttons .play svg { width: 22px; height: 22px; }
+  .player-seek { position: absolute; left: 8px; right: 8px; bottom: 0; width: auto; height: 2px; pointer-events: none; }
+  .player-seek .t { display: none; }
+  .player-seek input[type="range"] { height: 2px; border-radius: 0; background: linear-gradient(to right, var(--fg) 0%, var(--fg) var(--pct,0%), #ffffff33 var(--pct,0%), #ffffff33 100%); }
+  .player-seek input[type="range"]::-webkit-slider-thumb { display: none; }
+  .player-right { display: none; }
+  .playing-elsewhere { margin: 0 -8px 4px; justify-content: center; }
+
+  /* Content */
+  .pad { padding: 8px 16px 24px; }
+  .contentbar { padding: 8px 16px; }
+  .hero { flex-direction: column; align-items: flex-start; gap: 16px; padding: 16px; }
+  .hero .hero-cover img, .hero > img, .hero .liked-art { width: 160px; height: 160px; align-self: center; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  .hero .hero-cover, .hero .liked-art { align-self: center; }
+  .hero.artist .hero-cover, .hero.artist .hero-cover img { width: 140px; height: 140px; }
+  .hero h1 { font-size: 32px !important; letter-spacing: -1px; margin: 4px 0 8px; }
+  .hero.artist.with-banner { min-height: 260px; }
+  .actions { padding: 12px 16px; gap: 16px; }
+  /* Rows: art (when there is one), title/artist, dots. Hidden cells do not
+     take a column, so the template is just the visible ones. */
+  .trackrow { grid-template-columns: auto minmax(0, 1fr) 32px; gap: 0 12px; padding: 6px 8px; }
+  .trackrow:not(:has(.trackrow-art)) { grid-template-columns: minmax(0, 1fr) 32px; }
+  .trackrow-n, .trackrow-album, .trackrow-like, .trackrow-dur { display: none; }
+  .trackrow-more { opacity: 1; }
+  .trackhead { display: none !important; }
+  .shortcut-title { padding-right: 8px; }
+  .shortcut .shortcut-play { display: none; }
+  .shelf { scroll-snap-type: none; }
+  .reco-add { margin-right: 8px; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .shelf { grid-auto-columns: 140px; min-height: 0; }
+  .searchgrid { grid-template-columns: 1fr; }
+  .topresult h3 { font-size: 24px; }
+  .history-head h1 { font-size: 28px; }
+  .stat-tiles { grid-template-columns: repeat(2, 1fr); }
+  .history-grid { grid-template-columns: 1fr; }
+  .fs-top { padding: 8px 12px; }
+  .fs-tabs { gap: 8px; }
+  .fs-art { max-width: min(78vw, 60vh); }
+}
