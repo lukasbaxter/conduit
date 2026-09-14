@@ -28,7 +28,7 @@ export const DEFAULT_VIZ = { style: 'line', gradient: 'prism', delay: null };
 // (position - delay) within 0.1 s, and the speaker was found to be ahead of
 // the position it reports, so the BluOS default is negative.
 export const DELAY_OPTIONS = [-3, -2.5, -2, -1.5, -1.25, -1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1, 1.5, 2];
-export const defaultDelayFor = (kind) => (kind === 'bluos' ? -1.2 : kind === 'cast' ? 0 : 0);
+export const defaultDelayFor = (kind) => (kind === 'bluos' ? -2.2 : kind === 'cast' ? 0 : 0);
 export function loadVizSettings() {
   try { return { ...DEFAULT_VIZ, ...JSON.parse(localStorage.getItem('conduit.viz') || '{}') }; } catch { return { ...DEFAULT_VIZ }; }
 }
