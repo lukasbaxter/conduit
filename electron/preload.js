@@ -48,6 +48,13 @@ contextBridge.exposeInMainWorld('conduit', {
     },
   },
 
+  // Mouse back / forward buttons, forwarded by main as 'back' | 'forward'. Returns an unsubscribe.
+  onNavigate: (cb) => {
+    const handler = (_evt, dir) => cb(dir);
+    ipcRenderer.on('navigate', handler);
+    return () => ipcRenderer.removeListener('navigate', handler);
+  },
+
   // Save a track: main names the file and shows the save dialog.
   download: (url) => call('download', url),
 

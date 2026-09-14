@@ -231,6 +231,23 @@ export default function App() {
   const goBack = () => { const h = histRef.current; if (h.idx > 0) { h.idx -= 1; applyEntry(h.stack[h.idx]); setHistTick((t) => t + 1); } };
   const goForward = () => { const h = histRef.current; if (h.idx < h.stack.length - 1) { h.idx += 1; applyEntry(h.stack[h.idx]); setHistTick((t) => t + 1); } };
   const canBack = histRef.current.idx > 0;
+  // Mouse back / forward buttons (buttons 3 and 4) drive the in-app history in
+  // the browser and on the desktop; the browser's own navigation is suppressed.
+  // Electron on macOS also delivers them as app-command events via the main process.
+  useEffect(() => {
+    const onMouse = (e) => {
+      if (e.button !== 3 && e.button !== 4) return;
+      e.preventDefault();
+      if (e.button === 3) goBack(); else goForward();
+    };
+    window.addEventListener('mouseup', onMouse);
+    // Chromium fires the page navigation on mousedown/auxclick too; swallow both.
+    const swallow = (e) => { if (e.button === 3 || e.button === 4) e.preventDefault(); };
+    window.addEventListener('mousedown', swallow);
+    window.addEventListener('auxclick', swallow);
+    const off = window.conduit?.onNavigate?.((dir) => (dir === 'back' ? goBack() : goForward()));
+    return () => { window.removeEventListener('mouseup', onMouse); window.removeEventListener('mousedown', swallow); window.removeEventListener('auxclick', swallow); off?.(); };
+  }); // no deps: goBack/goForward close over the latest history state
   const canForward = histRef.current.idx < histRef.current.stack.length - 1;
   // null | 'npv' | 'queue' | 'lyrics'
   const [panel, setPanel] = useState(null);

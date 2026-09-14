@@ -63,6 +63,13 @@ function createWindow() {
   }
 
   win.on('closed', () => { win = null; });
+  // Mouse back / forward buttons: macOS delivers them as app commands (the
+  // renderer never sees a mouse event), so forward them to the page's history.
+  win.on('app-command', (e, cmd) => {
+    if (cmd === 'browser-backward' || cmd === 'browser-forward') { e.preventDefault(); win.webContents.send('navigate', cmd === 'browser-backward' ? 'back' : 'forward'); }
+  });
+  // Never let those buttons navigate the BrowserWindow itself.
+  win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('http://localhost:5173') && !url.includes('/index.html')) e.preventDefault(); });
 }
 
 /**
