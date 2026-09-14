@@ -9,6 +9,25 @@
 // air.
 
 const BLOCK = 512;
+const RAW = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+// Virtual / loopback inputs carry nothing from the room. The system default
+// on this Mac was "NDI Audio", which is why the first attempts heard silence.
+const VIRTUAL = /ndi|blackhole|soundflower|loopback|aggregate|virtual|iphone|continuity|zoom|teams|cable/i;
+const REAL = /macbook|built-?in|internal|microphone|mic\b/i;
+
+/** The room microphone: a real input, not whatever virtual device is the default. */
+export async function openMicrophone() {
+  // A first (default) stream unlocks device labels.
+  let stream = await navigator.mediaDevices.getUserMedia({ audio: RAW });
+  const inputs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
+  const current = stream.getAudioTracks()[0]?.label || '';
+  if (!VIRTUAL.test(current) && (REAL.test(current) || inputs.length <= 1)) return stream;
+  const pick = inputs.find((d) => REAL.test(d.label) && !VIRTUAL.test(d.label)) || inputs.find((d) => !VIRTUAL.test(d.label) && d.deviceId !== 'default');
+  if (!pick) return stream;
+  stream.getTracks().forEach((t) => t.stop());
+  stream = await navigator.mediaDevices.getUserMedia({ audio: { ...RAW, deviceId: { exact: pick.deviceId } } });
+  return stream;
+}
 
 function envelopeRecorder(ctx, source) {
   const proc = ctx.createScriptProcessor(BLOCK, 1, 1);
@@ -49,7 +68,7 @@ export async function measureSpeakerLag({ ctx, refSource, seconds = 8, maxLag = 
     const status = await window.conduit.askMic().catch(() => 'granted');
     if (status && status !== 'granted') throw new Error(status === 'denied' ? 'NotAllowed: microphone denied in System Settings > Privacy > Microphone' : `microphone ${status}`);
   }
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  const stream = await openMicrophone();
   const track = stream.getAudioTracks()[0];
   if (!track || track.muted || track.readyState !== 'live') throw new Error('microphone track is muted');
   const mic = ctx.createMediaStreamSource(stream);
@@ -61,7 +80,7 @@ export async function measureSpeakerLag({ ctx, refSource, seconds = 8, maxLag = 
     ref.stop(); room.stop();
     stream.getTracks().forEach((tr) => tr.stop());
   }
-  return lagFromRecordings(ref, room, ctx.sampleRate, maxLag);
+  return { ...lagFromRecordings(ref, room, ctx.sampleRate, maxLag), mic: track.label };
 }
 
 // Pure part, so it can be tested with synthetic envelopes.

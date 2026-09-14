@@ -121,12 +121,12 @@ export default function Visualizer({ player, active, jf, settings, onSetting, co
       const r = await measureSpeakerLag({ ctx: sh.ctx, refSource: sh.source, seconds: 8, maxLag: 4 });
       lastSyncRef.current = { id: deviceId, at: Date.now() };
       if (r.refLevel < 0.0005) { setSyncMsg('Reference stream is silent, try again'); return; }
-      if (r.level < 0.0002) { setSyncMsg(`Could not hear the speaker (mic level ${r.level.toExponential(1)})`); return; }
+      if (r.level < 0.0002) { setSyncMsg(`Could not hear the speaker on ${r.mic || 'the microphone'}`); return; }
       if (r.score < 0.15 || r.margin < 0.04) { setSyncMsg(manual ? 'No clear match, try again with the music louder' : ''); return; }
       const next = Math.round((delayRef.current + r.lag) * 100) / 100;
       delayRef.current = next;
       if (deviceId) onSetting?.({ sync: { ...(cfg.sync || {}), [deviceId]: next } });
-      setSyncMsg(`Synced to ${name}: ${next >= 0 ? '+' : ''}${next.toFixed(2)} s`);
+      setSyncMsg(`Synced to ${name}: ${next >= 0 ? '+' : ''}${next.toFixed(2)} s (via ${r.mic || 'microphone'})`);
     } catch (e) {
       setSyncMsg(/denied|NotAllowed/i.test(String(e)) ? 'Microphone access needed to sync' : `Sync failed: ${e.message}`);
     } finally {
