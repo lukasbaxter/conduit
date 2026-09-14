@@ -100,7 +100,7 @@ export default function Visualizer({ player, active, jf, settings }) {
   // Graphic EQ engine.
   useEffect(() => {
     if (!active) return undefined;
-    let alive = true;
+    let alive = true, offSource = null;
     setState('loading');
     (async () => {
       try {
@@ -117,11 +117,13 @@ export default function Visualizer({ player, active, jf, settings }) {
           ...style.opts, gradient: cfg.gradient, smoothing: cfg.smoothing ?? style.opts.smoothing ?? .6,
         });
         amRef.current = am;
+        // Local playback re-captures the element on every new track: follow it.
+        if (wa.onSource) offSource = wa.onSource((next, prev) => { try { if (prev) am.disconnectInput(prev); } catch { /* not connected */ } try { am.connectInput(next); } catch { /* ignore */ } });
         if (window.location.search.includes('debug')) window.__vizAm = am;
         setState('ready');
       } catch (e) { console.error('visualizer', e); if (alive) setState('error'); }
     })();
-    return () => { alive = false; try { amRef.current?.destroy(); } catch {} amRef.current = null; };
+    return () => { alive = false; offSource?.(); try { amRef.current?.destroy(); } catch {} amRef.current = null; };
   }, [active, local, style.id, cfg.gradient]); // eslint-disable-line react-hooks/exhaustive-deps
   // Smoothing changes apply live to the running analyser.
   useEffect(() => { if (amRef.current && cfg.smoothing != null) amRef.current.smoothing = cfg.smoothing; }, [cfg.smoothing]);
