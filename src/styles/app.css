@@ -283,7 +283,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 /* Spotify's artist header: the photo full-bleed behind the name, darkened
    towards the bottom so the 96px title reads; no round thumbnail. */
 .hero.artist.with-banner {
-  min-height: min(40vh, 400px); padding-bottom: 24px;
+  min-height: min(50vh, 500px); padding-bottom: 24px;
   background: linear-gradient(180deg, rgba(0,0,0,.05) 0%, rgba(0,0,0,.15) 50%, rgba(0,0,0,.75) 100%), var(--banner) center 25% / cover no-repeat;
 }
 .hero.artist.with-banner h1, .hero.artist.with-banner .verified, .hero.artist.with-banner .hero-meta { text-shadow: 0 2px 12px rgba(0,0,0,.5); }
@@ -302,6 +302,9 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .verified svg { color: #4cb3ff; }
 
 .actions { display: flex; align-items: center; gap: 24px; padding: 24px; }
+/* Artist page: Popular sits a little closer under Play / Follow. */
+.hero.artist ~ .actions { padding-bottom: 12px; }
+.hero.artist ~ .pad > section:first-child .shelf-head { margin-top: 8px; }
 .bigplay {
   width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: #000;
   display: grid; place-items: center; transition: transform .15s var(--ease), background-color .15s;
