@@ -102,18 +102,22 @@ export default function ContextMenu({ x, y, items, onClose, anchorRight = false 
     const down = (e) => { if (!e.target.closest?.('.ctxmenu')) onClose(); };
     const key = (e) => { if (e.key === 'Escape') onClose(); };
     const bye = () => onClose();
-    // Scrolling the page under the menu closes it; scrolling INSIDE a long
-    // submenu (the playlist list) must not.
+    // The USER scrolling the page under the menu closes it (wheel / touch);
+    // scrolling inside a long submenu must not, and neither must programmatic
+    // scrolls -- the lyrics pane following the song fires scroll events every
+    // few seconds and used to close any open menu.
     const scrolled = (e) => { if (!e.target?.closest?.('.ctxmenu')) onClose(); };
     document.addEventListener('mousedown', down, true);
     document.addEventListener('keydown', key);
     window.addEventListener('resize', bye);
-    document.addEventListener('scroll', scrolled, true);
+    document.addEventListener('wheel', scrolled, { capture: true, passive: true });
+    document.addEventListener('touchmove', scrolled, { capture: true, passive: true });
     return () => {
       document.removeEventListener('mousedown', down, true);
       document.removeEventListener('keydown', key);
       window.removeEventListener('resize', bye);
-      document.removeEventListener('scroll', scrolled, true);
+      document.removeEventListener('wheel', scrolled, true);
+      document.removeEventListener('touchmove', scrolled, true);
     };
   }, [onClose]);
   return createPortal(<Panel x={x} y={y} items={items} onClose={onClose} anchorRight={anchorRight} />, document.body);
