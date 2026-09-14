@@ -841,8 +841,6 @@ button:disabled { cursor: default; }
 .fs-tab > button:first-child { width: 36px; height: 36px; display: grid; place-items: center; color: #ffffffb3; border-radius: 50%; }
 .fs-tab > button:first-child:hover, .fs-tab.on > button:first-child { color: #fff; }
 .fs-tab > button:first-child svg { display: block; }
-.fs-kebab { width: 20px; height: 36px; display: grid; place-items: center; color: #ffffffb3; margin-left: -4px; }
-.fs-kebab:hover { color: #fff; }
 .fs-divider { width: 1px; height: 20px; background: rgba(255,255,255,.28); margin: 0 10px 0 8px; }
 .fs-chevron, .fs-from-phone, .fs-phone-row, .mobile-back, .mobile-title, .libchips, .libsort, .login-mark { display: none; }
 .fs-close { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #ffffffb3; }
