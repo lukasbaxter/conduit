@@ -26,9 +26,10 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
     { label: 'Colours', sub: GRADIENTS.map((g) => ({ key: g, label: `${g[0].toUpperCase()}${g.slice(1)}${viz.gradient === g ? '  ✓' : ''}`, onClick: () => setV({ gradient: g }) })) },
     // Only matters when the sound is on a speaker: the picture lags the
     // speaker's reported playhead by this much. "Auto" = per-device default.
-    { label: 'Speaker delay', sub: [
+    { label: 'Speaker sync', sub: [
+      { label: 'negative = picture earlier' },
       { key: 'auto', label: `Auto (${defaultDelayFor(player.nowPlaying?.device?.kind || player.device?.kind)} s)${viz.delay == null ? '  ✓' : ''}`, onClick: () => setV({ delay: null }) },
-      ...DELAY_OPTIONS.map((d) => ({ key: String(d), label: `${d} s${viz.delay != null && Number(viz.delay) === d ? '  ✓' : ''}`, onClick: () => setV({ delay: d }) })),
+      ...DELAY_OPTIONS.map((d) => ({ key: String(d), label: `${d > 0 ? '+' : ''}${d} s${viz.delay != null && Number(viz.delay) === d ? '  ✓' : ''}`, onClick: () => setV({ delay: d }) })),
     ] },
   ];
   const { nowPlaying, playing, position, duration, shuffle, repeat } = player;

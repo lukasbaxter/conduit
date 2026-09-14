@@ -23,8 +23,12 @@ export const GRADIENTS = ['prism', 'classic', 'rainbow', 'orangered', 'steelblue
 // position they report (buffering + DAC), so without it the picture is early.
 // null = per-device default below.
 export const DEFAULT_VIZ = { style: 'line', gradient: 'prism', delay: null };
-export const DELAY_OPTIONS = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
-export const defaultDelayFor = (kind) => (kind === 'bluos' ? 1.2 : kind === 'cast' ? 0.8 : 0.5);
+// Negative = the picture runs AHEAD of the speaker's reported playhead.
+// Measured on the B&W Node 2i: with a live mirror the shadow tracks
+// (position - delay) within 0.1 s, and the speaker was found to be ahead of
+// the position it reports, so the BluOS default is negative.
+export const DELAY_OPTIONS = [-3, -2.5, -2, -1.5, -1.25, -1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1, 1.5, 2];
+export const defaultDelayFor = (kind) => (kind === 'bluos' ? -1.2 : kind === 'cast' ? 0 : 0);
 export function loadVizSettings() {
   try { return { ...DEFAULT_VIZ, ...JSON.parse(localStorage.getItem('conduit.viz') || '{}') }; } catch { return { ...DEFAULT_VIZ }; }
 }
@@ -64,6 +68,7 @@ export default function Visualizer({ player, active, jf, settings }) {
   useEffect(() => {
     if (!active || local) { const sh = shadowRef.current; if (sh) sh.el.pause(); return undefined; }
     const sh = shadow();
+    if (window.location.search.includes('debug')) { window.__shadow = sh; sh.want = () => want(); }
     const kind = player.nowPlaying?.device?.kind || player.device?.kind;
     const delay = cfg.delay != null ? Number(cfg.delay) : defaultDelayFor(kind);
     const want = () => { const c = clockRef.current; return c.pos + (c.playing ? (Date.now() - c.at) / 1000 : 0) - delay; };
