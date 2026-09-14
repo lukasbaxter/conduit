@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import ContextMenu from './ContextMenu.jsx';
 import { FORMATS } from '../api/download.js';
+import { useLiked } from '../api/likes.js';
 
 export const PlayGlyph = ({ size = 20 }) => (
   <svg viewBox="0 0 16 16" width={size} height={size} fill="currentColor">
@@ -114,7 +115,8 @@ export default function TrackRow({
 }) {
   // {x, y} while the context menu is open (from the dots button or a right-click).
   const [menu, setMenu] = useState(null);
-  const liked = Boolean(track.UserData?.IsFavorite);
+  // From the like store, never from the row's UserData (which can be stale).
+  const liked = useLiked(track.Id);
   const excluded = track.UserData?.Likes === false;
   const artistsOf = track.ArtistItems?.length ? track.ArtistItems : (track.Artists || []).map((n2) => ({ Name: n2 }));
 

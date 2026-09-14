@@ -4,6 +4,7 @@ import Visualizer, { EQ_STYLES, GRADIENTS, DEFAULT_VIZ, loadVizSettings } from '
 import ContextMenu from './ContextMenu.jsx';
 import DevicePicker from './DevicePicker.jsx';
 import { seekHover } from '../api/seekHover.js';
+import { useLiked } from '../api/likes.js';
 import { ArtistLinks, PlayGlyph, PauseGlyph, ShuffleGlyph } from './TrackRow.jsx';
 import { vibrantColor } from '../api/colors.js';
 import { ctxItemId } from '../api/context.js';
@@ -28,6 +29,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
     { label: 'Colours', sub: GRADIENTS.map((g) => ({ key: g, label: `${g[0].toUpperCase()}${g.slice(1)}${viz.gradient === g ? '  ✓' : ''}`, onClick: () => setV({ gradient: g }) })) },
   ];
   const { nowPlaying, playing, position, duration, shuffle, repeat, volume } = player;
+  const liked = useLiked(nowPlaying?.itemId);
   const art = nowPlaying?.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: 1000 }) : nowPlaying?.artUrl || null;
   useEffect(() => { try { localStorage.setItem('conduit.fsTab', tab); } catch {} }, [tab]);
   // Phone: Spotify's now-playing is a gradient of the cover's colour (no
@@ -109,8 +111,8 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
             <div className="fs-artist"><ArtistLinks artists={nowPlaying?.artists} fallback={nowPlaying?.artist || ''} onOpen={(id) => { onClose(); onOpenArtist(id); }} className="linkish" /></div>
           </div>
           {nowPlaying?.itemId && (
-            <button className={`fs-like ${nowPlaying.liked ? 'on' : ''}`} onClick={() => onLike({ Id: nowPlaying.itemId, Name: nowPlaying.title, Artists: [nowPlaying.artist], AlbumId: nowPlaying.albumId, UserData: { IsFavorite: nowPlaying.liked }, _partial: true }, !nowPlaying.liked)} title={nowPlaying.liked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}>
-              <svg viewBox="0 0 16 16" width="20" height="20" fill={nowPlaying.liked ? 'var(--seek-accent)' : 'currentColor'}>{nowPlaying.liked
+            <button className={`fs-like ${liked ? 'on' : ''}`} onClick={() => onLike({ Id: nowPlaying.itemId, Name: nowPlaying.title, Artists: [nowPlaying.artist], AlbumId: nowPlaying.albumId, _partial: true }, !liked)} title={liked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}>
+              <svg viewBox="0 0 16 16" width="20" height="20" fill={liked ? 'var(--seek-accent)' : 'currentColor'}>{liked
                 ? <path d="M15.724 4.22A4.313 4.313 0 0 0 12.192.814a4.269 4.269 0 0 0-3.622 1.13.837.837 0 0 1-1.14 0 4.272 4.272 0 0 0-6.21 5.855l5.916 7.05a1.128 1.128 0 0 0 1.727 0l5.916-7.05a4.228 4.228 0 0 0 .945-3.577z" />
                 : <path d="M1.69 2A4.582 4.582 0 0 1 8 2.023 4.583 4.583 0 0 1 11.88.817h.002a4.618 4.618 0 0 1 3.782 3.65v.003a4.543 4.543 0 0 1-1.011 3.84L9.35 14.629a1.765 1.765 0 0 1-2.093.464 1.762 1.762 0 0 1-.605-.463L1.348 8.309A4.582 4.582 0 0 1 1.689 2zm3.158.252A3.082 3.082 0 0 0 2.49 7.337l.005.005L7.8 13.664a.264.264 0 0 0 .311.069.262.262 0 0 0 .09-.069l5.312-6.33a3.043 3.043 0 0 0 .68-2.573 3.118 3.118 0 0 0-2.551-2.463 3.079 3.079 0 0 0-2.612.816l-.007.007a1.501 1.501 0 0 1-2.045 0l-.009-.008a3.082 3.082 0 0 0-2.121-.861z" />}</svg>
             </button>

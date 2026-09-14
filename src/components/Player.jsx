@@ -3,6 +3,7 @@ import DevicePicker from './DevicePicker.jsx';
 import { Heart, ShuffleGlyph, ArtistLinks } from './TrackRow.jsx';
 import { vibrantColor } from '../api/colors.js';
 import { seekHover } from '../api/seekHover.js';
+import { useLiked } from '../api/likes.js';
 
 function fmt(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -64,6 +65,7 @@ export function sessionDeviceOf(player, devices) {
 export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist, panel, onPanel, onLike, onFullScreen }) {
   const { current, nowPlaying, playing, position, duration, volume, device, error, roster, relay, repeat, shuffle } = player;
   const sessionDevice = sessionDeviceOf(player, devices);
+  const liked = useLiked(nowPlaying?.itemId);
   // nowPlaying covers both our own queue and a session adopted from a speaker
   // that was already playing when the app opened.
   // artId is our own library item; artUrl is a ready URL from a mirrored relay
@@ -134,12 +136,12 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
             // Follows the SESSION track (mirrored liked state included), so the
             // heart works on a client that is only controlling another one.
             <button
-              className={`trackrow-like ${nowPlaying.liked ? 'on' : ''}`}
+              className={`trackrow-like ${liked ? 'on' : ''}`}
               style={{ opacity: 1 }}
-              onClick={() => onLike?.(current || { Id: nowPlaying.itemId, Name: nowPlaying.title, _partial: true }, !nowPlaying.liked)}
-              title={nowPlaying.liked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
+              onClick={() => onLike?.(current || { Id: nowPlaying.itemId, Name: nowPlaying.title, _partial: true }, !liked)}
+              title={liked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
             >
-              <Heart on={Boolean(nowPlaying.liked)} />
+              <Heart on={liked} />
             </button>
           )}
         </div>

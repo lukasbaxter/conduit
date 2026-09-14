@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArtistLinks, PlayGlyph } from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import { ctxItemId } from '../api/context.js';
+import { isLiked } from '../api/likes.js';
 
 const Close = () => (
   <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
@@ -139,7 +140,7 @@ function Queue({ player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlis
   }
   const items = (t, pos) => [
     { label: 'Remove from queue', onClick: () => player.removeFromQueue(pos) },
-    { label: t.UserData?.IsFavorite ? 'Remove from your Liked Songs' : 'Save to your Liked Songs', onClick: () => onLike?.(t, !t.UserData?.IsFavorite) },
+    { label: isLiked(t.Id) ? 'Remove from your Liked Songs' : 'Save to your Liked Songs', onClick: () => onLike?.(t, !isLiked(t.Id)) },
     playlists.length ? { label: 'Add to playlist', sub: playlists.map((p) => ({ key: p.Id, label: p.Name, onClick: () => onAddTo?.(p, t) })) } : null,
     { sep: true },
     t.ArtistItems?.[0]?.Id ? { label: 'Go to artist', onClick: () => onOpenArtist?.(t.ArtistItems[0].Id) } : null,

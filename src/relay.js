@@ -66,6 +66,7 @@ export class Relay {
     ws.onmessage = (e) => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.type === 'hello-ok') {
+        this.connected = true;
         // Only now is the server listening to us. Anything sent while it was
         // still verifying the token was dropped -- which is how the desktop's
         // speaker list went missing from the web player after a restart.
@@ -87,7 +88,7 @@ export class Relay {
         this.onCommand(m.command, m.from);
       }
     };
-    ws.onclose = () => { clearInterval(this._ping); this._retry(); };
+    ws.onclose = () => { this.connected = false; clearInterval(this._ping); this._retry(); };
     ws.onerror = () => { try { ws.close(); } catch {} };
   }
 

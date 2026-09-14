@@ -10,6 +10,7 @@ import FullScreen from './components/FullScreen.jsx';
 import { downloadTrack } from './api/download.js';
 import { applyTheme, DEFAULT_THEME } from './api/prefs.js';
 import { search as relaySearch, popular as relayPopular, likes as relayLikes, playlistTracks as relayPlaylist } from './api/search.js';
+import { likesLoad, likesSet, likesSnapshot, likedIds, likesReady, isLiked, useLikesVersion } from './api/likes.js';
 
 // Everything goes through music.baxtergroup.io (Let's Encrypt on the origin,
 // Cloudflare proxy deliberately off -- it throttles the audio). The browser
@@ -97,8 +98,12 @@ export default function App() {
   const [view, setView] = useState('home');
   const [playlists, setPlaylists] = useState([]);
   const [savedAlbums, setSavedAlbums] = useState([]);
-  const [likedCount, setLikedCount] = useState(null);
-  const likedCacheRef = useRef(null);
+  // Liked Songs count follows the like store; likedCacheRef holds the fetched
+  // rows by id so the page paints instantly and in the store's order.
+  const likesVersion = useLikesVersion();
+  const likedCount = likesReady() ? likedIds().length : null;
+  const likedCacheRef = useRef(new Map()); // itemId -> track row
+  const setLikedCount = () => {};
   const [toast, setToast] = useState(null);
   const [me, setMe] = useState(null);
   const [avatarOk, setAvatarOk] = useState(true);
@@ -270,8 +275,7 @@ export default function App() {
       const art = client.persisted('artists'); if (art) setArtists(art);
       const pls = client.persisted('playlists'); if (pls) setPlaylists(pls);
       const sal = client.persisted('savedAlbums'); if (sal) setSavedAlbums(sal);
-      const lc = client.persisted('likedCount'); if (lc != null) setLikedCount(lc);
-      const lk = client.persisted('liked'); if (lk) likedCacheRef.current = lk;
+      const lk = client.persisted('liked'); if (Array.isArray(lk)) likedCacheRef.current = new Map(lk.map((t) => [t.Id, t]));
       if (alb) setLibLoading(false);
     }
     setBooting(false);
@@ -290,15 +294,16 @@ export default function App() {
     }).catch(() => {});
   }, [jf]);
 
-  // When each track was liked, from the relay's store (Jellyfin only knows
-  // THAT a track is liked). Seeds the relay once with whatever the old prefs
-  // blob still holds, then that blob is left alone.
+  // The like store: loaded from the relay (which seeds/reconciles with
+  // Jellyfin's favourites). The old prefs-blob timestamps are sent once so
+  // they keep their dates, then never touched again.
   useEffect(() => {
     if (!jf) return;
     const seed = prefs.likedAt && Object.keys(prefs.likedAt).length ? prefs.likedAt : null;
-    relayLikes(jf, seed).then((m) => { jf.likedAt = m; }).catch(() => {});
+    relayLikes(jf, seed).then((m) => { likesLoad(m); jf.likedAt = m; }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jf, prefs.likedAt ? 1 : 0]);
+  useEffect(() => { if (jf) jf.likedAt = likesSnapshot(); }, [jf, likesVersion]);
 
   // Change a setting: apply here, save to the account, nudge the other clients.
   const updatePrefs = async (patch) => {
@@ -328,7 +333,6 @@ export default function App() {
     jf.artists({ limit: 500 }).then((r) => { setArtists(r.items); jf._persist('artists', r.items); }).catch(() => {});
     jf.playlists().then((p) => { setPlaylists(p.items); jf._persist('playlists', p.items); }).catch(() => {});
     jf.favoriteAlbums().then((a) => { setSavedAlbums(a.items); jf._persist('savedAlbums', a.items); }).catch(() => {});
-    jf.favoriteCount().then((n) => { setLikedCount(n); jf._persist('likedCount', n); }).catch(() => {});
   }, [jf]);
 
   const notify = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
@@ -342,31 +346,8 @@ export default function App() {
   };
 
   // Update a track's liked state everywhere it is currently shown.
-  const patchLiked = (trackId, liked) => {
-    const patch = (t) => t.Id === trackId ? { ...t, UserData: { ...(t.UserData || {}), IsFavorite: liked } } : t;
-    setDetail((d) => d ? { ...d, tracks: d.tracks.map(patch) } : d);
-    player.patchQueue?.(patch);
-    player.syncLiked?.(trackId, liked);
-  };
-
-  // Likes made while a list was still loading. A Liked Songs fetch takes a
-  // few seconds for 1,400 tracks; a heart tapped in that window used to be
-  // overwritten by the older server snapshot when it landed ("the song
-  // appeared, then vanished"). Fetched lists are reconciled against this log.
-  const likeLogRef = useRef([]);
-  const reconcile = (tracks, since, likedPage = false) => {
-    const recent = likeLogRef.current.filter((e) => e.at >= since);
-    if (!recent.length) return tracks;
-    let out = tracks;
-    for (const e of recent) {
-      if (likedPage) {
-        out = e.liked ? [e.row, ...out.filter((t) => t.Id !== e.id)] : out.filter((t) => t.Id !== e.id);
-      } else {
-        out = out.map((t) => (t.Id === e.id ? { ...t, UserData: { ...(t.UserData || {}), IsFavorite: e.liked } } : t));
-      }
-    }
-    return out;
-  };
+  const patchLiked = () => {}; // hearts read the like store now
+  const reconcile = (tracks) => tracks;
 
   // Device list is pushed from the main process as mDNS finds things.
   useEffect(() => {
@@ -400,12 +381,7 @@ export default function App() {
         if (p._libraryChanged && p._libraryChanged !== relayLibraryPing.current) { relayLibraryPing.current = p._libraryChanged; refreshPlaylists(); }
       },
       // Another client liked / unliked: keep the timestamp map and the hearts in step.
-      onLike: ({ itemId, liked, at }) => {
-        const la = { ...(jf.likedAt || {}) };
-        if (liked) la[itemId] = at; else delete la[itemId];
-        jf.likedAt = la;
-        patchLiked(itemId, liked);
-      },
+      onLike: ({ itemId, liked, at }) => { likesSet(itemId, liked, at); },
     });
     player.attachRelay(relay);
     return () => { relay.close(); player.attachRelay(null); };
@@ -593,57 +569,45 @@ export default function App() {
     setDetail({ item: { Id: 'history', Name: 'Listening history', Type: 'History' }, tracks: [], kind: 'History', loading: false });
   };
 
+  // Liked Songs = the store's ids, newest first; rows fetched by id (chunks of
+  // 150) and cached so a reopen paints at once. No Filters=IsFavorite query,
+  // so nothing can "vanish" between an optimistic row and a server list.
+  const likedRows = (ids) => ids.map((id) => likedCacheRef.current.get(id)).filter(Boolean);
   const openLiked = async () => {
     const item = { Id: LIKED_ID, Name: 'Liked Songs', Type: 'Playlist' };
-    // Navigate NOW with whatever we have; a 500-track fetch is not something to
-    // make the click wait on.
     setView('home');
-    setDetail({ item, tracks: likedCacheRef.current || [], kind: 'Playlist', loading: !likedCacheRef.current });
-    const since = Date.now();
+    const ids = likedIds();
+    setDetail({ item, tracks: likedRows(ids), kind: 'Playlist', loading: ids.some((id) => !likedCacheRef.current.has(id)) });
+    const missing = ids.filter((id) => !likedCacheRef.current.has(id));
     try {
-      const fetched = (await jf.favoriteTracks()).items;
-      const items = reconcile(fetched, since, true);
-      likedCacheRef.current = items;
-      jf._persist('liked', items);
-      setDetail((d) => (d && d.item?.Id === LIKED_ID ? { ...d, tracks: items, loading: false } : d));
-    } catch { /* keep what we showed */ }
+      for (let i = 0; i < missing.length; i += 150) {
+        const rows = await jf.itemsByIds(missing.slice(i, i + 150));
+        for (const r of rows) likedCacheRef.current.set(r.Id, r);
+        setDetail((d) => (d && d.item?.Id === LIKED_ID ? { ...d, tracks: likedRows(likedIds()), loading: i + 150 < missing.length } : d));
+      }
+      setDetail((d) => (d && d.item?.Id === LIKED_ID ? { ...d, tracks: likedRows(likedIds()), loading: false } : d));
+      jf._persist('liked', likedRows(likedIds()).slice(0, 1500));
+    } catch { setDetail((d) => (d && d.item?.Id === LIKED_ID ? { ...d, loading: false } : d)); }
   };
+  // Keep the open Liked Songs page in step with the store (likes from any client).
+  useEffect(() => {
+    setDetail((d) => (d && d.item?.Id === LIKED_ID ? { ...d, tracks: likedRows(likedIds()) } : d));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [likesVersion]);
 
   const onLike = async (track, liked) => {
-    patchLiked(track.Id, liked);
-    // Logged optimistically so a list fetch that lands mid-flight keeps it.
-    likeLogRef.current = [...likeLogRef.current.filter((e) => e.id !== track.Id).slice(-50),
-      { id: track.Id, liked, at: Date.now(), row: { ...track, UserData: { ...(track.UserData || {}), IsFavorite: true } } }];
-    try {
-      await jf.setFavorite(track.Id, liked);
-      // The footer heart on a mirroring client only knows the session track's
-      // id; fetch the real item so the Liked Songs row it prepends is complete.
-      if (track._partial) {
-        try { const full = await jf.itemById(track.Id); if (full) track = { ...full, ...track, _partial: false }; } catch { /* keep partial */ }
-      }
-      notify(liked ? 'Added to Liked Songs' : 'Removed from Liked Songs');
-      // Remember WHEN, so Liked Songs stays newest-first across every device.
-      const la = { ...(jf.likedAt || {}) };
-      if (liked) la[track.Id] = Date.now(); else delete la[track.Id];
-      jf.likedAt = la;
-      player.relay?.sendLike?.(track.Id, liked);
-      setLikedCount((c) => (c == null ? c : Math.max(0, c + (liked ? 1 : -1))));
-      // Liked Songs view stays live: unliking drops the row, liking (e.g. the
-      // now-playing track from the footer) prepends it, newest first like
-      // Spotify. No re-opening the page.
-      const row = { ...track, UserData: { ...(track.UserData || {}), IsFavorite: true } };
-      likeLogRef.current = likeLogRef.current.map((e) => (e.id === track.Id ? { ...e, row } : e));
-      const cache = likedCacheRef.current || [];
-      likedCacheRef.current = liked ? [row, ...cache.filter((t) => t.Id !== track.Id)] : cache.filter((t) => t.Id !== track.Id);
-      setDetail((d) => {
-        if (!d || d.item?.Id !== LIKED_ID) return d;
-        const without = d.tracks.filter((t) => t.Id !== track.Id);
-        return { ...d, tracks: liked ? [row, ...without] : without };
-      });
-    } catch (e) {
-      patchLiked(track.Id, !liked);
-      likeLogRef.current = likeLogRef.current.filter((x) => x.id !== track.Id);
-      notify(`Not saved: Jellyfin did not accept the change (${e.message.slice(0, 60)}). Try again.`);
+    likesSet(track.Id, liked);
+    // The relay stores it, writes the Jellyfin favourite through, and echoes it
+    // to every client (this one included, with the server's timestamp).
+    if (player.relay?.connected) player.relay.sendLike(track.Id, liked);
+    else { try { await jf.setFavorite(track.Id, liked); } catch (e) { likesSet(track.Id, !liked); notify(`Not saved: ${e.message.slice(0, 60)}`); return; } }
+    notify(liked ? 'Added to Liked Songs' : 'Removed from Liked Songs');
+    // Keep the row so Liked Songs can show it without a fetch.
+    if (liked) {
+      let row = track;
+      if (track._partial) { try { const full = await jf.itemById(track.Id); if (full) row = full; } catch { /* partial is fine */ } }
+      likedCacheRef.current.set(track.Id, row);
+      setDetail((d) => (d && d.item?.Id === LIKED_ID ? { ...d, tracks: likedRows(likedIds()) } : d));
     }
   };
 

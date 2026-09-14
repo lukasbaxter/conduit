@@ -680,6 +680,40 @@ async function playlistFast(who, token, playlistId) {
   return { items, total: ids.length, missing: ids.length - items.length };
 }
 
+// --- likes: Jellyfin write-through + reconciliation ---------------------------
+// The relay is the source of truth for WHICH tracks are liked and WHEN; Jellyfin
+// keeps a copy (its favourite flag) so other apps and the search index agree.
+async function jellyfinFavorite(uid, token, itemId, liked) {
+  const r = await fetch(`${JELLYFIN}/Users/${uid}/FavoriteItems/${itemId}`, { method: liked ? 'POST' : 'DELETE', headers: { Authorization: `MediaBrowser Token="${token}"` }, signal: AbortSignal.timeout(8000) });
+  return r.ok;
+}
+const reconciledAt = new Map(); // uid -> ms
+// Jellyfin's favourites vs the table: a like made in another app (or before
+// the relay existed) is added with a sensible date; a favourite Jellyfin no
+// longer has, for a like we know we had written, was unliked elsewhere.
+async function reconcileLikes(uid, token) {
+  if (Date.now() - (reconciledAt.get(uid) || 0) < 10 * 60 * 1000) return;
+  reconciledAt.set(uid, Date.now());
+  const q = new URLSearchParams({ IncludeItemTypes: 'Audio', Recursive: 'true', Filters: 'IsFavorite', Fields: 'DateCreated', Limit: '20000', userId: uid, SortBy: 'DateCreated', SortOrder: 'Descending' });
+  const r = await fetch(`${JELLYFIN}/Items?${q}`, { headers: { Authorization: `MediaBrowser Token="${token}"` }, signal: AbortSignal.timeout(30000) });
+  if (!r.ok) return;
+  const jf = new Map((((await r.json()).Items) || []).map((it) => [it.Id, Date.parse(it.DateCreated || '') || 0]));
+  const mine = new Map(store.likesAll(uid).map((x) => [x.item_id, x]));
+  const first = mine.size === 0;
+  const add = [];
+  for (const [id, created] of jf) if (!mine.has(id)) add.push([id, first ? (created || Date.now()) : Date.now()]);
+  if (add.length) store.likeSeed(uid, add);
+  for (const [id, row] of mine) if (row.synced && !jf.has(id)) store.likeDel(uid, id);
+  if (add.length) console.log(`likes: ${uid.slice(0, 8)} +${add.length} from Jellyfin${first ? ' (first sync)' : ''}`);
+}
+// Failed write-throughs are retried every few minutes with a live client's token.
+setInterval(() => {
+  for (const { uid, item_id } of store.likesUnsynced()) {
+    const c = [...userMap(uid).values()][0]; if (!c?.token) continue;
+    jellyfinFavorite(uid, c.token, item_id, true).then((ok) => { if (ok) store.likeSynced(uid, item_id); }).catch(() => {});
+  }
+}, 3 * 60 * 1000);
+
 async function requestAlbum(albumId) {
   const r = await fetch(`${MUSIC_REQUESTS}/api/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ album_id: albumId }), signal: AbortSignal.timeout(20000) });
   const j = await r.json().catch(() => ({}));
@@ -708,8 +742,9 @@ const server = http.createServer(async (req, res) => {
       let out;
       if (path === '/history') out = await history({ uid: who.id, token }, url);
       else if (path === '/likes') {
-        // Seed from the (few) timestamps the old prefs blob still has, once.
+        // Old prefs-blob timestamps, sent once by the client, keep their dates.
         if (req.method === 'POST') { let body = ''; for await (const chunk of req) body += chunk; const seed = JSON.parse(body || '{}'); store.likeSeed(who.id, Object.entries(seed).filter(([, at]) => Number.isFinite(at))); }
+        await reconcileLikes(who.id, token);
         out = { at: Object.fromEntries(store.likesAll(who.id).map((r) => [r.item_id, r.at])) };
       }
       else if (path === '/playlist') out = await playlistFast(who, token, url.searchParams.get('id') || '');
@@ -920,9 +955,12 @@ wss.on('connection', (ws, req) => {
       // truth for WHETHER a track is liked; this is only WHEN.
       case 'like': {
         if (!msg.itemId) break;
-        const at = Date.now();
-        if (msg.liked) store.likePut(self.uid, String(msg.itemId), at); else store.likeDel(self.uid, String(msg.itemId));
-        for (const c of userMap(self.uid).values()) if (c.id !== self.id) send(c.ws, { type: 'like', itemId: msg.itemId, liked: !!msg.liked, at });
+        const itemId = String(msg.itemId), liked = !!msg.liked, at = Date.now();
+        if (liked) store.likePut(self.uid, itemId, at); else store.likeDel(self.uid, itemId);
+        // Every client of the account, the sender included (its timestamp is this one).
+        for (const c of userMap(self.uid).values()) send(c.ws, { type: 'like', itemId, liked, at });
+        // Write through to Jellyfin (the favourite other apps see); retried later if it fails.
+        jellyfinFavorite(self.uid, self.token, itemId, liked).then((ok) => { if (ok && liked) store.likeSynced(self.uid, itemId); }).catch(() => {});
         break;
       }
 

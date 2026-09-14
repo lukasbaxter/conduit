@@ -30,8 +30,9 @@ export function openDb(file) {
     CREATE TABLE IF NOT EXISTS history (uid TEXT PRIMARY KEY, user TEXT, complete INTEGER NOT NULL DEFAULT 0, synced_at INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS matches (key TEXT PRIMARY KEY, id TEXT, album_id TEXT, artist_id TEXT, dur INTEGER, genres TEXT);
     CREATE TABLE IF NOT EXISTS cache (k TEXT PRIMARY KEY, json TEXT NOT NULL, at INTEGER NOT NULL);
-    CREATE TABLE IF NOT EXISTS likes (uid TEXT NOT NULL, item_id TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (uid, item_id));
+    CREATE TABLE IF NOT EXISTS likes (uid TEXT NOT NULL, item_id TEXT NOT NULL, at INTEGER NOT NULL, synced INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (uid, item_id));
   `);
+  try { db.exec('ALTER TABLE likes ADD COLUMN synced INTEGER NOT NULL DEFAULT 0'); } catch { /* already there */ }
   const q = {
     sessionGet: db.prepare('SELECT json, at FROM sessions WHERE uid = ?'),
     sessionPut: db.prepare('INSERT INTO sessions (uid, json, at) VALUES (?, ?, ?) ON CONFLICT(uid) DO UPDATE SET json = excluded.json, at = excluded.at'),
@@ -51,10 +52,13 @@ export function openDb(file) {
     cacheGet: db.prepare('SELECT json, at FROM cache WHERE k = ?'),
     cachePut: db.prepare('INSERT INTO cache (k, json, at) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET json = excluded.json, at = excluded.at'),
     cacheDel: db.prepare('DELETE FROM cache WHERE k LIKE ?'),
-    likePut: db.prepare('INSERT INTO likes (uid, item_id, at) VALUES (?, ?, ?) ON CONFLICT(uid, item_id) DO UPDATE SET at = excluded.at'),
+    likePut: db.prepare('INSERT INTO likes (uid, item_id, at, synced) VALUES (?, ?, ?, 0) ON CONFLICT(uid, item_id) DO UPDATE SET at = excluded.at, synced = 0'),
     likeDel: db.prepare('DELETE FROM likes WHERE uid = ? AND item_id = ?'),
-    likesAll: db.prepare('SELECT item_id, at FROM likes WHERE uid = ? ORDER BY at DESC'),
-    likeKeep: db.prepare('INSERT OR IGNORE INTO likes (uid, item_id, at) VALUES (?, ?, ?)'),
+    likesAll: db.prepare('SELECT item_id, at, synced FROM likes WHERE uid = ? ORDER BY at DESC'),
+    likeKeep: db.prepare('INSERT OR IGNORE INTO likes (uid, item_id, at, synced) VALUES (?, ?, ?, 1)'),
+    likeSynced: db.prepare('UPDATE likes SET synced = 1 WHERE uid = ? AND item_id = ?'),
+    likesUnsynced: db.prepare('SELECT uid, item_id FROM likes WHERE synced = 0'),
+    likeCount: db.prepare('SELECT COUNT(*) AS n FROM likes WHERE uid = ?'),
   };
   return {
     db,
@@ -83,6 +87,9 @@ export function openDb(file) {
     likeDel(uid, itemId) { q.likeDel.run(uid, itemId); },
     likesAll(uid) { return q.likesAll.all(uid); },
     likeSeed(uid, rows) { db.exec('BEGIN'); try { for (const [id, at] of rows) q.likeKeep.run(uid, id, at); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; } },
+    likeSynced(uid, itemId) { q.likeSynced.run(uid, itemId); },
+    likesUnsynced() { return q.likesUnsynced.all(); },
+    likeCount(uid) { return q.likeCount.get(uid)?.n || 0; },
   };
 }
 
