@@ -59,7 +59,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
 
   return (
     <div className="fs" style={np ? { '--np': np } : undefined}>
-      {art && tab !== 'viz' && <div className="fs-bg" style={{ backgroundImage: `url("${art}")` }} />}
+      {art && <div className={`fs-bg ${tab === 'viz' ? 'dim' : ''}`} style={{ backgroundImage: `url("${art}")` }} />}
       <div className="fs-top">
         <button className="fs-chevron" onClick={onClose} title="Close" aria-label="Close">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2.793 8.043a1 1 0 0 1 1.414 0L12 15.836l7.793-7.793a1 1 0 1 1 1.414 1.414L12 18.664 2.793 9.457a1 1 0 0 1 0-1.414z" /></svg>

@@ -853,6 +853,8 @@ button:disabled { cursor: default; }
 /* ---------- full-screen player ---------- */
 .fs { position: fixed; inset: 0; z-index: 200; background: #000; color: #fff; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
 .fs-bg { position: absolute; inset: -60px; background-size: cover; background-position: center; filter: blur(60px) brightness(.35) saturate(1.2); transform: scale(1.1); }
+/* Behind the spectrum: same blur, a touch darker so the bars and their floor reflection stay crisp. */
+.fs-bg.dim { filter: blur(60px) brightness(.22) saturate(1.2); }
 .fs > *:not(.fs-bg) { position: relative; }
 .fs-top { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 4px; padding: 0 32px; height: 76px; box-sizing: border-box; }
 .fs-from { grid-column: 1; }
