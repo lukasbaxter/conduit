@@ -279,7 +279,7 @@ export function Lyrics({ player, jf }) {
           key={i}
           ref={i === activeIndex ? activeRef : null}
           className={`lyric-line ${synced && i < activeIndex ? 'sung' : ''} ${i === activeIndex ? 'now' : ''}`}
-          onClick={() => l.start != null && player.seek(l.start)}
+          onClick={() => { if (l.start == null) return; player.seek(l.start); setManual(false); }}
           style={{ cursor: l.start != null ? 'pointer' : 'default' }}
         >
           {l.text || ' '}
