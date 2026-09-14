@@ -62,9 +62,14 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
           {from && <span className="fs-from-phone"><small>{from.kind}</small><b>{from.name}</b></span>}
         </div>
         <div className="fs-tabs">
-          {[['album', 'Album'], ['lyrics', 'Lyrics'], ['viz', 'Visualizer']].map(([k, label]) => (
+          {/* Flat icon tabs: vinyl = album, note = lyrics, wave = visualizer. */}
+          {[
+            ['album', 'Album', <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.25" /><circle cx="12" cy="12" r="5.75" strokeOpacity=".55" /><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" /></svg>],
+            ['lyrics', 'Lyrics', <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M20 2.5a1 1 0 0 0-1.2-1L9.3 3.6A1 1 0 0 0 8.5 4.6v10.2A3.7 3.7 0 0 0 6.5 14a3.5 3.5 0 1 0 3.5 3.5V8.3l8-1.7v6.2a3.7 3.7 0 0 0-2-.8 3.5 3.5 0 1 0 3.5 3.5V2.5z" /></svg>],
+            ['viz', 'Visualizer', <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M3 12h1.5M6.5 8v8M10 4.5v15M13.5 8v8M17 6v12M20.5 10v4" /></svg>],
+          ].map(([k, label, icon]) => (
             <span key={k} className={`fs-tab ${tab === k ? 'on' : ''}`}>
-              <button onClick={() => setTab(k)}>{label}</button>
+              <button onClick={() => setTab(k)} title={label} aria-label={label} aria-pressed={tab === k}>{icon}</button>
               {k === 'viz' && tab === 'viz' && (
                 <button className="fs-kebab" title="Visualizer settings" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setVizMenu({ x: r.left - 8, y: r.bottom + 8 }); }}>
                   <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 6l4.5 4.5L12.5 6" /></svg>
@@ -73,6 +78,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
             </span>
           ))}
           {vizMenu && <ContextMenu x={vizMenu.x} y={vizMenu.y} items={vizItems} onClose={() => setVizMenu(null)} />}
+          <span className="fs-divider" aria-hidden="true" />
         </div>
         {/* Arrows pointing IN (collapse), the mirror of the footer's expand glyph. */}
         <button className="fs-close" onClick={onClose} title="Exit now playing view">

@@ -833,18 +833,18 @@ button:disabled { cursor: default; }
 .fs { position: fixed; inset: 0; z-index: 200; background: #000; color: #fff; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
 .fs-bg { position: absolute; inset: -60px; background-size: cover; background-position: center; filter: blur(60px) brightness(.35) saturate(1.2); transform: scale(1.1); }
 .fs > *:not(.fs-bg) { position: relative; }
-.fs-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 32px; height: 76px; box-sizing: border-box; }
-.fs-from { font-size: 13px; color: #ffffffb3; }
-.fs-tabs { display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.35); border-radius: 500px; padding: 4px; height: 44px; box-sizing: border-box; }
-.fs-tab { display: flex; align-items: center; border-radius: 500px; height: 36px; }
-.fs-tab > button:first-child { padding: 0 18px; height: 36px; border-radius: 500px; color: #ffffffb3; font-weight: 700; font-size: 14px; }
-.fs-tab.on { background: rgba(255,255,255,.14); }
-.fs-tab.on > button:first-child { color: #fff; }
-.fs-tab.on:has(.fs-kebab) > button:first-child { padding-right: 8px; }
-.fs-kebab { width: 26px; height: 36px; display: grid; place-items: center; color: #ffffffb3; border-radius: 0 500px 500px 0; padding-right: 8px; }
+.fs-top { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 4px; padding: 0 32px; height: 76px; box-sizing: border-box; }
+.fs-from { grid-column: 1; }
+/* Right side: three flat icon tabs, a vertical rule, then the minimize button. */
+.fs-tabs { display: flex; align-items: center; gap: 2px; height: 36px; }
+.fs-tab { display: flex; align-items: center; }
+.fs-tab > button:first-child { width: 36px; height: 36px; display: grid; place-items: center; color: #ffffffb3; border-radius: 50%; }
+.fs-tab > button:first-child:hover, .fs-tab.on > button:first-child { color: #fff; }
+.fs-tab > button:first-child svg { display: block; }
+.fs-kebab { width: 20px; height: 36px; display: grid; place-items: center; color: #ffffffb3; margin-left: -4px; }
 .fs-kebab:hover { color: #fff; }
-.fs-chevron, .fs-from-phone, .fs-phone-row, .mobile-back, .mobile-title, .libchips, .libsort, .login-mark { display: none; }
-.fs-close { justify-self: end; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #ffffffb3; background: rgba(0,0,0,.35); }
+.fs-divider { width: 1px; height: 20px; background: rgba(255,255,255,.28); margin: 0 10px 0 8px; }
+.fs-close { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #ffffffb3; }
 .fs-close:hover { color: #fff; }
 .fs-stage { display: grid; place-items: center; min-height: 0; padding: 0 32px; }
 .fs-art { max-height: 100%; max-width: min(56vh, 90vw); aspect-ratio: 1; object-fit: cover; border-radius: 12px; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
