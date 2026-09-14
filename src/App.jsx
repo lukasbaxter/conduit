@@ -4,7 +4,7 @@ import { usePlayer } from './player/usePlayer.js';
 import { Relay } from './relay.js';
 import Sidebar from './components/Sidebar.jsx';
 import Library, { LIKED_ID } from './components/Library.jsx';
-import Player from './components/Player.jsx';
+import Player, { PlayingElsewhereBar, sessionDeviceOf } from './components/Player.jsx';
 import RightPanel from './components/RightPanel.jsx';
 import FullScreen from './components/FullScreen.jsx';
 import { downloadTrack } from './api/download.js';
@@ -889,7 +889,8 @@ pos=${Math.round(player.position)} playing=${player.playing} vol=${player.volume
         onLike={onLike}
         onFullScreen={openFullScreen}
       />
-      {fullScreen && <FullScreen player={player} jf={jf} onClose={closeFullScreen} onOpenArtist={openArtistById} onLike={onLike} prefs={prefs} onUpdatePrefs={updatePrefs} onPanel={setPanel} />}
+      <PlayingElsewhereBar player={player} />
+      {fullScreen && <FullScreen player={player} jf={jf} onClose={closeFullScreen} onOpenArtist={openArtistById} onLike={onLike} prefs={prefs} onUpdatePrefs={updatePrefs} onPanel={setPanel} devices={[...devices, ...player.relayDevices, ...player.lanDevices]} sessionDevice={sessionDeviceOf(player, [...devices, ...player.relayDevices, ...player.lanDevices])} />}
     </div>
   );
 }

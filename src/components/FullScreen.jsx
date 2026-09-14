@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Lyrics } from './RightPanel.jsx';
 import Visualizer, { EQ_STYLES, GRADIENTS, DEFAULT_VIZ, loadVizSettings } from './Visualizer.jsx';
 import ContextMenu from './ContextMenu.jsx';
+import DevicePicker from './DevicePicker.jsx';
 import { ArtistLinks, PlayGlyph, PauseGlyph, ShuffleGlyph } from './TrackRow.jsx';
 import { vibrantColor } from '../api/colors.js';
 import { ctxItemId } from '../api/context.js';
@@ -12,7 +13,7 @@ const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(
  * Spotify's full-screen player: blurred cover behind, tabs up top (Album /
  * Visualizer / Lyrics), the track and transport along the bottom.
  */
-export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, prefs, onUpdatePrefs, onPanel }) {
+export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, prefs, onUpdatePrefs, onPanel, devices = [], sessionDevice = null }) {
   const [tab, setTab] = useState(() => localStorage.getItem('conduit.fsTab') || 'album');
   // Visualizer settings (style, colours) behind the tab's ⋯ menu. They live
   // in the account's prefs, so a change here shows up on every signed-in
@@ -25,7 +26,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
     { label: 'Style', sub: EQ_STYLES.map((s2) => ({ key: s2.id, label: `${s2.name}${viz.style === s2.id ? '  ✓' : ''}`, onClick: () => setV({ style: s2.id }) })) },
     { label: 'Colours', sub: GRADIENTS.map((g) => ({ key: g, label: `${g[0].toUpperCase()}${g.slice(1)}${viz.gradient === g ? '  ✓' : ''}`, onClick: () => setV({ gradient: g }) })) },
   ];
-  const { nowPlaying, playing, position, duration, shuffle, repeat } = player;
+  const { nowPlaying, playing, position, duration, shuffle, repeat, volume } = player;
   const art = nowPlaying?.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: 1000 }) : nowPlaying?.artUrl || null;
   useEffect(() => { try { localStorage.setItem('conduit.fsTab', tab); } catch {} }, [tab]);
   // Phone: Spotify's now-playing is a gradient of the cover's colour (no
@@ -58,7 +59,6 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2.793 8.043a1 1 0 0 1 1.414 0L12 15.836l7.793-7.793a1 1 0 1 1 1.414 1.414L12 18.664 2.793 9.457a1 1 0 0 1 0-1.414z" /></svg>
         </button>
         <div className="fs-from">
-          <span className="fs-from-desktop">{nowPlaying?.device?.name ? `Playing on ${nowPlaying.device.name}` : ''}</span>
           {from && <span className="fs-from-phone"><small>{from.kind}</small><b>{from.name}</b></span>}
         </div>
         <div className="fs-tabs">
@@ -89,6 +89,12 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
       </div>
 
       <div className="fs-bottom">
+        {/* Progress across the top of the block, above the album thumb and the controls. */}
+        <div className="fs-seek">
+          <span>{fmt(position || 0)}</span>
+          <input type="range" min="0" max={Math.max(1, duration || 0)} value={Math.min(position || 0, duration || 0)} onChange={(e) => player.seek(Number(e.target.value))} style={{ '--pct': `${duration ? (position / duration) * 100 : 0}%` }} />
+          <span>{fmt(duration || 0)}</span>
+        </div>
         <div className="fs-meta">
           {art && tab !== 'album' && <img className="fs-thumb" src={art} alt="" />}
           <div style={{ minWidth: 0 }}>
@@ -103,17 +109,28 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
             </button>
           )}
         </div>
-        <div className="fs-seek">
-          <span>{fmt(position || 0)}</span>
-          <input type="range" min="0" max={Math.max(1, duration || 0)} value={Math.min(position || 0, duration || 0)} onChange={(e) => player.seek(Number(e.target.value))} style={{ '--pct': `${duration ? (position / duration) * 100 : 0}%` }} />
-          <span>{fmt(duration || 0)}</span>
-        </div>
         <div className="fs-controls">
           <button className={`ctl-mode ${shuffle && shuffle !== 'off' ? 'on' : ''}`} onClick={player.cycleShuffle} title="Shuffle"><ShuffleGlyph size={18} /></button>
           <button onClick={player.previous} title="Previous"><svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor"><path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z" /></svg></button>
           <button className="fs-play" onClick={player.toggle} title={playing ? 'Pause' : 'Play'}>{playing ? <PauseGlyph size={26} /> : <PlayGlyph size={26} />}</button>
           <button onClick={player.next} title="Next"><svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor"><path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z" /></svg></button>
           <button className={`ctl-mode ${repeat && repeat !== 'off' ? 'on' : ''}`} onClick={player.cycleRepeat} title="Repeat"><svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor"><path d="M0 4.75A3.75 3.75 0 0 1 3.75 1h8.5A3.75 3.75 0 0 1 16 4.75v5a3.75 3.75 0 0 1-3.75 3.75H9.81l1.018 1.018a.75.75 0 1 1-1.06 1.06L6.939 12.75l2.829-2.828a.75.75 0 1 1 1.06 1.06L9.811 12h2.439a2.25 2.25 0 0 0 2.25-2.25v-5a2.25 2.25 0 0 0-2.25-2.25h-8.5A2.25 2.25 0 0 0 1.5 4.75v5A2.25 2.25 0 0 0 3.75 12H5v1.5H3.75A3.75 3.75 0 0 1 0 9.75v-5z" /></svg></button>
+        </div>
+        {/* Bottom-left: the speaker picker with the device it is on as green text, and the volume. */}
+        <div className="fs-output">
+          {sessionDevice && <DevicePicker devices={devices} active={sessionDevice} onSelect={player.setDevice} showName />}
+          <div className="fs-volume" title={`Volume ${volume}%`}>
+            <button onClick={() => player.setVolume(volume > 0 ? 0 : 60)} title={volume > 0 ? 'Mute' : 'Unmute'}>
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+                {volume === 0 ? (
+                  <><path d="M13.86 5.47a.75.75 0 0 0-1.061 0l-1.47 1.47-1.47-1.47A.75.75 0 0 0 8.8 6.53L10.269 8l-1.47 1.47a.75.75 0 1 0 1.06 1.06l1.47-1.47 1.47 1.47a.75.75 0 0 0 1.06-1.06L12.39 8l1.47-1.47a.75.75 0 0 0 0-1.06z" /><path d="M10.116 1.5A.75.75 0 0 0 8.991.85l-6.925 4a3.642 3.642 0 0 0-1.33 4.967 3.639 3.639 0 0 0 1.33 1.332l6.925 4a.75.75 0 0 0 1.125-.649v-1.906a4.73 4.73 0 0 1-1.5-.694v1.3L2.817 9.852a2.141 2.141 0 0 1-.781-2.92c.187-.324.456-.594.78-.782l5.8-3.35v1.3c.45-.313.956-.55 1.5-.694V1.5z" /></>
+                ) : (
+                  <><path d="M9.741.85a.75.75 0 0 1 .375.65v13a.75.75 0 0 1-1.125.65l-6.925-4a3.642 3.642 0 0 1-1.33-4.967 3.639 3.639 0 0 1 1.33-1.332l6.925-4a.75.75 0 0 1 .75 0zm-6.924 5.3a2.139 2.139 0 0 0 0 3.7l5.8 3.35V2.8l-5.8 3.35zm8.683 4.29V5.56a2.75 2.75 0 0 1 0 4.88z" />{volume > 40 && <path d="M11.5 13.614a5.752 5.752 0 0 0 0-11.228v1.55a4.252 4.252 0 0 1 0 8.127v1.55z" />}</>
+                )}
+              </svg>
+            </button>
+            <input type="range" min="0" max="100" value={volume} onChange={(e) => player.setVolume(Number(e.target.value))} style={{ '--pct': `${volume}%` }} />
+          </div>
         </div>
         {/* Phone-only bottom row (Spotify: devices bottom-left, lyrics / queue bottom-right). */}
         <div className="fs-phone-row">

@@ -496,34 +496,22 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 
 /* ---------- player bar ---------- */
 
-.player { background: var(--black); padding: 0; min-width: 620px; }
+.player { background: var(--black); padding: 8px 0 0; min-width: 620px; }
 .player-error { background: #2a1618; color: var(--danger); padding: 8px 16px; font-size: 14px; cursor: pointer; border-radius: var(--r-art); margin-bottom: 8px; }
-.player-row { display: grid; grid-template-columns: minmax(280px, 30%) minmax(0, 1fr) 30%; align-items: center; height: 84px; gap: 16px; padding-bottom: 4px; }
+.player-row { display: grid; grid-template-columns: 30% minmax(0, 40%) 30%; align-items: center; height: 72px; gap: 16px; }
 
-.player-now { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.player-art { width: 60px; height: 60px; border-radius: var(--r-art); object-fit: cover; background: var(--card-hover); flex: none; }
+.player-now { display: flex; align-items: center; gap: 14px; min-width: 180px; }
+.player-art { width: 56px; height: 56px; border-radius: var(--r-art); object-fit: cover; background: var(--card-hover); }
 .player-art.clickable { cursor: pointer; }
 .player-art.clickable:hover { opacity: .82; }
-.player-meta { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.player-title-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.player-title-row .trackrow-like { width: 24px; height: 24px; flex: none; }
+.player-meta { min-width: 0; }
 .player-title, .player-artist { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .player-title { font-size: 14px; font-weight: 400; }
 .player-artist { color: var(--fg-dim); font-size: 12px; }
 .linkish { padding: 0; color: var(--fg-dim); font-size: 12px; text-align: left; }
 .linkish:hover { color: var(--fg); text-decoration: underline; }
-/* Bottom-left: output device (green name when on a speaker / another client) + volume. */
-.player-output { display: flex; align-items: center; gap: 6px; margin-top: 2px; min-width: 0; }
-.player-output .devicebtn { padding: 2px 4px 2px 0; font-size: 12px; gap: 5px; max-width: 220px; }
-.player-output .devicebtn.with-name .devicebtn-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.player-output .devicebtn.casting { color: var(--accent); }
-.player-output .devicebtn:not(.casting) .devicebtn-name { color: var(--fg-dim); }
-.player-output .player-volume { width: auto; }
-.player-output .player-volume .vol-ico { width: 24px; height: 24px; }
-.player-output .player-volume input { width: 80px; }
 
 .player-controls { display: flex; flex-direction: column; gap: 8px; align-items: center; justify-self: center; width: 100%; max-width: 722px; }
-.player-right .devicepicker { display: none; }
 .player-buttons { display: flex; gap: 16px; align-items: center; }
 .player-buttons button { color: #ffffffb3; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; }
 .player-buttons button:hover:not(:disabled) { color: var(--fg); }
@@ -545,10 +533,9 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
   font-size: 8px; font-weight: 700; color: var(--accent, #1ed760); pointer-events: none;
 }
 
-.player-seek { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 12px 2px; box-sizing: border-box; }
-.player-seek .t { color: var(--fg-dim); font-size: 11px; font-variant-numeric: tabular-nums; width: 40px; flex: none; }
+.player-seek { display: flex; align-items: center; gap: 8px; width: 100%; }
+.player-seek .t { color: var(--fg-dim); font-size: 11px; font-variant-numeric: tabular-nums; width: 50px; }
 .player-seek .t:last-child { text-align: right; }
-.player-seek input { flex: 1; }
 
 input[type="range"] {
   -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 2px;
@@ -710,6 +697,13 @@ input[type="range"]:disabled { opacity: .4; }
 
 
 
+/* Spotify's green "Playing on <device>" bar, pinned under the player. */
+.playing-elsewhere {
+  display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+  background: var(--accent); color: #000; font-size: 11px; font-weight: 700;
+  padding: 3px 12px; margin: 0 -8px -8px; /* span full width past the app's side padding */
+}
+
 /* Small centred dialog (playlist name). */
 .modal-back { position: fixed; inset: 0; z-index: 130; background: rgba(0,0,0,.6); display: grid; place-items: center; }
 .modal { background: var(--bg-elevated-hi); border-radius: 8px; padding: 24px; width: min(420px, calc(100vw - 32px)); display: grid; gap: 16px; box-shadow: 0 16px 24px rgba(0,0,0,.3); }
@@ -857,7 +851,7 @@ button:disabled { cursor: default; }
 .fs-art.ph { width: 56vh; background: #222; }
 .fs-lyrics { width: min(900px, 100%); height: 100%; overflow-y: auto; font-size: 28px; line-height: 1.35; font-weight: 700; padding: 24px 0; mask-image: linear-gradient(transparent, #000 10%, #000 90%, transparent); }
 .fs-lyrics .lyric-line, .fs-lyrics p { font-size: 28px; }
-.fs-bottom { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; padding: 20px 32px 32px; }
+.fs-bottom { display: grid; grid-template-columns: 1fr auto 1fr; grid-template-rows: auto auto auto; align-items: center; gap: 12px 24px; padding: 12px 32px 28px; }
 .fs-meta { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .fs-thumb { width: 64px; height: 64px; border-radius: 6px; object-fit: cover; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
 .fs-title { font-size: 28px; font-weight: 800; letter-spacing: -.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -866,9 +860,19 @@ button:disabled { cursor: default; }
 .fs-artist .linkish:hover { color: #fff; text-decoration: underline; }
 .fs-like { color: #ffffffb3; padding: 8px; }
 .fs-like:hover, .fs-like.on { color: #fff; }
-.fs-seek { grid-column: 1 / -1; grid-row: 2; display: flex; align-items: center; gap: 12px; font-size: 13px; color: #ffffffb3; font-variant-numeric: tabular-nums; }
+.fs-seek { grid-column: 1 / -1; grid-row: 1; display: flex; align-items: center; gap: 12px; font-size: 13px; color: #ffffffb3; font-variant-numeric: tabular-nums; }
 .fs-seek input { flex: 1; }
-.fs-controls { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 24px; color: #ffffffb3; }
+.fs-meta { grid-column: 1; grid-row: 2; }
+.fs-controls { grid-column: 2; grid-row: 2 / 4; display: flex; align-items: center; gap: 24px; color: #ffffffb3; }
+.fs-output { grid-column: 1; grid-row: 3; display: flex; align-items: center; gap: 14px; min-width: 0; color: #ffffffb3; }
+.fs-output .devicebtn { padding: 4px 6px 4px 0; font-size: 13px; gap: 6px; max-width: 260px; color: #ffffffb3; }
+.fs-output .devicebtn.with-name .devicebtn-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-output .devicebtn.casting, .fs-output .devicebtn.casting .devicebtn-name { color: var(--accent); }
+.fs-output .devicemenu { bottom: auto; top: calc(100% + 8px); left: 0; right: auto; }
+.fs-volume { display: flex; align-items: center; gap: 6px; }
+.fs-volume button { width: 28px; height: 28px; display: grid; place-items: center; color: inherit; }
+.fs-volume button:hover { color: #fff; }
+.fs-volume input { width: 110px; }
 .fs-controls button:hover { color: #fff; }
 .fs-controls .ctl-mode.on { color: var(--accent); }
 .fs-play { width: 56px; height: 56px; border-radius: 50%; background: #fff; color: #000 !important; display: grid; place-items: center; }
@@ -1011,11 +1015,9 @@ button:disabled { cursor: default; }
   .player-art { width: 40px; height: 40px; border-radius: 4px; }
   .player-title { font-size: 13px; font-weight: 600; }
   .player-artist, .player-artist .linkish { font-size: 13px; color: rgba(255,255,255,.7); }
-  .player-now .trackrow-like, .player-output { display: none; }
-  .player-row { padding-bottom: 0; }
+  .player-now .trackrow-like { display: none; }
   .player-right { display: flex; min-width: 0; padding: 0; gap: 0; order: 2; margin-right: 2px; }
   .player-right > *:not(.devicepicker) { display: none; }
-  .player-right .devicepicker { display: block; }
   .player-right .devicebtn { color: #fff; }
   .player-right .devicebtn.casting { color: var(--accent); }
   .player-controls { width: auto; max-width: none; gap: 0; order: 3; }
@@ -1117,6 +1119,8 @@ button:disabled { cursor: default; }
   .fs-artist, .fs-artist .linkish { font-size: 16px; color: #b3b3b3; }
   .fs-like { margin-left: auto; }
   .fs-seek { grid-column: 1; grid-row: auto; font-size: 11px; }
+  .fs-meta, .fs-controls { grid-column: 1; grid-row: auto; }
+  .fs-output { display: none; }
   .fs-controls { grid-column: 1; grid-row: auto; justify-content: space-between; gap: 0; padding: 4px 8px; }
   .fs-controls .fs-play { width: 64px; height: 64px; }
   .fs-controls .fs-play svg { width: 28px; height: 28px; }
