@@ -3,6 +3,7 @@ import { Lyrics } from './RightPanel.jsx';
 import Visualizer, { EQ_STYLES, GRADIENTS, DEFAULT_VIZ, loadVizSettings } from './Visualizer.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import DevicePicker from './DevicePicker.jsx';
+import { seekHover } from '../api/seekHover.js';
 import { ArtistLinks, PlayGlyph, PauseGlyph, ShuffleGlyph } from './TrackRow.jsx';
 import { vibrantColor } from '../api/colors.js';
 import { ctxItemId } from '../api/context.js';
@@ -98,7 +99,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
         {/* Progress across the top of the block, above the album thumb and the controls. */}
         <div className="fs-seek">
           <span>{fmt(position || 0)}</span>
-          <input type="range" min="0" max={Math.max(1, duration || 0)} value={Math.min(position || 0, duration || 0)} onChange={(e) => player.seek(Number(e.target.value))} style={{ '--pct': `${duration ? (position / duration) * 100 : 0}%` }} />
+          <input type="range" min="0" max={Math.max(1, duration || 0)} value={Math.min(position || 0, duration || 0)} onChange={(e) => player.seek(Number(e.target.value))} style={{ '--pct': `${duration ? (position / duration) * 100 : 0}%` }} {...seekHover} />
           <span>{fmt(duration || 0)}</span>
         </div>
         <div className="fs-meta">

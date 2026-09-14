@@ -431,10 +431,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 
 .banner { padding: 12px 16px; border-radius: var(--r-panel); background: var(--bg-elevated); color: var(--fg-dim); margin: 16px 24px; font-size: 14px; }
 .banner.error { background: #2a1618; color: var(--danger); }
-.placeholder-note {
-  color: var(--fg-dim); font-size: 14px; padding: 16px; border: 1px dashed #3d3c3c;
-  border-radius: var(--r-panel); margin: 8px 0;
-}
+.placeholder-note { color: var(--fg-dim); font-size: 14px; padding: 16px 0; margin: 8px 0; }
 
 /* ---------- right panel (Now Playing / Queue / Lyrics) ---------- */
 
@@ -551,6 +548,13 @@ input[type="range"] {
   background: linear-gradient(to right, var(--fg) 0%, var(--fg) var(--pct,0%), #ffffff4d var(--pct,0%), #ffffff4d 100%);
 }
 input[type="range"]:hover { background: linear-gradient(to right, var(--seek-accent) 0%, var(--seek-accent) var(--pct,0%), #ffffff4d var(--pct,0%), #ffffff4d 100%); }
+/* Seek bars: while hovering, a white line runs from the playhead to the cursor. */
+.player-seek input[type="range"].hovering, .fs-seek input[type="range"].hovering {
+  background: linear-gradient(to right,
+    #fff 0%, #fff min(var(--pct, 0%), var(--hov, 0%)),
+    rgba(255,255,255,.85) min(var(--pct, 0%), var(--hov, 0%)), rgba(255,255,255,.85) max(var(--pct, 0%), var(--hov, 0%)),
+    #ffffff4d max(var(--pct, 0%), var(--hov, 0%)), #ffffff4d 100%);
+}
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
   background: var(--fg); box-shadow: 0 2px 4px rgba(0,0,0,.5); opacity: 0; transition: opacity .15s;

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import DevicePicker from './DevicePicker.jsx';
 import { Heart, ShuffleGlyph, ArtistLinks } from './TrackRow.jsx';
 import { vibrantColor } from '../api/colors.js';
+import { seekHover } from '../api/seekHover.js';
 
 function fmt(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -208,6 +209,7 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
               onBlur={commitScrub}
               disabled={!nowPlaying || !duration}
               style={{ '--pct': `${pct}%` }}
+              {...seekHover}
             />
             <span className="t">{fmt(duration)}</span>
           </div>
