@@ -96,7 +96,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
           <span>{fmt(duration || 0)}</span>
         </div>
         <div className="fs-meta">
-          {art && tab !== 'album' && <img className="fs-thumb" src={art} alt="" />}
+          {art && <img className="fs-thumb" src={art} alt="" />}
           <div style={{ minWidth: 0 }}>
             <div className="fs-title">{nowPlaying?.title || 'Nothing playing'}</div>
             <div className="fs-artist"><ArtistLinks artists={nowPlaying?.artists} fallback={nowPlaying?.artist || ''} onOpen={(id) => { onClose(); onOpenArtist(id); }} className="linkish" /></div>
@@ -116,7 +116,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
           <button onClick={player.next} title="Next"><svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor"><path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z" /></svg></button>
           <button className={`ctl-mode ${repeat && repeat !== 'off' ? 'on' : ''}`} onClick={player.cycleRepeat} title="Repeat"><svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor"><path d="M0 4.75A3.75 3.75 0 0 1 3.75 1h8.5A3.75 3.75 0 0 1 16 4.75v5a3.75 3.75 0 0 1-3.75 3.75H9.81l1.018 1.018a.75.75 0 1 1-1.06 1.06L6.939 12.75l2.829-2.828a.75.75 0 1 1 1.06 1.06L9.811 12h2.439a2.25 2.25 0 0 0 2.25-2.25v-5a2.25 2.25 0 0 0-2.25-2.25h-8.5A2.25 2.25 0 0 0 1.5 4.75v5A2.25 2.25 0 0 0 3.75 12H5v1.5H3.75A3.75 3.75 0 0 1 0 9.75v-5z" /></svg></button>
         </div>
-        {/* Bottom-left: the speaker picker with the device it is on as green text, and the volume. */}
+        {/* Bottom-right: the speaker picker with the device it is on as green text, and the volume. */}
         <div className="fs-output">
           {sessionDevice && <DevicePicker devices={devices} active={sessionDevice} onSelect={player.setDevice} showName />}
           <div className="fs-volume" title={`Volume ${volume}%`}>
