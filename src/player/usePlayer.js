@@ -165,6 +165,7 @@ export function usePlayer(jf) {
   const setRepeatModeRef = useRef(() => {});
   const setShuffleModeRef = useRef(() => {});
   const activePlayerRef = useRef(null); // clientId of the active player, if not us
+  const wasMirroringRef = useRef(false); // this client has been mirroring another player since it last played itself
   const rosterRef = useRef({ players: [], lanDevices: [] });
   const repeatRef = useRef('off');
   const shuffleRef = useRef('off');
@@ -216,9 +217,16 @@ export function usePlayer(jf) {
   const applySession = useCallback((s) => {
     const np = s?.nowPlaying;
     if (!np?.itemId) return;
-    if (queueRef.current.length && (anchorRef.current.playing || loadedRef.current)) return;
-    const mine = (jf && jf.persisted('playhead')) || {};
-    if (queueRef.current.length && (mine.at || 0) >= (s.at || 0)) return;
+    if (queueRef.current.length && anchorRef.current.playing) return;
+    // A client that was MIRRORING the session takes it over as-is when its
+    // player vanishes (a reload of the playing browser): what it has locally
+    // is whatever it played hours ago, not something to fall back to. Only a
+    // client that was on its own queue weighs its saved playhead against it.
+    if (!wasMirroringRef.current) {
+      if (queueRef.current.length && loadedRef.current) return;
+      const mine = (jf && jf.persisted('playhead')) || {};
+      if (queueRef.current.length && (mine.at || 0) >= (s.at || 0)) return;
+    }
     let q = Array.isArray(s.queue) && s.queue.length ? s.queue : [];
     let i = q.findIndex((t) => t?.Id === np.itemId);
     if (i < 0) {
@@ -1375,7 +1383,9 @@ export function usePlayer(jf) {
   useEffect(() => { previousRef.current = previous; }, [previous]);
   useEffect(() => { setRepeatModeRef.current = setRepeatMode; }, [setRepeatMode]);
   useEffect(() => { setShuffleModeRef.current = setShuffleMode; }, [setShuffleMode]);
-  useEffect(() => { activePlayerRef.current = relayTargetId; }, [relayTargetId]);
+  useEffect(() => { activePlayerRef.current = relayTargetId; if (relayTargetId) wasMirroringRef.current = true; }, [relayTargetId]);
+  // Cleared once this client plays something itself (playQueue / take-over).
+  useEffect(() => { if (playing && !activePlayerRef.current) wasMirroringRef.current = false; }, [playing]);
 
   // Broadcast what we're playing so the roster shows it on other clients. The
   // song AND the playhead go together, so a controller never shows a different
