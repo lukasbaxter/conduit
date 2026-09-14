@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { measureSpeakerLag } from '../api/speakerSync.js';
 
 // The visualizer is a graphic-EQ family (audioMotion-analyzer, the spectrum
 // engine Feishin ships). Settings come from the full-screen tab's ⋯ menu and
@@ -18,22 +19,17 @@ export const EQ_STYLES = [
   { id: 'radial', name: 'Radial', opts: { mode: 5, radial: true, spinSpeed: 1, showPeaks: true, barSpace: .2, mirror: 0, reflexRatio: 0, ledBars: false, fillAlpha: 1, lineWidth: 0 } },
 ];
 export const GRADIENTS = ['prism', 'classic', 'rainbow', 'orangered', 'steelblue'];
-// `delay` (seconds): how far the visualizer lags the speaker's reported
-// playhead when the sound is on a Node / Cast. Their output runs behind the
-// position they report (buffering + DAC), so without it the picture is early.
-// null = per-device default below.
-export const DEFAULT_VIZ = { style: 'line', gradient: 'prism', delay: null };
-// Negative = the picture runs AHEAD of the speaker's reported playhead.
-// Measured on the B&W Node 2i: with a live mirror the shadow tracks
-// (position - delay) within 0.1 s, and the speaker was found to be ahead of
-// the position it reports, so the BluOS default is negative.
-export const DELAY_OPTIONS = [-3, -2.5, -2, -1.5, -1.25, -1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1, 1.5, 2];
-export const defaultDelayFor = (kind) => (kind === 'bluos' ? -2.2 : kind === 'cast' ? 0 : 0);
+// `sync[deviceId]` (seconds): how far the picture must lag the speaker's
+// reported playhead so it lines up with the sound in the room. MEASURED with
+// the microphone (src/api/speakerSync.js), never assumed; `autoSync` (default
+// on) re-measures whenever the visualizer opens on a speaker and every so
+// often after that.
+export const DEFAULT_VIZ = { style: 'line', gradient: 'prism', sync: {}, autoSync: true };
 export function loadVizSettings() {
   try { return { ...DEFAULT_VIZ, ...JSON.parse(localStorage.getItem('conduit.viz') || '{}') }; } catch { return { ...DEFAULT_VIZ }; }
 }
 
-export default function Visualizer({ player, active, jf, settings }) {
+export default function Visualizer({ player, active, jf, settings, onSetting, controls }) {
   const boxRef = useRef(null);
   const stageRef = useRef(null);
   const amRef = useRef(null);
@@ -69,9 +65,7 @@ export default function Visualizer({ player, active, jf, settings }) {
     if (!active || local) { const sh = shadowRef.current; if (sh) sh.el.pause(); return undefined; }
     const sh = shadow();
     if (window.location.search.includes('debug')) { window.__shadow = sh; sh.want = () => want(); }
-    const kind = player.nowPlaying?.device?.kind || player.device?.kind;
-    const delay = cfg.delay != null ? Number(cfg.delay) : defaultDelayFor(kind);
-    const want = () => { const c = clockRef.current; return c.pos + (c.playing ? (Date.now() - c.at) / 1000 : 0) - delay; };
+    const want = () => { const c = clockRef.current; return c.pos + (c.playing ? (Date.now() - c.at) / 1000 : 0) - delayRef.current; };
     // Seeking the ORIGINAL file is not accurate on VBR rips, so every (re)sync
     // is a fresh transcode that ffmpeg starts exactly at `base`; from then on
     // the element's clock is exact and small drift is taken out with
@@ -105,7 +99,49 @@ export default function Visualizer({ player, active, jf, settings }) {
     tick();
     const t = setInterval(tick, 250);
     return () => { clearInterval(t); sh.el.removeEventListener('playing', onPlaying); };
-  }, [active, local, trackId, player.playing, cfg.delay, player.nowPlaying?.device?.kind]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, local, trackId, player.playing]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // --- speaker sync (microphone) --------------------------------------------
+  const deviceId = player.nowPlaying?.device?.id || player.device?.id || null;
+  const delayRef = useRef(0);
+  const learned = deviceId ? cfg.sync?.[deviceId] : undefined;
+  delayRef.current = learned ?? 0;
+  const [syncMsg, setSyncMsg] = useState('');
+  const syncingRef = useRef(false);
+  const lastSyncRef = useRef({ id: null, at: 0 });
+  const runSync = async (manual = false) => {
+    const sh = shadowRef.current;
+    if (!sh || syncingRef.current || local || !clockRef.current.playing) return;
+    syncingRef.current = true;
+    const name = player.nowPlaying?.device?.name || 'speaker';
+    setSyncMsg(`Listening for ${name}…`);
+    try {
+      // Let the shadow settle first: it must be playing at rate 1 for a clean reference.
+      for (let i = 0; i < 20 && (sh.loading || sh.el.paused); i += 1) await new Promise((r) => setTimeout(r, 250)); // eslint-disable-line no-await-in-loop
+      const r = await measureSpeakerLag({ ctx: sh.ctx, refSource: sh.source, seconds: 8, maxLag: 4 });
+      lastSyncRef.current = { id: deviceId, at: Date.now() };
+      if (r.level < 0.001) { setSyncMsg('Could not hear the speaker'); return; }
+      if (r.score < 0.15 || r.margin < 0.04) { setSyncMsg(manual ? 'No clear match, try again with the music louder' : ''); return; }
+      const next = Math.round((delayRef.current + r.lag) * 100) / 100;
+      delayRef.current = next;
+      if (deviceId) onSetting?.({ sync: { ...(cfg.sync || {}), [deviceId]: next } });
+      setSyncMsg(`Synced to ${name}: ${next >= 0 ? '+' : ''}${next.toFixed(2)} s`);
+    } catch (e) {
+      setSyncMsg(/denied|NotAllowed/i.test(String(e)) ? 'Microphone access needed to sync' : `Sync failed: ${e.message}`);
+    } finally {
+      syncingRef.current = false;
+      setTimeout(() => setSyncMsg(''), 6000);
+    }
+  };
+  if (controls) controls.current = { sync: () => runSync(true) };
+  useEffect(() => {
+    if (!active || local || !deviceId || cfg.autoSync === false || !player.playing) return undefined;
+    // First open on this speaker: measure after the shadow has had 2 s; then every 60 s.
+    const due = lastSyncRef.current.id !== deviceId || Date.now() - lastSyncRef.current.at > 60000;
+    const t = setTimeout(() => { if (due) runSync(false); }, learned === undefined ? 2500 : 4000);
+    const iv = setInterval(() => runSync(false), 60000);
+    return () => { clearTimeout(t); clearInterval(iv); };
+  }, [active, local, deviceId, cfg.autoSync, player.playing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const graph = () => { const wa = local ? player.webAudio() : shadow(); wa?.ctx?.resume?.(); return wa; };
 
@@ -141,6 +177,7 @@ export default function Visualizer({ player, active, jf, settings }) {
     <div className="viz" ref={boxRef}>
       <div ref={stageRef} className="viz-stage" />
       {state === 'error' && <div className="viz-msg">The visualizer could not start here.</div>}
+      {syncMsg && <div className="viz-sync">{syncMsg}</div>}
     </div>
   );
 }

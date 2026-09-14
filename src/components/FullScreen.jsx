@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Lyrics } from './RightPanel.jsx';
-import Visualizer, { EQ_STYLES, GRADIENTS, DEFAULT_VIZ, DELAY_OPTIONS, defaultDelayFor, loadVizSettings } from './Visualizer.jsx';
+import Visualizer, { EQ_STYLES, GRADIENTS, DEFAULT_VIZ, loadVizSettings } from './Visualizer.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import { ArtistLinks, PlayGlyph, PauseGlyph, ShuffleGlyph } from './TrackRow.jsx';
 import { vibrantColor } from '../api/colors.js';
@@ -24,13 +24,13 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
   const vizItems = [
     { label: 'Style', sub: EQ_STYLES.map((s2) => ({ key: s2.id, label: `${s2.name}${viz.style === s2.id ? '  ✓' : ''}`, onClick: () => setV({ style: s2.id }) })) },
     { label: 'Colours', sub: GRADIENTS.map((g) => ({ key: g, label: `${g[0].toUpperCase()}${g.slice(1)}${viz.gradient === g ? '  ✓' : ''}`, onClick: () => setV({ gradient: g }) })) },
-    // Only matters when the sound is on a speaker: the picture lags the
-    // speaker's reported playhead by this much. "Auto" = per-device default.
-    { label: 'Speaker sync', sub: [
-      { label: 'negative = picture earlier' },
-      { key: 'auto', label: `Auto (${defaultDelayFor(player.nowPlaying?.device?.kind || player.device?.kind)} s)${viz.delay == null ? '  ✓' : ''}`, onClick: () => setV({ delay: null }) },
-      ...DELAY_OPTIONS.map((d) => ({ key: String(d), label: `${d > 0 ? '+' : ''}${d} s${viz.delay != null && Number(viz.delay) === d ? '  ✓' : ''}`, onClick: () => setV({ delay: d }) })),
-    ] },
+    // Speaker sync is MEASURED with the microphone (see speakerSync.js).
+    ...(player.nowPlaying?.device && player.nowPlaying.device.kind !== 'local' ? [
+      { sep: true },
+      { label: `Sync to ${player.nowPlaying.device.name} now (microphone)`, onClick: () => vizCtl.current?.sync?.() },
+      { label: `Auto-sync on speakers${viz.autoSync !== false ? '  ✓' : ''}`, onClick: () => setV({ autoSync: viz.autoSync === false }) },
+      { label: `Current offset: ${(() => { const v = viz.sync?.[player.nowPlaying.device.id]; return v == null ? 'not measured yet' : `${v >= 0 ? '+' : ''}${v.toFixed(2)} s`; })()}` },
+    ] : []),
   ];
   const { nowPlaying, playing, position, duration, shuffle, repeat } = player;
   const art = nowPlaying?.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: 1000 }) : nowPlaying?.artUrl || null;
@@ -50,7 +50,8 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
     jf.itemById(ctxItemId(ctx)).then((it) => { if (!alive || !it) return; const kind = it.Type === 'MusicArtist' ? 'ARTIST' : it.Type === 'MusicAlbum' ? 'ALBUM' : 'PLAYLIST'; setFrom({ kind: `PLAYING FROM ${kind}`, name: it.Name }); }).catch(() => {});
     return () => { alive = false; };
   }, [player.contextId, jf]);
-  const vizEl = <Visualizer player={player} jf={jf} active={tab === 'viz'} settings={viz} />;
+  const vizCtl = useRef(null);
+  const vizEl = <Visualizer player={player} jf={jf} active={tab === 'viz'} settings={viz} onSetting={setV} controls={vizCtl} />;
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
