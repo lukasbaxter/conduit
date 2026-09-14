@@ -179,6 +179,7 @@ handle('mic:ask', async () => {
   const { systemPreferences } = require('electron');
   if (process.platform !== 'darwin') return 'granted';
   const before = systemPreferences.getMediaAccessStatus('microphone');
+  trace(`mic status ${before}`);
   if (before === 'granted') return before;
   const ok = await systemPreferences.askForMediaAccess('microphone');
   const after = systemPreferences.getMediaAccessStatus('microphone');

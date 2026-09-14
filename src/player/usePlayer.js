@@ -1220,6 +1220,7 @@ export function usePlayer(jf) {
         artId: current.AlbumId || current.Id,
         itemId: current.Id,
         liked: Boolean(current.UserData?.IsFavorite),
+        device: { id: device.id, kind: device.kind, name: device.name },
         albumId: current.AlbumId || null,
         // ArtistItems carries the real artist entity; AlbumArtists is the
         // fallback for tracks credited only at album level.

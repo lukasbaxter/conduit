@@ -25,11 +25,11 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
     { label: 'Style', sub: EQ_STYLES.map((s2) => ({ key: s2.id, label: `${s2.name}${viz.style === s2.id ? '  ✓' : ''}`, onClick: () => setV({ style: s2.id }) })) },
     { label: 'Colours', sub: GRADIENTS.map((g) => ({ key: g, label: `${g[0].toUpperCase()}${g.slice(1)}${viz.gradient === g ? '  ✓' : ''}`, onClick: () => setV({ gradient: g }) })) },
     // Speaker sync is MEASURED with the microphone (see speakerSync.js).
-    ...(player.nowPlaying?.device && player.nowPlaying.device.kind !== 'local' ? [
+    ...((() => { const d = player.nowPlaying?.device || player.device; return d && d.kind !== 'local'; })() ? [
       { sep: true },
-      { label: `Sync to ${player.nowPlaying.device.name} now (microphone)`, onClick: () => vizCtl.current?.sync?.() },
+      { label: `Sync to ${(player.nowPlaying?.device || player.device).name} now (microphone)`, onClick: () => vizCtl.current?.sync?.() },
       { label: `Auto-sync on speakers${viz.autoSync !== false ? '  ✓' : ''}`, onClick: () => setV({ autoSync: viz.autoSync === false }) },
-      { label: `Current offset: ${(() => { const v = viz.sync?.[player.nowPlaying.device.id]; return v == null ? 'not measured yet' : `${v >= 0 ? '+' : ''}${v.toFixed(2)} s`; })()}` },
+      { label: `Current offset: ${(() => { const v = viz.sync?.[(player.nowPlaying?.device || player.device).id]; return v == null ? 'not measured yet' : `${v >= 0 ? '+' : ''}${v.toFixed(2)} s`; })()}` },
     ] : []),
   ];
   const { nowPlaying, playing, position, duration, shuffle, repeat } = player;
