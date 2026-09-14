@@ -113,16 +113,27 @@ export function usePlayer(jf) {
     // stream origin (music.baxtergroup.io) answers with ACAO: *.
     audioRef.current.crossOrigin = 'anonymous';
   }
-  // Built on first use (a user gesture: opening the visualizer). One source
-  // per element for the element's whole life, so it lives in a ref.
+  // Built on first use (a user gesture: opening the visualizer). The analyser
+  // listens to a CAPTURE of the element's output (captureStream), so the sound
+  // itself never leaves the element's native path. Routing the element through
+  // an AudioContext (createMediaElementSource) re-plumbed the audio mid-play:
+  // an audible pop when the visualizer opened, and the context's own buffering
+  // and resampling on the way to the speakers from then on.
   const webAudioRef = useRef(null);
   const webAudio = useCallback(() => {
     if (webAudioRef.current) { webAudioRef.current.ctx.resume?.(); return webAudioRef.current; }
     const el = audioRef.current; if (!el) return null;
     const Ctx = window.AudioContext || window.webkitAudioContext; if (!Ctx) return null;
-    const ctx = new Ctx();
-    const source = ctx.createMediaElementSource(el);
-    source.connect(ctx.destination);
+    const ctx = new Ctx({ latencyHint: 'playback' });
+    let source;
+    if (typeof el.captureStream === 'function') {
+      const stream = el.captureStream();
+      source = ctx.createMediaStreamSource(stream);
+      // Nothing to the destination: the element is still what you hear.
+    } else {
+      source = ctx.createMediaElementSource(el);
+      source.connect(ctx.destination);
+    }
     webAudioRef.current = { ctx, source };
     return webAudioRef.current;
   }, []);
