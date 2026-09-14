@@ -72,13 +72,16 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 
 .navbar {
   display: flex; align-items: center;
-  height: 56px; padding-left: 78px; -webkit-app-region: drag;
+  height: 56px; padding-left: 8px; -webkit-app-region: drag;
 }
+/* macOS desktop: leave room for the traffic lights. */
+.desktop-mac .navbar { padding-left: 78px; }
 .navbar button, .navbar input { -webkit-app-region: no-drag; }
 .brand { display: none; }
 .appmenuwrap { position: relative; display: flex; align-items: center; }
-.appmenu-btn { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--fg-dim); }
-.appmenu-btn:hover { color: var(--fg); background: var(--tint); }
+.appmenu-btn { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: #fff; }
+.appmenu-btn svg { display: block; }
+.appmenu-btn:hover { background: var(--tint); }
 .avatarmenu.appmenu { left: 0; right: auto; }
 .navbar-right { display: flex; align-items: center; gap: 10px; margin-left: auto; padding-right: 8px; }
 

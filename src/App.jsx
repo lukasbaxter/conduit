@@ -726,7 +726,7 @@ export default function App() {
         {/* App menu (the ⋯ Spotify keeps at the top-left), then history arrows. */}
         <div className="appmenuwrap">
           <button className="appmenu-btn" onClick={() => setAppMenu((v) => !v)} title="Menu" aria-label="Menu">
-            <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor"><path d="M3 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm6.5 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM16 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" /></svg>
+            <svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor"><circle cx="2.25" cy="8" r="2" /><circle cx="8" cy="8" r="2" /><circle cx="13.75" cy="8" r="2" /></svg>
           </button>
           {appMenu && (
             <div className="avatarmenu appmenu">
