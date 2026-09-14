@@ -60,6 +60,15 @@ function Panel({ x, y, items, onClose, depth = 0, anchorRight = false, onEnter, 
         {items.map((it, i) => {
           if (!it) return null;
           if (it.sep) return <div key={`sep${i}`} className="ctxmenu-sep" />;
+          if (it.slider) {
+            // A range inside the menu; dragging it must not close the menu.
+            return (
+              <div key={it.key || it.label} className="ctxslider" onMouseEnter={() => setOpen(null)} onClick={(e) => e.stopPropagation()}>
+                <div className="ctxslider-head"><span className="ctx-label">{it.label}</span><span className="ctxslider-val">{it.format ? it.format(it.value) : it.value}</span></div>
+                <input type="range" min={it.min ?? 0} max={it.max ?? 1} step={it.step ?? 0.01} value={it.value} onChange={(e) => it.onChange?.(Number(e.target.value))} style={{ '--pct': `${((it.value - (it.min ?? 0)) / ((it.max ?? 1) - (it.min ?? 0))) * 100}%` }} />
+              </div>
+            );
+          }
           if (it.label && !it.onClick && !it.sub) return <div key={`lbl${i}`} className="ctxmenu-label">{it.label}</div>;
           return (
             <button

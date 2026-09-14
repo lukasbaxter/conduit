@@ -27,6 +27,9 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
   const vizItems = [
     { label: 'Style', sub: EQ_STYLES.map((s2) => ({ key: s2.id, label: `${s2.name}${viz.style === s2.id ? '  ✓' : ''}`, onClick: () => setV({ style: s2.id }) })) },
     { label: 'Colours', sub: GRADIENTS.map((g) => ({ key: g, label: `${g[0].toUpperCase()}${g.slice(1)}${viz.gradient === g ? '  ✓' : ''}`, onClick: () => setV({ gradient: g }) })) },
+    { sep: true },
+    // 0 = raw every frame (real time); 0.95 = very calm.
+    { slider: true, key: 'smoothing', label: 'Smoothing', min: 0, max: 0.95, step: 0.05, value: viz.smoothing ?? 0.6, format: (v) => (v === 0 ? 'Real time' : `${Math.round(v * 100)}%`), onChange: (v) => setV({ smoothing: v }) },
   ];
   const { nowPlaying, playing, position, duration, shuffle, repeat, volume } = player;
   const liked = useLiked(nowPlaying?.itemId);

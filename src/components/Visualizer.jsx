@@ -18,7 +18,8 @@ export const EQ_STYLES = [
   { id: 'radial', name: 'Radial', opts: { mode: 5, radial: true, spinSpeed: 1, showPeaks: true, barSpace: .2, mirror: 0, reflexRatio: 0, ledBars: false, fillAlpha: 1, lineWidth: 0 } },
 ];
 export const GRADIENTS = ['prism', 'classic', 'rainbow', 'orangered', 'steelblue'];
-export const DEFAULT_VIZ = { style: 'line', gradient: 'prism' };
+// `smoothing` 0..0.95: 0 = every frame raw (real time), higher = calmer bars.
+export const DEFAULT_VIZ = { style: 'line', gradient: 'prism', smoothing: 0.6 };
 export function loadVizSettings() {
   try { return { ...DEFAULT_VIZ, ...JSON.parse(localStorage.getItem('conduit.viz') || '{}') }; } catch { return { ...DEFAULT_VIZ }; }
 }
@@ -112,8 +113,8 @@ export default function Visualizer({ player, active, jf, settings }) {
         const am = new AudioMotion(stage, {
           audioCtx: wa.ctx, source: wa.source, connectSpeakers: false,
           overlay: true, bgAlpha: 0, showBgColor: false, showScaleX: false, showScaleY: false,
-          smoothing: .7, minFreq: 30, maxFreq: 16000, weightingFilter: 'D', maxFPS: 60,
-          ...style.opts, gradient: cfg.gradient,
+          minFreq: 30, maxFreq: 16000, weightingFilter: 'D', maxFPS: 60,
+          ...style.opts, gradient: cfg.gradient, smoothing: cfg.smoothing ?? style.opts.smoothing ?? .6,
         });
         amRef.current = am;
         if (window.location.search.includes('debug')) window.__vizAm = am;
@@ -122,6 +123,8 @@ export default function Visualizer({ player, active, jf, settings }) {
     })();
     return () => { alive = false; try { amRef.current?.destroy(); } catch {} amRef.current = null; };
   }, [active, local, style.id, cfg.gradient]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Smoothing changes apply live to the running analyser.
+  useEffect(() => { if (amRef.current && cfg.smoothing != null) amRef.current.smoothing = cfg.smoothing; }, [cfg.smoothing]);
 
 
   return (
