@@ -172,6 +172,19 @@ handle('devices:list', () => (discovery ? withSyncInfo(discovery.list()) : []));
 // renderer passes the wanted filename as a `conduit_name` query param, which
 // Jellyfin ignores.
 handle('download', (url) => { if (win) win.webContents.downloadURL(url); return true; });
+// macOS hands the renderer a SILENT microphone unless the app itself asks
+// for access first (systemPreferences.askForMediaAccess) -- getUserMedia
+// alone never triggers the system prompt in Electron. Returns the status.
+handle('mic:ask', async () => {
+  const { systemPreferences } = require('electron');
+  if (process.platform !== 'darwin') return 'granted';
+  const before = systemPreferences.getMediaAccessStatus('microphone');
+  if (before === 'granted') return before;
+  const ok = await systemPreferences.askForMediaAccess('microphone');
+  const after = systemPreferences.getMediaAccessStatus('microphone');
+  trace(`mic:ask ${before} -> ${after} (${ok})`);
+  return after;
+});
 app.whenReady().then(() => {
   session.defaultSession.on('will-download', (_e, item) => {
     let name = item.getFilename();

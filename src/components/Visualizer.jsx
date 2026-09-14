@@ -120,7 +120,8 @@ export default function Visualizer({ player, active, jf, settings, onSetting, co
       for (let i = 0; i < 20 && (sh.loading || sh.el.paused); i += 1) await new Promise((r) => setTimeout(r, 250)); // eslint-disable-line no-await-in-loop
       const r = await measureSpeakerLag({ ctx: sh.ctx, refSource: sh.source, seconds: 8, maxLag: 4 });
       lastSyncRef.current = { id: deviceId, at: Date.now() };
-      if (r.level < 0.001) { setSyncMsg('Could not hear the speaker'); return; }
+      if (r.refLevel < 0.0005) { setSyncMsg('Reference stream is silent, try again'); return; }
+      if (r.level < 0.0002) { setSyncMsg(`Could not hear the speaker (mic level ${r.level.toExponential(1)})`); return; }
       if (r.score < 0.15 || r.margin < 0.04) { setSyncMsg(manual ? 'No clear match, try again with the music louder' : ''); return; }
       const next = Math.round((delayRef.current + r.lag) * 100) / 100;
       delayRef.current = next;

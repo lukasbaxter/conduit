@@ -44,7 +44,14 @@ function shape(rec, t0, bin, n) {
  * mean mic RMS (to tell silence from a bad match).
  */
 export async function measureSpeakerLag({ ctx, refSource, seconds = 8, maxLag = 4, signal } = {}) {
+  // Desktop: macOS needs the app to ask before the mic carries any sound.
+  if (window.conduit?.askMic) {
+    const status = await window.conduit.askMic().catch(() => 'granted');
+    if (status && status !== 'granted') throw new Error(status === 'denied' ? 'NotAllowed: microphone denied in System Settings > Privacy > Microphone' : `microphone ${status}`);
+  }
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  const track = stream.getAudioTracks()[0];
+  if (!track || track.muted || track.readyState !== 'live') throw new Error('microphone track is muted');
   const mic = ctx.createMediaStreamSource(stream);
   await ctx.resume?.();
   const ref = envelopeRecorder(ctx, refSource), room = envelopeRecorder(ctx, mic);
@@ -77,5 +84,5 @@ export function lagFromRecordings(ref, room, sampleRate, maxLag = 4) {
   const guard = Math.round(0.15 / bin); let second = -Infinity;
   for (let lag = -L; lag <= L; lag += 1) if (Math.abs(lag - bestLag) > guard && corr[lag + L] > second) second = corr[lag + L];
   const level = room.v.reduce((s, x) => s + x, 0) / room.v.length;
-  return { lag: bestLag * bin, score: best, margin: best - second, level };
+  return { lag: bestLag * bin, score: best, margin: best - second, level, refLevel: ref.v.reduce((s2, x) => s2 + x, 0) / ref.v.length };
 }
