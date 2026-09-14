@@ -234,20 +234,21 @@ export default function App() {
   // Mouse back / forward buttons (buttons 3 and 4) drive the in-app history in
   // the browser and on the desktop; the browser's own navigation is suppressed.
   // Electron on macOS also delivers them as app-command events via the main process.
+  const navRef = useRef({ goBack, goForward }); navRef.current = { goBack, goForward };
   useEffect(() => {
     const onMouse = (e) => {
       if (e.button !== 3 && e.button !== 4) return;
       e.preventDefault();
-      if (e.button === 3) goBack(); else goForward();
+      if (e.button === 3) navRef.current.goBack(); else navRef.current.goForward();
     };
     window.addEventListener('mouseup', onMouse);
     // Chromium fires the page navigation on mousedown/auxclick too; swallow both.
     const swallow = (e) => { if (e.button === 3 || e.button === 4) e.preventDefault(); };
     window.addEventListener('mousedown', swallow);
     window.addEventListener('auxclick', swallow);
-    const off = window.conduit?.onNavigate?.((dir) => (dir === 'back' ? goBack() : goForward()));
+    const off = window.conduit?.onNavigate?.((dir) => (dir === 'back' ? navRef.current.goBack() : navRef.current.goForward()));
     return () => { window.removeEventListener('mouseup', onMouse); window.removeEventListener('mousedown', swallow); window.removeEventListener('auxclick', swallow); off?.(); };
-  }); // no deps: goBack/goForward close over the latest history state
+  }, []); // registered once; the ref always points at the current history
   const canForward = histRef.current.idx < histRef.current.stack.length - 1;
   // null | 'npv' | 'queue' | 'lyrics'
   const [panel, setPanel] = useState(null);

@@ -286,11 +286,14 @@ export default function Library({
   const discoRef = useRef(null);
   const [discoMinH, setDiscoMinH] = useState(0);
   useEffect(() => { setDiscoMinH(0); }, [detail?.item?.Id]);
+  // Measure only when the list can actually change size -- NOT every render
+  // (the player ticks several times a second and a forced layout each time
+  // made the whole app lag).
   useLayoutEffect(() => {
     const el = discoRef.current; if (!el) return;
     const h = el.offsetHeight;
     if (h > discoMinH) setDiscoMinH(h);
-  });
+  }, [discoLib, discoFilter, discog, detail?.item?.Id, detail?.albums?.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const [overIdx, setOverIdx] = useState(null);
 
   useEffect(() => {
