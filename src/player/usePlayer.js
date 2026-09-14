@@ -1297,9 +1297,28 @@ export function usePlayer(jf) {
         } catch { /* ignore */ }
       }
     } else if (cmd.action === 'play' && jf && Array.isArray(cmd.trackIds) && cmd.trackIds.length) {
+      // Start the chosen song the moment ITS record is here; the rest of the
+      // queue (often 20-50 tracks with full fields) arrives behind it and is
+      // swapped in around the playing track. Waiting for the whole list first
+      // cost about a second between the click on the phone and the sound.
+      const fields = 'ArtistItems,AlbumArtists,UserData';
+      const idx = Math.min(cmd.index || 0, cmd.trackIds.length - 1);
+      const chosenId = cmd.trackIds[idx];
       try {
-        const tracks = await fetchByIds(jf, cmd.trackIds, 'ArtistItems,AlbumArtists,UserData');
-        if (tracks.length) playQueueRef.current(tracks, Math.min(cmd.index || 0, tracks.length - 1), cmd.ctx || null, cmd.startAt || 0);
+        const rest = cmd.trackIds.length > 1 ? fetchByIds(jf, cmd.trackIds, fields) : null;
+        const [first] = await fetchByIds(jf, [chosenId], fields);
+        if (!first) return;
+        await playQueueRef.current([first], 0, cmd.ctx || null, cmd.startAt || 0);
+        if (!rest) return;
+        const tracks = await rest;
+        // Still on that song? Then fill the queue in around it, respecting shuffle.
+        if (queueRef.current[indexRef.current]?.Id !== chosenId || !tracks.length) return;
+        const at = Math.max(0, tracks.findIndex((t) => t.Id === chosenId));
+        let order = tracks, start = at;
+        if (shuffleRef.current !== 'off' && tracks.length > 1) { order = [tracks[at], ...shuffled(tracks.filter((_, i) => i !== at))]; start = 0; }
+        originalQueueRef.current = tracks;
+        setQueue(order); queueRef.current = order;
+        setIndex(start); indexRef.current = start;
       } catch { /* ignore */ }
     } else if (cmd.action === 'enqueue' && jf && Array.isArray(cmd.trackIds) && cmd.trackIds.length) {
       (async () => {
