@@ -50,8 +50,6 @@ contextBridge.exposeInMainWorld('conduit', {
 
   // Save a track: main names the file and shows the save dialog.
   download: (url) => call('download', url),
-  // Microphone permission (speaker sync): resolves 'granted' | 'denied' | 'restricted' | 'not-determined'.
-  askMic: () => call('mic:ask'),
 
   remote: {
     play: (device, url, meta, startAt = 0) => call('device:play', device, url, meta, startAt),

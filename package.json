@@ -48,10 +48,7 @@
         "zip"
       ],
       "category": "public.app-category.music",
-      "identity": null,
-      "extendInfo": {
-        "NSMicrophoneUsageDescription": "Conduit listens for a few seconds to line the visualizer up with your speakers."
-      }
+      "identity": null
     },
     "win": {
       "target": [

@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { measureSpeakerLag } from '../api/speakerSync.js';
 
 // The visualizer is a graphic-EQ family (audioMotion-analyzer, the spectrum
 // engine Feishin ships). Settings come from the full-screen tab's ⋯ menu and
@@ -19,18 +18,12 @@ export const EQ_STYLES = [
   { id: 'radial', name: 'Radial', opts: { mode: 5, radial: true, spinSpeed: 1, showPeaks: true, barSpace: .2, mirror: 0, reflexRatio: 0, ledBars: false, fillAlpha: 1, lineWidth: 0 } },
 ];
 export const GRADIENTS = ['prism', 'classic', 'rainbow', 'orangered', 'steelblue'];
-// `sync[deviceId]` (seconds): how far the picture must lag the speaker's
-// reported playhead so it lines up with the sound. Set by the user with the
-// live sync slider (like a TV's lip-sync control) and remembered per speaker;
-// nothing is assumed and nothing listens on its own. An explicit "calibrate
-// with microphone" button (src/api/speakerSync.js) exists for when you are in
-// the room and want it measured.
-export const DEFAULT_VIZ = { style: 'line', gradient: 'prism', sync: {} };
+export const DEFAULT_VIZ = { style: 'line', gradient: 'prism' };
 export function loadVizSettings() {
   try { return { ...DEFAULT_VIZ, ...JSON.parse(localStorage.getItem('conduit.viz') || '{}') }; } catch { return { ...DEFAULT_VIZ }; }
 }
 
-export default function Visualizer({ player, active, jf, settings, onSetting, controls }) {
+export default function Visualizer({ player, active, jf, settings }) {
   const boxRef = useRef(null);
   const stageRef = useRef(null);
   const amRef = useRef(null);
@@ -65,8 +58,7 @@ export default function Visualizer({ player, active, jf, settings, onSetting, co
   useEffect(() => {
     if (!active || local) { const sh = shadowRef.current; if (sh) sh.el.pause(); return undefined; }
     const sh = shadow();
-    if (window.location.search.includes('debug')) { window.__shadow = sh; sh.want = () => want(); }
-    const want = () => { const c = clockRef.current; return c.pos + (c.playing ? (Date.now() - c.at) / 1000 : 0) - delayRef.current; };
+    const want = () => { const c = clockRef.current; return c.pos + (c.playing ? (Date.now() - c.at) / 1000 : 0); };
     // Seeking the ORIGINAL file is not accurate on VBR rips, so every (re)sync
     // is a fresh transcode that ffmpeg starts exactly at `base`; from then on
     // the element's clock is exact and small drift is taken out with
@@ -102,59 +94,6 @@ export default function Visualizer({ player, active, jf, settings, onSetting, co
     return () => { clearInterval(t); sh.el.removeEventListener('playing', onPlaying); };
   }, [active, local, trackId, player.playing]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // --- speaker sync (microphone) --------------------------------------------
-  const deviceId = player.nowPlaying?.device?.id || player.device?.id || null;
-  const delayRef = useRef(0);
-  const learned = deviceId ? cfg.sync?.[deviceId] : undefined;
-  delayRef.current = learned ?? 0;
-  const [syncMsg, setSyncMsg] = useState('');
-  const syncingRef = useRef(false);
-  const lastSyncRef = useRef({ id: null, at: 0 });
-  const runSync = async (manual = false) => {
-    const sh = shadowRef.current;
-    if (!sh || syncingRef.current || local || !clockRef.current.playing) return;
-    syncingRef.current = true;
-    const name = player.nowPlaying?.device?.name || 'speaker';
-    setSyncMsg(`Listening for ${name}…`);
-    try {
-      // Let the shadow settle first: it must be playing at rate 1 for a clean reference.
-      for (let i = 0; i < 20 && (sh.loading || sh.el.paused); i += 1) await new Promise((r) => setTimeout(r, 250)); // eslint-disable-line no-await-in-loop
-      const r = await measureSpeakerLag({ ctx: sh.ctx, refSource: sh.source, seconds: 8, maxLag: 4 });
-      lastSyncRef.current = { id: deviceId, at: Date.now() };
-      if (r.refLevel < 0.0005) { setSyncMsg('Reference stream is silent, try again'); return; }
-      if (r.level < 0.0002) { setSyncMsg(`Could not hear the speaker on ${r.mic || 'the microphone'}`); return; }
-      if (r.score < 0.15 || r.margin < 0.04) { setSyncMsg(manual ? 'No clear match, try again with the music louder' : ''); return; }
-      const next = Math.round((delayRef.current + r.lag) * 100) / 100;
-      delayRef.current = next;
-      if (deviceId) onSetting?.({ sync: { ...(cfg.sync || {}), [deviceId]: next } });
-      setSyncMsg(`Synced to ${name}: ${next >= 0 ? '+' : ''}${next.toFixed(2)} s (via ${r.mic || 'microphone'})`);
-    } catch (e) {
-      setSyncMsg(/denied|NotAllowed/i.test(String(e)) ? 'Microphone access needed to sync' : `Sync failed: ${e.message}`);
-    } finally {
-      syncingRef.current = false;
-      setTimeout(() => setSyncMsg(''), 6000);
-    }
-  };
-  // Manual sync: the slider panel (⋯ menu / [ and ] keys) writes the value
-  // straight into the clock and saves it for this speaker.
-  const [adjust, setAdjust] = useState(false);
-  const setOffset = (v) => {
-    const next = Math.round(Math.max(-4, Math.min(4, v)) * 100) / 100;
-    delayRef.current = next;
-    if (deviceId) onSetting?.({ sync: { ...(cfg.sync || {}), [deviceId]: next } });
-  };
-  if (controls) controls.current = { sync: () => runSync(true), adjust: () => setAdjust((v) => !v), offset: () => delayRef.current, setOffset };
-  useEffect(() => {
-    if (!active || local) return undefined;
-    const onKey = (e) => {
-      if (e.target.closest('input, textarea')) return;
-      if (e.key === '[') { setOffset(delayRef.current - 0.1); setAdjust(true); }
-      else if (e.key === ']') { setOffset(delayRef.current + 0.1); setAdjust(true); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [active, local, deviceId, cfg.sync]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const graph = () => { const wa = local ? player.webAudio() : shadow(); wa?.ctx?.resume?.(); return wa; };
 
   // Graphic EQ engine.
@@ -189,22 +128,6 @@ export default function Visualizer({ player, active, jf, settings, onSetting, co
     <div className="viz" ref={boxRef}>
       <div ref={stageRef} className="viz-stage" />
       {state === 'error' && <div className="viz-msg">The visualizer could not start here.</div>}
-      {syncMsg && <div className="viz-sync">{syncMsg}</div>}
-      {adjust && !local && (
-        <div className="viz-adjust" onClick={(e) => e.stopPropagation()}>
-          <div className="viz-adjust-head">
-            <span>Sync to {player.nowPlaying?.device?.name || 'speaker'}</span>
-            <button onClick={() => setAdjust(false)} aria-label="Close">×</button>
-          </div>
-          <div className="viz-adjust-row">
-            <button onClick={() => setOffset(delayRef.current - 0.1)}>−</button>
-            <input type="range" min="-4" max="4" step="0.05" value={delayRef.current} onChange={(e) => setOffset(Number(e.target.value))} />
-            <button onClick={() => setOffset(delayRef.current + 0.1)}>+</button>
-            <b>{delayRef.current >= 0 ? '+' : ''}{delayRef.current.toFixed(2)} s</b>
-          </div>
-          <small>Picture behind the sound? Drag left. Ahead? Drag right. Keys [ and ] nudge by 0.1 s. Saved for this speaker.</small>
-        </div>
-      )}
     </div>
   );
 }
