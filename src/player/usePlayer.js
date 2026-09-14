@@ -905,15 +905,22 @@ export function usePlayer(jf) {
       anchorAt(at, wasPlaying);
 
       try {
-        await stopOn(prev);
+        // Start the new device FIRST and only then stop the old one, so the
+        // music never drops out while the target spins up (a Node takes a few
+        // seconds to fetch, seek and unmute). The brief overlap is the price.
         if (track && wasPlaying) {
           await startOn(nextDevice, track, at);
           anchorAt(at, true);
           setPlaying(true);
+          stopOn(prev).catch(() => {});
+        } else {
+          await stopOn(prev);
         }
       } catch (e) {
+        // The target failed: the old device is still playing, leave it be.
+        setDeviceState(prev); deviceRef.current = prev;
         setError(`Could not move playback to ${nextDevice.name}: ${e.message}`);
-        setPlaying(false);
+        setPlaying(wasPlaying);
       } finally {
         // Show the incoming device's real volume rather than carrying the old
         // one across; they are independent hardware levels.
