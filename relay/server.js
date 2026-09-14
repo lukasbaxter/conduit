@@ -692,7 +692,7 @@ const reconciledAt = new Map(); // uid -> ms
 // the relay existed) is added with a sensible date; a favourite Jellyfin no
 // longer has, for a like we know we had written, was unliked elsewhere.
 async function reconcileLikes(uid, token) {
-  if (Date.now() - (reconciledAt.get(uid) || 0) < 10 * 60 * 1000) return;
+  if (Date.now() - (reconciledAt.get(uid) || 0) < 30 * 1000) return;
   reconciledAt.set(uid, Date.now());
   const q = new URLSearchParams({ IncludeItemTypes: 'Audio', Recursive: 'true', Filters: 'IsFavorite', Fields: 'DateCreated', Limit: '20000', userId: uid, SortBy: 'DateCreated', SortOrder: 'Descending' });
   const r = await fetch(`${JELLYFIN}/Items?${q}`, { headers: { Authorization: `MediaBrowser Token="${token}"` }, signal: AbortSignal.timeout(30000) });
@@ -703,8 +703,14 @@ async function reconcileLikes(uid, token) {
   const add = [];
   for (const [id, created] of jf) if (!mine.has(id)) add.push([id, first ? (created || Date.now()) : Date.now()]);
   if (add.length) store.likeSeed(uid, add);
-  for (const [id, row] of mine) if (row.synced && !jf.has(id)) store.likeDel(uid, id);
-  if (add.length) console.log(`likes: ${uid.slice(0, 8)} +${add.length} from Jellyfin${first ? ' (first sync)' : ''}`);
+  const gone = [];
+  for (const [id, row] of mine) if (row.synced && !jf.has(id)) { store.likeDel(uid, id); gone.push(id); }
+  // Tell the live clients about anything that changed outside the app.
+  if (!first) {
+    for (const [id, at] of add) for (const c of userMap(uid).values()) send(c.ws, { type: 'like', itemId: id, liked: true, at });
+    for (const id of gone) for (const c of userMap(uid).values()) send(c.ws, { type: 'like', itemId: id, liked: false, at: Date.now() });
+  }
+  if (add.length || gone.length) console.log(`likes: ${uid.slice(0, 8)} +${add.length} -${gone.length} from Jellyfin${first ? ' (first sync)' : ''}`);
 }
 // Failed write-throughs are retried every few minutes with a live client's token.
 setInterval(() => {
@@ -744,7 +750,11 @@ const server = http.createServer(async (req, res) => {
       else if (path === '/likes') {
         // Old prefs-blob timestamps, sent once by the client, keep their dates.
         if (req.method === 'POST') { let body = ''; for await (const chunk of req) body += chunk; const seed = JSON.parse(body || '{}'); store.likeSeed(who.id, Object.entries(seed).filter(([, at]) => Number.isFinite(at))); }
-        await reconcileLikes(who.id, token);
+        // First time for the account: seed from Jellyfin before answering.
+        // Later: answer now, reconcile behind (likes made in other Jellyfin
+        // apps arrive as `like` messages within a second or so).
+        if (store.likeCount(who.id) === 0) await reconcileLikes(who.id, token);
+        else reconcileLikes(who.id, token).catch((e) => console.error('likes reconcile', e.message));
         out = { at: Object.fromEntries(store.likesAll(who.id).map((r) => [r.item_id, r.at])) };
       }
       else if (path === '/playlist') out = await playlistFast(who, token, url.searchParams.get('id') || '');
