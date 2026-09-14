@@ -867,7 +867,9 @@ button:disabled { cursor: default; }
 .fs-output { grid-column: 3; grid-row: 2; justify-self: end; display: flex; align-items: center; gap: 14px; min-width: 0; color: #ffffffb3; }
 .fs-output .devicebtn { padding: 4px 6px 4px 0; font-size: 13px; gap: 6px; max-width: 260px; color: #ffffffb3; }
 .fs-output .devicebtn.with-name .devicebtn-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-output .devicebtn:hover, .fs-output .devicebtn:hover .devicebtn-name { color: #fff; }
 .fs-output .devicebtn.casting, .fs-output .devicebtn.casting .devicebtn-name { color: var(--accent); }
+.fs-output .devicebtn.casting:hover, .fs-output .devicebtn.casting:hover .devicebtn-name { color: var(--accent-hover); }
 .fs-output .devicemenu { right: 0; left: auto; }
 .fs-volume { display: flex; align-items: center; gap: 6px; }
 .fs-volume button { width: 28px; height: 28px; display: grid; place-items: center; color: inherit; }
