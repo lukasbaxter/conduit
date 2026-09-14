@@ -174,7 +174,10 @@ export class Jellyfin {
   }
 
   async setPrefs(patch) {
-    if (!this._dp) await this.getPrefs();
+    // Jellyfin replaces the whole CustomPrefs blob on write, so re-read it
+    // first: writing a stale copy from THIS client used to wipe keys other
+    // clients had just saved (that is how likedAt kept vanishing).
+    await this.getPrefs();
     const dp = { ...this._dp, Client: 'conduit', CustomPrefs: { ...(this._dp.CustomPrefs || {}) } };
     for (const [k, v] of Object.entries(patch)) dp.CustomPrefs[k] = typeof v === 'string' ? v : JSON.stringify(v);
     const q = new URLSearchParams({ userId: this.userId, client: 'conduit' });

@@ -80,6 +80,16 @@ export const similar = (jf, artistId, name) => relayGet(jf, '/similar', { artist
 // The artist's tracks in popularity order (Deezer top-100 matched to the library), as ids.
 export const popular = (jf, artistId, name) => relayGet(jf, '/popular', { artistId, name }, 15000);
 export const radar = (jf) => relayGet(jf, '/radar', {}, 120000);
+// When each track was liked (relay store). `seed` = old prefs timestamps, sent once.
+export async function likes(jf, seed = null) {
+  const res = await fetch(`${relayBase()}/likes`, seed
+    ? { method: 'POST', headers: { 'X-Emby-Token': jf.token, 'Content-Type': 'application/json' }, body: JSON.stringify(seed), signal: AbortSignal.timeout(10000) }
+    : { headers: { 'X-Emby-Token': jf.token }, signal: AbortSignal.timeout(10000) });
+  if (!res.ok) throw new Error(`likes ${res.status}`);
+  return (await res.json()).at || {};
+}
+// A playlist's tracks in order, from playlist.xml + the search index (fast).
+export const playlistTracks = (jf, id) => relayGet(jf, "/playlist", { id }, 8000);
 // Listening history (ListenBrainz mirrored by the relay): stats for a range, or a page of recent listens.
 export const history = (jf, params) => relayGet(jf, '/history', { tzo: new Date().getTimezoneOffset(), ...params }, 180000);
 export async function requestAlbum(jf, albumId) {

@@ -41,7 +41,7 @@ SYNONYMS = {
 SETTINGS = {
     'tracks': {
         'searchableAttributes': ['name', 'artists', 'album', 'albumArtist', 'lyrics'],
-        'filterableAttributes': ['artistIds', 'albumId', 'year', 'genres', 'liked', 'playlistIds', 'artists', 'album'],
+        'filterableAttributes': ['id', 'artistIds', 'albumId', 'year', 'genres', 'liked', 'playlistIds', 'artists', 'album'],
         'sortableAttributes': ['plays', 'year'],
         'rankingRules': ['words', 'typo', 'proximity', 'attribute', 'sort', 'exactness', 'plays:desc'],
         'synonyms': SYNONYMS,

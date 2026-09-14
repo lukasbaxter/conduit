@@ -19,6 +19,7 @@
 // friend's TV only on her LAN.
 
 import fs from 'fs';
+import crypto from 'crypto';
 import http from 'http';
 import { WebSocketServer } from 'ws';
 import { openDb, migrateJson } from './db.js';
@@ -641,6 +642,43 @@ async function history(self, url) {
   return { connected: true, ...historyStats(self.uid, url.searchParams.get('range') || '4w', Number(url.searchParams.get('tzo')) || 0) };
 }
 
+// --- fast playlists ---------------------------------------------------------
+// Jellyfin resolves playlist entries one by one (~0.5 s per 100 tracks, 3 s+
+// for a big list). Its playlist.xml is just the ordered file paths, and an
+// item id is a deterministic hash of the path, so the relay reads the file,
+// computes the ids and pulls the rows from Meilisearch in one query (~20 ms).
+// PlaylistItemId == item id for these files (they carry no per-entry ids).
+const JF_PLAYLISTS = process.env.JF_PLAYLISTS_DIR || '/jfdata/playlists';
+function jellyfinId(type, filePath) {
+  // GetNewItemId: MD5 of UTF-16LE(type.FullName + path), then .NET Guid byte order.
+  const h = crypto.createHash('md5').update(Buffer.from(type + filePath, 'utf16le')).digest();
+  return Buffer.concat([h.subarray(0, 4).reverse(), h.subarray(4, 6).reverse(), h.subarray(6, 8).reverse(), h.subarray(8)]).toString('hex');
+}
+async function playlistFast(who, token, playlistId) {
+  if (!/^[0-9a-f]{32}$/.test(playlistId)) throw new Error('bad id');
+  const r = await fetch(`${JELLYFIN}/Items/${playlistId}?userId=${who.id}&Fields=Path`, { headers: { Authorization: `MediaBrowser Token="${token}"` }, signal: AbortSignal.timeout(5000) });
+  if (!r.ok) throw new Error(`playlist ${r.status}`);
+  const pl = await r.json();
+  if (!pl.Path || !pl.Path.startsWith('/config/data/playlists/')) throw new Error('not a file playlist');
+  const file = `${JF_PLAYLISTS}/${pl.Path.slice('/config/data/playlists/'.length)}/playlist.xml`;
+  const xml = fs.readFileSync(file, 'utf8');
+  const paths = [...xml.matchAll(/<Path>([^<]*)<\/Path>/g)].map((m) => m[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'"));
+  const ids = paths.map((p) => jellyfinId('MediaBrowser.Controller.Entities.Audio.Audio', p));
+  const docs = new Map();
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = ids.slice(i, i + 500);
+    const res = await meiliOne('tracks', { q: '', limit: chunk.length, filter: `id IN [${chunk.map((x) => JSON.stringify(x)).join(',')}]`, attributesToRetrieve: ['id', 'name', 'artists', 'artistIds', 'album', 'albumId', 'albumArtist', 'year', 'durationTicks', 'liked'] });
+    for (const d of res.hits || []) docs.set(d.id, d);
+  }
+  const items = ids.map((id) => docs.get(id)).filter(Boolean).map((d) => ({
+    Id: d.id, PlaylistItemId: d.id, Name: d.name, Type: 'Audio', Artists: d.artists || [], AlbumArtist: d.albumArtist || '',
+    ArtistItems: (d.artists || []).map((n, i) => ({ Name: n, Id: (d.artistIds || [])[i] })).filter((a) => a.Id),
+    Album: d.album || '', AlbumId: d.albumId || null, ProductionYear: d.year || null, RunTimeTicks: d.durationTicks || 0,
+    UserData: { IsFavorite: Array.isArray(d.liked) && d.liked.includes(who.id) },
+  }));
+  return { items, total: ids.length, missing: ids.length - items.length };
+}
+
 async function requestAlbum(albumId) {
   const r = await fetch(`${MUSIC_REQUESTS}/api/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ album_id: albumId }), signal: AbortSignal.timeout(20000) });
   const j = await r.json().catch(() => ({}));
@@ -659,7 +697,7 @@ const server = http.createServer(async (req, res) => {
   if (req.url === '/healthz') { res.writeHead(200); res.end('ok'); return; }
   const url = new URL(req.url, 'http://x');
   const path = url.pathname.replace(/^\/relay/, '');
-  if (path === '/discography' || path === '/radar' || path === '/request' || path === '/similar' || path === '/popular' || path === '/history') {
+  if (path === '/discography' || path === '/radar' || path === '/request' || path === '/similar' || path === '/popular' || path === '/history' || path === '/likes' || path === '/playlist') {
     const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, X-Emby-Token, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }
     try {
@@ -668,6 +706,12 @@ const server = http.createServer(async (req, res) => {
       if (!who) { res.writeHead(401, cors); res.end('{"error":"unauthorized"}'); return; }
       let out;
       if (path === '/history') out = await history({ uid: who.id, token }, url);
+      else if (path === '/likes') {
+        // Seed from the (few) timestamps the old prefs blob still has, once.
+        if (req.method === 'POST') { let body = ''; for await (const chunk of req) body += chunk; const seed = JSON.parse(body || '{}'); store.likeSeed(who.id, Object.entries(seed).filter(([, at]) => Number.isFinite(at))); }
+        out = { at: Object.fromEntries(store.likesAll(who.id).map((r) => [r.item_id, r.at])) };
+      }
+      else if (path === '/playlist') out = await playlistFast(who, token, url.searchParams.get('id') || '');
       else if (path === '/discography') out = await discography(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '');
       else if (path === '/radar') out = { releases: await releaseRadar() };
       else if (path === '/similar') out = { artists: await similarArtists(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '') };
@@ -863,6 +907,17 @@ wss.on('connection', (ws, req) => {
       // Account settings changed on one client (theme, quality): tell the
       // user's other clients so they repaint right away. Jellyfin holds the
       // persistent copy; this is only the live nudge.
+      // A like / unlike with its timestamp: kept here (SQLite) so Liked Songs
+      // keeps its newest-first order on every device. Jellyfin remains the
+      // truth for WHETHER a track is liked; this is only WHEN.
+      case 'like': {
+        if (!msg.itemId) break;
+        const at = Date.now();
+        if (msg.liked) store.likePut(self.uid, String(msg.itemId), at); else store.likeDel(self.uid, String(msg.itemId));
+        for (const c of userMap(self.uid).values()) if (c.id !== self.id) send(c.ws, { type: 'like', itemId: msg.itemId, liked: !!msg.liked, at });
+        break;
+      }
+
       case 'prefs':
         if (msg.prefs && 'listenbrainz' in msg.prefs) lbTokens.set(self.uid, msg.prefs.listenbrainz && msg.prefs.listenbrainz.token ? msg.prefs.listenbrainz : null);
         for (const c of userMap(self.uid).values()) {

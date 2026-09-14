@@ -30,6 +30,7 @@ export function openDb(file) {
     CREATE TABLE IF NOT EXISTS history (uid TEXT PRIMARY KEY, user TEXT, complete INTEGER NOT NULL DEFAULT 0, synced_at INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS matches (key TEXT PRIMARY KEY, id TEXT, album_id TEXT, artist_id TEXT, dur INTEGER, genres TEXT);
     CREATE TABLE IF NOT EXISTS cache (k TEXT PRIMARY KEY, json TEXT NOT NULL, at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS likes (uid TEXT NOT NULL, item_id TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (uid, item_id));
   `);
   const q = {
     sessionGet: db.prepare('SELECT json, at FROM sessions WHERE uid = ?'),
@@ -50,6 +51,10 @@ export function openDb(file) {
     cacheGet: db.prepare('SELECT json, at FROM cache WHERE k = ?'),
     cachePut: db.prepare('INSERT INTO cache (k, json, at) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET json = excluded.json, at = excluded.at'),
     cacheDel: db.prepare('DELETE FROM cache WHERE k LIKE ?'),
+    likePut: db.prepare('INSERT INTO likes (uid, item_id, at) VALUES (?, ?, ?) ON CONFLICT(uid, item_id) DO UPDATE SET at = excluded.at'),
+    likeDel: db.prepare('DELETE FROM likes WHERE uid = ? AND item_id = ?'),
+    likesAll: db.prepare('SELECT item_id, at FROM likes WHERE uid = ? ORDER BY at DESC'),
+    likeKeep: db.prepare('INSERT OR IGNORE INTO likes (uid, item_id, at) VALUES (?, ?, ?)'),
   };
   return {
     db,
@@ -73,6 +78,11 @@ export function openDb(file) {
     cacheGet(k, maxAgeMs) { const r = q.cacheGet.get(k); if (!r) return undefined; if (maxAgeMs != null && Date.now() - r.at > maxAgeMs) return undefined; return JSON.parse(r.json); },
     cachePut(k, v) { q.cachePut.run(k, JSON.stringify(v), Date.now()); },
     cacheClear(prefix) { q.cacheDel.run(`${prefix}%`); },
+    // --- likes (when each track was liked; Jellyfin only knows THAT it is)
+    likePut(uid, itemId, at = Date.now()) { q.likePut.run(uid, itemId, at); },
+    likeDel(uid, itemId) { q.likeDel.run(uid, itemId); },
+    likesAll(uid) { return q.likesAll.all(uid); },
+    likeSeed(uid, rows) { db.exec('BEGIN'); try { for (const [id, at] of rows) q.likeKeep.run(uid, id, at); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; } },
   };
 }
 

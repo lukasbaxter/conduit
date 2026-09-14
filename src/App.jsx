@@ -9,7 +9,7 @@ import RightPanel from './components/RightPanel.jsx';
 import FullScreen from './components/FullScreen.jsx';
 import { downloadTrack } from './api/download.js';
 import { applyTheme, DEFAULT_THEME } from './api/prefs.js';
-import { search as relaySearch, popular as relayPopular } from './api/search.js';
+import { search as relaySearch, popular as relayPopular, likes as relayLikes, playlistTracks as relayPlaylist } from './api/search.js';
 
 // Everything goes through music.baxtergroup.io (Let's Encrypt on the origin,
 // Cloudflare proxy deliberately off -- it throttles the audio). The browser
@@ -290,13 +290,23 @@ export default function App() {
     }).catch(() => {});
   }, [jf]);
 
-  useEffect(() => { if (jf) jf.likedAt = prefs.likedAt || {}; }, [jf, prefs.likedAt]);
+  // When each track was liked, from the relay's store (Jellyfin only knows
+  // THAT a track is liked). Seeds the relay once with whatever the old prefs
+  // blob still holds, then that blob is left alone.
+  useEffect(() => {
+    if (!jf) return;
+    const seed = prefs.likedAt && Object.keys(prefs.likedAt).length ? prefs.likedAt : null;
+    relayLikes(jf, seed).then((m) => { jf.likedAt = m; }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jf, prefs.likedAt ? 1 : 0]);
 
   // Change a setting: apply here, save to the account, nudge the other clients.
   const updatePrefs = async (patch) => {
-    const next = { ...prefs, ...patch };
-    setPrefs(next); applyTheme(next.theme); jf.quality = next.quality; jf._persist('prefs', next);
-    player.relay?.sendPrefs?.(next);
+    // Only the PATCH travels (to Jellyfin and over the relay); every client
+    // merges it. Broadcasting whole prefs objects let a stale client overwrite
+    // what another had just saved.
+    setPrefs((cur) => { const next = { ...cur, ...patch }; applyTheme(next.theme); jf.quality = next.quality; jf._persist('prefs', next); return next; });
+    player.relay?.sendPrefs?.(patch);
     try { await jf.setPrefs(patch); } catch (e) { notify(`Could not save settings: ${e.message}`); }
   };
   const onUploadAvatar = async (file) => {
@@ -380,10 +390,21 @@ export default function App() {
       onQueue: (from, q) => player.applyRemoteQueue(from, q),
       onSession: (s) => player.applySession(s),
       onPrefs: (p) => {
-        const next = { ...p, theme: { ...DEFAULT_THEME, ...(p.theme || {}) }, quality: p.quality || 'original' };
-        delete next._libraryChanged;
-        setPrefs(next); applyTheme(next.theme); jf.quality = next.quality; jf._persist('prefs', next);
+        const patch = { ...p }; delete patch._libraryChanged;
+        setPrefs((cur) => {
+          const next = { ...cur, ...patch };
+          if (patch.theme) next.theme = { ...DEFAULT_THEME, ...patch.theme };
+          applyTheme(next.theme); jf.quality = next.quality || 'original'; jf._persist('prefs', next);
+          return next;
+        });
         if (p._libraryChanged && p._libraryChanged !== relayLibraryPing.current) { relayLibraryPing.current = p._libraryChanged; refreshPlaylists(); }
+      },
+      // Another client liked / unliked: keep the timestamp map and the hearts in step.
+      onLike: ({ itemId, liked, at }) => {
+        const la = { ...(jf.likedAt || {}) };
+        if (liked) la[itemId] = at; else delete la[itemId];
+        jf.likedAt = la;
+        patchLiked(itemId, liked);
       },
     });
     player.attachRelay(relay);
@@ -462,7 +483,7 @@ export default function App() {
     try {
       await jf.deleteItem(pl.Id);
       await refreshPlaylists();
-      player.relay?.sendPrefs?.({ ...prefs, _libraryChanged: Date.now() });
+      player.relay?.sendPrefs?.({ _libraryChanged: Date.now() });
       setDetail(null);
       notify(`Deleted ${pl.Name}`);
     } catch (e) { notify(`Could not delete: ${e.message}`); }
@@ -517,10 +538,26 @@ export default function App() {
     const cached = jf.persisted(`pl.${pl.Id}`);
     setDetail({ item: pl, tracks: reconcile(cached || [], 0), kind: 'Playlist', loading: !cached });
     const since = Date.now();
+    // Fast path: the relay reads Jellyfin's playlist.xml and answers from the
+    // search index in ~20 ms (Jellyfin itself takes ~0.5 s per 100 tracks).
+    // Jellyfin's own copy (the truth for liked / played state) follows behind.
+    let fast = null;
+    try {
+      const r = await relayPlaylist(jf, pl.Id);
+      if (r?.items?.length) { fast = r.items; setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, tracks: reconcile(fast, since), loading: false } : d)); }
+    } catch { /* relay down or a playlist it cannot read: Jellyfin below */ }
     try {
       // First page renders fast; the rest streams in behind. Virtualized, so the
       // visible rows are ready at once. Every result is persisted for next time.
       const first = await jf.playlistTracks(pl.Id, { startIndex: 0, limit: 100 });
+      if (fast && first.total > first.items.length) {
+        // Already showing the whole list from the relay: wait for the full copy
+        // rather than flashing a 100-row version in between.
+        const rest = await jf.playlistTracks(pl.Id);
+        setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, tracks: reconcile(rest.items, since), loading: false } : d));
+        jf._persist(`pl.${pl.Id}`, rest.items);
+        return;
+      }
       setDetail((d) => (d && d.item?.Id === pl.Id ? { ...d, tracks: reconcile(first.items, since), loading: false } : d));
       jf._persist(`pl.${pl.Id}`, first.items);
       if (first.total > first.items.length) {
@@ -586,9 +623,10 @@ export default function App() {
       }
       notify(liked ? 'Added to Liked Songs' : 'Removed from Liked Songs');
       // Remember WHEN, so Liked Songs stays newest-first across every device.
-      const la = { ...(prefs.likedAt || {}) };
+      const la = { ...(jf.likedAt || {}) };
       if (liked) la[track.Id] = Date.now(); else delete la[track.Id];
-      updatePrefs({ likedAt: la });
+      jf.likedAt = la;
+      player.relay?.sendLike?.(track.Id, liked);
       setLikedCount((c) => (c == null ? c : Math.max(0, c + (liked ? 1 : -1))));
       // Liked Songs view stays live: unliking drops the row, liking (e.g. the
       // now-playing track from the footer) prepends it, newest first like
@@ -617,7 +655,7 @@ export default function App() {
       await jf.setFavorite(album.Id, on);
       notify(on ? 'Added to Your Library' : 'Removed from Your Library');
       const a = await jf.favoriteAlbums(); setSavedAlbums(a.items); jf._persist('savedAlbums', a.items);
-      player.relay?.sendPrefs?.({ ...prefs, _libraryChanged: Date.now() });
+      player.relay?.sendPrefs?.({ _libraryChanged: Date.now() });
     } catch (e) { notify(`Could not update: ${e.message}`); }
   };
   // Another client changed the library (saved an album, made a playlist).
@@ -627,7 +665,7 @@ export default function App() {
     try {
       await jf.createPlaylist(name, firstTrack ? [firstTrack.Id] : []);
       await refreshPlaylists();
-      player.relay?.sendPrefs?.({ ...prefs, _libraryChanged: Date.now() });
+      player.relay?.sendPrefs?.({ _libraryChanged: Date.now() });
       notify(firstTrack ? `Added to ${name}` : `Created ${name}`);
     } catch (e) { notify(`Could not create playlist: ${e.message}`); }
   };
@@ -705,7 +743,7 @@ export default function App() {
   // Test hook: drive playback/transfer from the headless test. Gated on ?debug.
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.search.includes('debug')) {
-      window.__jf = jf; window.__player = player;
+      window.__jf = jf; window.__player = player; window.__onLike = onLike; window.__updatePrefs = updatePrefs;
     }
   }, [jf, player]);
 
