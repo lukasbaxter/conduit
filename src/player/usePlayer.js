@@ -1012,9 +1012,11 @@ export function usePlayer(jf) {
   useEffect(() => {
     if (device.kind === 'local' || !remote) return undefined;
     let cancelled = false;
-    // One status reading from the device. `exact` = the reading arrived on
-    // the speaker's own second tick (BluOS long-poll), so the whole second
-    // is the true position at `arrivedAt`; otherwise it is a floor value.
+    // One status reading from the device. `exact` = `arrivedAt` is the
+    // moment the speaker's whole-second counter ticked over to `position`
+    // (caught by the BluOS loop below), so the position is the true one at
+    // that instant; otherwise it is a reading of unknown phase, and it only
+    // moves the anchor when the anchor no longer agrees with it.
     const apply = (s, arrivedAt, exact) => {
       if (cancelled || !s || transitionRef.current) return;
       const a = anchorRef.current;
@@ -1068,15 +1070,23 @@ export function usePlayer(jf) {
         stalledRef.current = 0;
       }
 
-      // De-bias a whole-second clock: the reported value is the floor of the
-      // true position, so the expected true value is half a second later.
-      const debiased = exact ? reported : (s.coarsePosition && s.playing ? reported + 0.5 : reported);
-      anchorRef.current = { pos: debiased, at: arrivedAt, playing: !!s.playing };
+      // A whole-second clock reports the floor of the true position. While
+      // our anchor is consistent with the reading (the true value lies in
+      // [reported, reported+1), or within 0.3 s for a sub-second clock) leave
+      // it alone: re-anchoring on every poll was what made the head jitter by
+      // up to a second. Re-anchor only on an exact tick or a real disagreement.
+      const agrees = a.playing && !!s.playing && (s.coarsePosition
+        ? expected >= reported && expected < reported + 1
+        : Math.abs(expected - reported) < 0.3);
+      if (exact || !agrees) {
+        const debiased = exact ? reported : (s.coarsePosition && s.playing ? reported + 0.5 : reported);
+        anchorRef.current = { pos: debiased, at: arrivedAt, playing: !!s.playing };
+      }
       if (s.duration) setDuration(s.duration);
       setPlaying(Boolean(s.playing));
       // The ticker only runs while playing; once it stops nothing else would
       // move the displayed position, so pin it to what the device reports.
-      if (!s.playing) setPosition(debiased);
+      if (!s.playing) setPosition(anchorRef.current.pos);
       // Mirror the speaker's own volume, including changes made from the
       // BluOS app or a physical dial -- but never while the user is dragging.
       // A muted speaker (the resume dance mutes for a moment) must not drag
@@ -1086,23 +1096,42 @@ export function usePlayer(jf) {
       }
 
     };
-    // BluOS: sit on the long-poll so every reading lands on the second tick
-    // (exact clock). Anything else: the 2 s poll.
+    // BluOS only counts whole seconds, and its long-poll returns on state
+    // changes, never on the tick (verified against the Node: 30 s timeouts
+    // while playing). So catch the tick ourselves: poll fast until two
+    // readings straddle a change of the counter -- the tick happened between
+    // the first response and the second request, which pins the true
+    // position to ~100 ms -- then drop to a 1 s check that only re-anchors
+    // (and re-catches the tick) if the anchor has drifted out of agreement.
     let timer = null;
-    if (device.kind === 'bluos' && remote.statusWait) {
+    if (device.kind === 'bluos') {
       (async () => {
-        let etag = null;
+        let prev = null;    // { secs, t1 } of the last reading while playing
+        let locked = false; // the anchor sits on a caught tick
         while (!cancelled) {
           try {
-            const s = await remote.statusWait(device, etag);
+            if (transitionRef.current) { prev = null; locked = false; await new Promise((r) => setTimeout(r, 300)); continue; }
+            const t0 = Date.now();
+            const s = await remote.status(device);
+            const t1 = Date.now();
             if (cancelled) return;
-            etag = s?.etag || etag;
-            // A reading that came back with a changed etag while playing is
-            // the tick edge (or a state change, equally exact).
-            apply(s, s?.arrivedAt || Date.now(), true);
+            if (!s.playing) { apply(s, (t0 + t1) / 2, false); prev = null; locked = false; await new Promise((r) => setTimeout(r, 1000)); continue; }
+            const a = anchorRef.current;
+            const expected = a.playing ? a.pos + (t1 - a.at) / 1000 : a.pos;
+            const agrees = a.playing && expected >= s.position && expected < s.position + 1;
+            if (locked && !agrees) locked = false;
+            if (!locked && prev && s.position === prev.secs + 1 && t0 - prev.t1 < 600) {
+              // The counter ticked between prev's response and this request.
+              apply(s, (prev.t1 + t0) / 2, true);
+              locked = true;
+            } else {
+              apply(s, (t0 + t1) / 2, false);
+            }
+            prev = { secs: s.position, t1 };
+            await new Promise((r) => setTimeout(r, locked ? 1000 : 200));
           } catch {
-            await new Promise((r) => setTimeout(r, 2000)); // blip: fall back to a beat
-            try { const s = await remote.status(device); if (!cancelled) apply(s, Date.now(), false); } catch { /* keep looping */ }
+            prev = null;
+            await new Promise((r) => setTimeout(r, 2000));
           }
         }
       })();
