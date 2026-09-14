@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import TrackRow, { PlayGlyph, PauseGlyph, Heart, ShuffleGlyph, LikedCover } from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import { ctxOf } from '../api/context.js';
@@ -280,6 +280,17 @@ export default function Library({
   // Discography filter on the artist page: 'all' | 'album' | 'single' | 'compilation'.
   const [discoFilter, setDiscoFilter] = useState('all');
   const [discoLib, setDiscoLib] = useState('all'); // 'all' | 'have' | 'missing'
+  // Filtering the discography must not move the page: the section keeps the
+  // tallest height it has had for this artist, so a shorter list leaves blank
+  // space below instead of pulling the scroll position up.
+  const discoRef = useRef(null);
+  const [discoMinH, setDiscoMinH] = useState(0);
+  useEffect(() => { setDiscoMinH(0); }, [detail?.item?.Id]);
+  useLayoutEffect(() => {
+    const el = discoRef.current; if (!el) return;
+    const h = el.offsetHeight;
+    if (h > discoMinH) setDiscoMinH(h);
+  });
   const [overIdx, setOverIdx] = useState(null);
 
   useEffect(() => {
@@ -817,7 +828,7 @@ export default function Library({
                 .sort((a, b) => (yearOf(b) - yearOf(a)) || String(b.r.date || '').localeCompare(String(a.r.date || '')));
               const have = all.filter((x) => x.inLib).length;
               return (
-                <section>
+                <section ref={discoRef} style={discoMinH ? { minHeight: discoMinH } : undefined}>
                   <div className="shelf-head">
                     <h2>Discography</h2>
                     {dg === null ? <span className="settings-hint">Loading…</span> : all.length ? <span className="settings-hint">{have} of {all.length} in your library</span> : null}
