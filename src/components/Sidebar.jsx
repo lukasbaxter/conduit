@@ -22,6 +22,13 @@ function Icon({ name, size = 22 }) {
  * Left rail. "Your Library" is Liked Songs pinned first, then the user's own
  * playlists -- Spotify's layout. Albums and artists live under Home and Search.
  */
+// Spotify's green thumbtack, shown before the subtitle of pinned entries.
+const Pin = () => (
+  <svg className="libpin" viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-label="Pinned">
+    <path d="M8.822.797a2.72 2.72 0 0 1 3.847 0l2.534 2.533a2.72 2.72 0 0 1 0 3.848l-3.678 3.678-1.337 4.988-4.486-4.486L1.28 15.78a.75.75 0 0 1-1.06-1.06l4.422-4.422L.156 5.812l4.987-1.337L8.822.797z" />
+  </svg>
+);
+
 export default function Sidebar({ view, onView, playlists, likedCount, onOpen, onOpenLiked, onCreate, jf, loading,
   savedAlbums = [], onOpenAlbum, player, prefs, onUpdatePrefs, onEditPlaylist, onDeletePlaylist, onFollowAlbum, onOpenArtist }) {
   const [menu, setMenu] = useState(null); // { x, y, entry }
@@ -41,8 +48,16 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
     const pos = new Map(order.map((id, i) => [id, i]));
     const known = all.filter((e) => pos.has(e.id)).sort((a, b) => pos.get(a.id) - pos.get(b.id));
     const fresh = all.filter((e) => !pos.has(e.id));
-    return [...fresh, ...known];
-  }, [playlists, savedAlbums, prefs?.libraryOrder]);
+    // Pinned entries float to the top (in their own dragged order), like Spotify's pins.
+    const pinned = new Set(Array.isArray(prefs?.libraryPinned) ? prefs.libraryPinned : []);
+    const list = [...fresh, ...known];
+    return [...list.filter((e) => pinned.has(e.id)), ...list.filter((e) => !pinned.has(e.id))];
+  }, [playlists, savedAlbums, prefs?.libraryOrder, prefs?.libraryPinned]);
+  const pinned = new Set(Array.isArray(prefs?.libraryPinned) ? prefs.libraryPinned : []);
+  const togglePin = (id) => {
+    const next = pinned.has(id) ? [...pinned].filter((x) => x !== id) : [...pinned, id];
+    onUpdatePrefs?.({ libraryPinned: next });
+  };
 
   const reorder = (fromId, toId) => {
     if (!fromId || !toId || fromId === toId) return;
@@ -64,12 +79,14 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
     { label: 'Play', onClick: () => playEntry(e) },
     { label: 'Add to queue', onClick: () => playEntry(e, true) },
     { sep: true },
+    { label: pinned.has(e.id) ? 'Unpin album' : 'Pin album', onClick: () => togglePin(e.id) },
     e.item.AlbumArtists?.[0]?.Id ? { label: 'Go to artist', onClick: () => onOpenArtist?.(e.item.AlbumArtists[0].Id) } : null,
     { label: 'Remove from Your Library', onClick: () => onFollowAlbum?.(e.item, false) },
   ] : [
     { label: 'Play', onClick: () => playEntry(e) },
     { label: 'Add to queue', onClick: () => playEntry(e, true) },
     { sep: true },
+    { label: pinned.has(e.id) ? 'Unpin playlist' : 'Pin playlist', onClick: () => togglePin(e.id) },
     { label: 'Edit details', onClick: () => onEditPlaylist?.(e.item) },
     { label: 'Delete', danger: true, onClick: () => { if (window.confirm(`Delete "${e.item.Name}"?`)) onDeletePlaylist?.(e.item); } },
   ];
@@ -136,7 +153,7 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
             <LikedCover />
             <span className="libitem-text">
               <span className="libitem-name">Liked Songs</span>
-              <span className="libitem-sub">Playlist{likedCount != null ? ` · ${likedCount} songs` : ''}</span>
+              <span className="libitem-sub"><Pin />Playlist{likedCount != null ? ` · ${likedCount} songs` : ''}</span>
             </span>
           </button>}
 
@@ -163,7 +180,7 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
                 {art ? <img src={art} alt="" loading="lazy" draggable={false} /> : <div className="ph" />}
                 <span className="libitem-text">
                   <span className="libitem-name">{it.Name}</span>
-                  <span className="libitem-sub">{sub}</span>
+                  <span className="libitem-sub">{pinned.has(e.id) && <Pin />}{sub}</span>
                 </span>
               </button>
             );

@@ -155,7 +155,8 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .libitem.round img, .libitem.round .ph { border-radius: 50%; }
 .libitem-text { min-width: 0; display: flex; flex-direction: column; }
 .libitem-name { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.libitem-sub { color: var(--fg-dim); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.libitem-sub { color: var(--fg-dim); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+.libpin { color: var(--accent); flex: none; }
 
 /* ---------- content ---------- */
 
