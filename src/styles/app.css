@@ -844,6 +844,7 @@ button:disabled { cursor: default; }
 .fs-kebab { width: 20px; height: 36px; display: grid; place-items: center; color: #ffffffb3; margin-left: -4px; }
 .fs-kebab:hover { color: #fff; }
 .fs-divider { width: 1px; height: 20px; background: rgba(255,255,255,.28); margin: 0 10px 0 8px; }
+.fs-chevron, .fs-from-phone, .fs-phone-row, .mobile-back, .mobile-title, .libchips, .libsort, .login-mark { display: none; }
 .fs-close { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #ffffffb3; }
 .fs-close:hover { color: #fff; }
 .fs-stage { display: grid; place-items: center; min-height: 0; padding: 0 32px; }
