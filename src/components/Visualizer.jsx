@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { paletteColors } from '../api/colors.js';
+import Calibrate from './Calibrate.jsx';
 
 // The visualizer is a graphic-EQ family (audioMotion-analyzer, the spectrum
 // engine Feishin ships). Settings come from the full-screen tab's ⋯ menu and
@@ -8,7 +9,9 @@ import { paletteColors } from '../api/colors.js';
 // Audio source: the local <audio> element when this device plays. When the
 // sound is on a speaker or another client, a silent shadow copy of the same
 // stream is played in step with the session's playhead and analysed instead
-// (its graph has no destination, so nothing is heard twice).
+// (its graph has no destination, so nothing is heard twice). `offset` is the
+// speaker's measured output delay (seconds, from the calibration): the shadow
+// runs that far behind the reported playhead so the bars match the sound.
 export const EQ_STYLES = [
   // "Line": Feishin's default preset (mode 10 line graph, 1.9px, prism, faint reflection).
   { id: 'line', name: 'Line', opts: { mode: 10, lineWidth: 1.9, fillAlpha: 0, barSpace: .7, reflexRatio: .5, reflexAlpha: .1, reflexBright: 1, showPeaks: false, ledBars: false, lumiBars: false, radial: false, mirror: 0, smoothing: .6, fftSize: 16384, maxFreq: 22050, minFreq: 20, gravity: 11, linearBoost: 4, maxDecibels: -25, minDecibels: -85 } },
@@ -26,7 +29,7 @@ export function loadVizSettings() {
   try { return { ...DEFAULT_VIZ, ...JSON.parse(localStorage.getItem('conduit.viz') || '{}') }; } catch { return { ...DEFAULT_VIZ }; }
 }
 
-export default function Visualizer({ player, active, jf, settings }) {
+export default function Visualizer({ player, active, jf, settings, offset = 0, calibrate = null, onCalibrated, onCalibrateClose }) {
   const boxRef = useRef(null);
   const stageRef = useRef(null);
   const amRef = useRef(null);
@@ -58,10 +61,16 @@ export default function Visualizer({ player, active, jf, settings }) {
   // position captured when the effect ran.
   const clockRef = useRef({ pos: 0, at: Date.now(), playing: false });
   clockRef.current = { pos: player.position || 0, at: Date.now(), playing: !!player.playing };
+  const offsetRef = useRef(0);
+  offsetRef.current = Number.isFinite(offset) ? offset : 0;
+  // What the speaker REPORTS right now (no offset): the calibration measures
+  // the delay against this.
+  const reported = (at = Date.now()) => { const c = clockRef.current; return c.pos + (c.playing ? (at - c.at) / 1000 : 0); };
   useEffect(() => {
     if (!active || local) { const sh = shadowRef.current; if (sh) sh.el.pause(); return undefined; }
     const sh = shadow();
-    const want = () => { const c = clockRef.current; return c.pos + (c.playing ? (Date.now() - c.at) / 1000 : 0); };
+    // What is coming out of the speaker right now: reported minus its delay.
+    const want = () => reported() - offsetRef.current;
     // Seeking the ORIGINAL file is not accurate on VBR rips, so every (re)sync
     // is a fresh transcode that ffmpeg starts exactly at `base`; from then on
     // the element's clock is exact and small drift is taken out with
@@ -92,10 +101,12 @@ export default function Visualizer({ player, active, jf, settings }) {
       sh.el.playbackRate = Math.abs(drift) < 0.04 ? 1 : Math.min(1.25, Math.max(0.8, 1 - drift * 0.6));
     };
     sh.el.addEventListener('playing', onPlaying);
+    // A new offset is a jump, not drift: restart the stream at the new spot.
+    if (sh.offset !== offsetRef.current) { sh.offset = offsetRef.current; sh.id = null; }
     tick();
     const t = setInterval(tick, 250);
     return () => { clearInterval(t); sh.el.removeEventListener('playing', onPlaying); };
-  }, [active, local, trackId, player.playing]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, local, trackId, player.playing, offset]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const graph = () => { const wa = local ? player.webAudio() : shadow(); wa?.ctx?.resume?.(); return wa; };
 
@@ -151,6 +162,10 @@ export default function Visualizer({ player, active, jf, settings }) {
     <div className="viz" ref={boxRef}>
       <div ref={stageRef} className="viz-stage" />
       {state === 'error' && <div className="viz-msg">The visualizer could not start here.</div>}
+      {calibrate && !local && (
+        <Calibrate player={player} device={calibrate} shadow={shadow} reported={reported}
+          onDone={(v) => onCalibrated?.(v)} onClose={() => onCalibrateClose?.()} />
+      )}
     </div>
   );
 }

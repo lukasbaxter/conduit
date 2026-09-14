@@ -6,6 +6,9 @@
 //   matches    listen key (artist|title) -> library track, shared by everyone
 //   cache      JSON blobs with a timestamp (discography, popular, similar,
 //              browse, radar) so a redeploy does not refetch everything
+//   devices    per-speaker output delay (seconds), measured by a user tapping
+//              along in the visualizer's calibration; shared by every account
+//              because the delay belongs to the speaker, not the listener
 //
 // The old JSON files (sessions.json, history-<uid>.json) are imported once
 // on first start and renamed *.migrated.
@@ -31,6 +34,7 @@ export function openDb(file) {
     CREATE TABLE IF NOT EXISTS matches (key TEXT PRIMARY KEY, id TEXT, album_id TEXT, artist_id TEXT, dur INTEGER, genres TEXT);
     CREATE TABLE IF NOT EXISTS cache (k TEXT PRIMARY KEY, json TEXT NOT NULL, at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS likes (uid TEXT NOT NULL, item_id TEXT NOT NULL, at INTEGER NOT NULL, synced INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (uid, item_id));
+    CREATE TABLE IF NOT EXISTS devices (id TEXT PRIMARY KEY, offset REAL NOT NULL, uid TEXT, at INTEGER NOT NULL);
   `);
   try { db.exec('ALTER TABLE likes ADD COLUMN synced INTEGER NOT NULL DEFAULT 0'); } catch { /* already there */ }
   const q = {
@@ -59,6 +63,9 @@ export function openDb(file) {
     likeSynced: db.prepare('UPDATE likes SET synced = 1 WHERE uid = ? AND item_id = ?'),
     likesUnsynced: db.prepare('SELECT uid, item_id FROM likes WHERE synced = 0'),
     likeCount: db.prepare('SELECT COUNT(*) AS n FROM likes WHERE uid = ?'),
+    offsetPut: db.prepare('INSERT INTO devices (id, offset, uid, at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET offset = excluded.offset, uid = excluded.uid, at = excluded.at'),
+    offsetDel: db.prepare('DELETE FROM devices WHERE id = ?'),
+    offsetsAll: db.prepare('SELECT id, offset FROM devices'),
   };
   return {
     db,
@@ -90,6 +97,9 @@ export function openDb(file) {
     likeSynced(uid, itemId) { q.likeSynced.run(uid, itemId); },
     likesUnsynced() { return q.likesUnsynced.all(); },
     likeCount(uid) { return q.likeCount.get(uid)?.n || 0; },
+    // --- devices (visualizer timing offset per speaker; null clears it)
+    offsetPut(id, offset, uid) { if (offset == null) q.offsetDel.run(id); else q.offsetPut.run(id, offset, uid || null, Date.now()); },
+    offsetsAll() { return Object.fromEntries(q.offsetsAll.all().map((r) => [r.id, r.offset])); },
   };
 }
 

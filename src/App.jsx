@@ -11,6 +11,7 @@ import { downloadTrack } from './api/download.js';
 import { applyTheme, DEFAULT_THEME } from './api/prefs.js';
 import { search as relaySearch, popular as relayPopular, likes as relayLikes, playlistTracks as relayPlaylist } from './api/search.js';
 import { likesLoad, likesSet, likesSnapshot, likedIds, likesReady, isLiked, useLikesVersion } from './api/likes.js';
+import { offsetsMerge } from './api/offsets.js';
 
 // Everything goes through music.baxtergroup.io (Let's Encrypt on the origin,
 // Cloudflare proxy deliberately off -- it throttles the audio). The browser
@@ -382,6 +383,8 @@ export default function App() {
       },
       // Another client liked / unliked: keep the timestamp map and the hearts in step.
       onLike: ({ itemId, liked, at }) => { likesSet(itemId, liked, at); },
+      // Speaker timing offsets measured by anyone on this relay.
+      onOffsets: offsetsMerge,
     });
     player.attachRelay(relay);
     return () => { relay.close(); player.attachRelay(null); };

@@ -29,7 +29,7 @@ function clientId() {
 }
 
 export class Relay {
-  constructor({ token, name, kind, canPlay = true, onRoster, onCommand, onQueue, onSession, onPrefs, onLike }) {
+  constructor({ token, name, kind, canPlay = true, onRoster, onCommand, onQueue, onSession, onPrefs, onLike, onOffsets }) {
     this.token = token;
     this.name = name;
     this.kind = kind; // 'desktop' | 'web' | 'mobile'
@@ -40,6 +40,7 @@ export class Relay {
     this.onSession = onSession || (() => {});
     this.onPrefs = onPrefs || (() => {});
     this.onLike = onLike || (() => {});
+    this.onOffsets = onOffsets || (() => {});
     this.id = clientId();
     this.ws = null;
     this.closed = false;
@@ -67,6 +68,7 @@ export class Relay {
       let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.type === 'hello-ok') {
         this.connected = true;
+        if (m.offsets) this.onOffsets(m.offsets);
         // Only now is the server listening to us. Anything sent while it was
         // still verifying the token was dropped -- which is how the desktop's
         // speaker list went missing from the web player after a restart.
@@ -79,6 +81,7 @@ export class Relay {
       } else if (m.type === 'queue') this.onQueue(m.from, m.queue || null);
       else if (m.type === 'prefs') this.onPrefs(m.prefs || {});
       else if (m.type === 'like') this.onLike(m);
+      else if (m.type === 'offset') this.onOffsets({ [m.id]: m.offset });
       else if (m.type === 'session') this.onSession({ nowPlaying: m.nowPlaying, queue: m.queue || [], at: m.at || 0 });
       else if (m.type === 'roster') this.onRoster({ players: m.players || [], lanDevices: m.lanDevices || [], activeClientId: m.activeClientId || null });
       else if (m.type === 'command') {
@@ -123,6 +126,8 @@ export class Relay {
   sendPrefs(prefs) { this._send({ type: 'prefs', prefs }); }
   // A like / unlike; the relay stores the timestamp and tells the other clients.
   sendLike(itemId, liked) { this._send({ type: 'like', itemId, liked }); }
+  // A speaker's measured visualizer offset in seconds (null = forget it).
+  sendOffset(id, offset) { this._send({ type: 'offset', id, offset }); }
 
   // Tell another client to do something.
   command(toClientId, command) {

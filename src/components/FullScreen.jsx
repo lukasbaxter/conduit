@@ -5,6 +5,7 @@ import ContextMenu from './ContextMenu.jsx';
 import DevicePicker from './DevicePicker.jsx';
 import { seekHover } from '../api/seekHover.js';
 import { useLiked } from '../api/likes.js';
+import { useOffset } from '../api/offsets.js';
 import { ArtistLinks, PlayGlyph, PauseGlyph, ShuffleGlyph } from './TrackRow.jsx';
 import { vibrantColor } from '../api/colors.js';
 import { ctxItemId } from '../api/context.js';
@@ -24,12 +25,26 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
   const viz = { ...DEFAULT_VIZ, ...(prefs?.viz || loadVizSettings()) };
   const [vizMenu, setVizMenu] = useState(null);
   const setV = (patch) => { const n = { ...viz, ...patch }; try { localStorage.setItem('conduit.viz', JSON.stringify(n)); } catch {} onUpdatePrefs?.({ viz: n }); };
+  // Speaker timing: the session device's measured output delay (relay-wide,
+  // per speaker). Calibrating needs the clock of the client that drives the
+  // speaker, so a mirroring client is told to do it from the player.
+  const speaker = sessionDevice && sessionDevice.kind !== 'local' && sessionDevice.kind !== 'relay' ? sessionDevice : null;
+  const driving = !!speaker && !player.mirroring && player.device?.id === speaker.id;
+  const offset = useOffset(speaker?.id);
+  const [calibrating, setCalibrating] = useState(null);
+  const saveOffset = (v) => { if (speaker) player.relay?.sendOffset(speaker.id, v); };
   const vizItems = [
     { label: 'Style', sub: EQ_STYLES.map((s2) => ({ key: s2.id, label: `${s2.name}${viz.style === s2.id ? '  ✓' : ''}`, onClick: () => setV({ style: s2.id }) })) },
     { label: 'Colours', sub: GRADIENTS.map((g) => ({ key: g, label: `${g === 'album' ? 'Match album art' : g[0].toUpperCase() + g.slice(1)}${viz.gradient === g ? '  ✓' : ''}`, onClick: () => setV({ gradient: g }) })) },
     { sep: true },
     // 0 = raw every frame (real time); 0.95 = very calm.
     { slider: true, key: 'smoothing', label: 'Smoothing', min: 0, max: 0.95, step: 0.05, value: viz.smoothing ?? 0.6, format: (v) => (v === 0 ? 'Real time' : `${Math.round(v * 100)}%`), onChange: (v) => setV({ smoothing: v }) },
+    ...(speaker ? [
+      { sep: true },
+      { label: `Timing on ${speaker.name}${offset != null ? ` (${offset > 0 ? '+' : ''}${Math.round(offset * 1000)} ms)` : ''}` },
+      { key: 'cal', label: driving ? 'Calibrate by tapping…' : 'Calibrate from the client that is playing', disabled: !driving, onClick: () => { setTab('viz'); setCalibrating(speaker); } },
+      ...(offset != null ? [{ key: 'cal-reset', label: 'Forget calibration', onClick: () => saveOffset(null) }] : []),
+    ] : []),
   ];
   const { nowPlaying, playing, position, duration, shuffle, repeat, volume } = player;
   const liked = useLiked(nowPlaying?.itemId);
@@ -50,7 +65,10 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onLike, 
     jf.itemById(ctxItemId(ctx)).then((it) => { if (!alive || !it) return; const kind = it.Type === 'MusicArtist' ? 'ARTIST' : it.Type === 'MusicAlbum' ? 'ALBUM' : 'PLAYLIST'; setFrom({ kind: `PLAYING FROM ${kind}`, name: it.Name }); }).catch(() => {});
     return () => { alive = false; };
   }, [player.contextId, jf]);
-  const vizEl = <Visualizer player={player} jf={jf} active={tab === 'viz'} settings={viz} />;
+  const vizEl = (
+    <Visualizer player={player} jf={jf} active={tab === 'viz'} settings={viz} offset={offset || 0}
+      calibrate={calibrating} onCalibrated={saveOffset} onCalibrateClose={() => setCalibrating(null)} />
+  );
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);

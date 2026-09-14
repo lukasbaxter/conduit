@@ -900,7 +900,7 @@ wss.on('connection', (ws, req) => {
         queue: null,
       };
       userMap(who.id).set(self.id, self);
-      send(ws, { type: 'hello-ok', clientId: self.id, userId: who.id });
+      send(ws, { type: 'hello-ok', clientId: self.id, userId: who.id, offsets: store.offsetsAll() });
       broadcastRoster(self.uid);
       // The queues the user's other clients have already published, so this
       // client can show the active player's queue straight away.
@@ -971,6 +971,17 @@ wss.on('connection', (ws, req) => {
         for (const c of userMap(self.uid).values()) send(c.ws, { type: 'like', itemId, liked, at });
         // Write through to Jellyfin (the favourite other apps see); retried later if it fails.
         jellyfinFavorite(self.uid, self.token, itemId, liked).then((ok) => { if (ok && liked) store.likeSynced(self.uid, itemId); }).catch(() => {});
+        break;
+      }
+
+      // A speaker's measured output delay (visualizer calibration). The delay
+      // is the speaker's, so every account on this relay gets it.
+      // { type:'offset', id:<deviceId>, offset:<seconds>|null }
+      case 'offset': {
+        if (!msg.id) break;
+        const offset = Number.isFinite(msg.offset) ? Math.max(-5, Math.min(5, msg.offset)) : null;
+        store.offsetPut(String(msg.id), offset, self.uid);
+        for (const m of users.values()) for (const c of m.values()) send(c.ws, { type: 'offset', id: String(msg.id), offset });
         break;
       }
 
