@@ -491,6 +491,10 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
   transition: color .1s ease-out, opacity .1s ease-out; background: none; border: 0; padding: 0;
 }
 .lyric-line.sung { opacity: .5; }
+/* Shown once the reader has scrolled away from the song: white pill, black text, pinned to the pane's bottom. */
+.lyrics-sync { position: sticky; bottom: 16px; align-self: center; background: #fff; color: #000; border-radius: 500px; padding: 8px 20px; font-size: 14px; font-weight: 700; box-shadow: 0 8px 24px rgba(0,0,0,.4); margin-top: 8px; }
+.lyrics-sync:hover { transform: scale(1.04); }
+.fs-lyrics .lyrics-sync { font-size: 15px; padding: 10px 24px; }
 .lyric-line.now { color: var(--lyrics-active, var(--fg)); opacity: 1; }
 .lyric-line:hover { color: var(--lyrics-active, var(--fg)); opacity: 1; text-decoration: underline; }
 

@@ -222,14 +222,26 @@ export function Lyrics({ player, jf }) {
     ? lines.reduce((acc, l, i) => (l.start != null && at >= l.start ? i : acc), -1)
     : -1;
 
-  useEffect(() => {
+  // Following stops the moment the user scrolls (wheel / touch), so reading
+  // ahead is not yanked back; a Sync button brings the view back to the song.
+  const [manual, setManual] = useState(false);
+  const listRef = useRef(null);
+  const follow = () => {
     // Scroll the lyrics' OWN container, not every scrollable ancestor:
     // scrollIntoView also nudged the app shell and slid the footer up.
     const el = activeRef.current; if (!el) return;
     const box = el.closest('.panel-body, .fs-lyrics'); if (!box) return;
     const er = el.getBoundingClientRect(), br = box.getBoundingClientRect();
     box.scrollTo({ top: box.scrollTop + (er.top - br.top) - br.height / 2 + er.height / 2, behavior: 'smooth' });
-  }, [activeIndex]);
+  };
+  useEffect(() => { if (!manual) follow(); }, [activeIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setManual(false); }, [trackId]);
+  useEffect(() => {
+    const box = listRef.current?.closest('.panel-body, .fs-lyrics'); if (!box) return undefined;
+    const stop = () => setManual(true);
+    box.addEventListener('wheel', stop, { passive: true }); box.addEventListener('touchmove', stop, { passive: true });
+    return () => { box.removeEventListener('wheel', stop); box.removeEventListener('touchmove', stop); };
+  }, [state]);
 
   // Breadcrumb every ~2s: what the lyrics view believes.
   useEffect(() => {
@@ -256,7 +268,7 @@ export function Lyrics({ player, jf }) {
   const synced = lines.some((l) => l.start != null);
 
   return (
-    <div className="lyrics">
+    <div className="lyrics" ref={listRef}>
       {!synced && (
         <p className="qrow-sub" style={{ margin: '0 0 12px' }}>
           These lyrics aren&rsquo;t synced to the song yet.
@@ -273,6 +285,9 @@ export function Lyrics({ player, jf }) {
           {l.text || ' '}
         </button>
       ))}
+      {manual && synced && (
+        <button className="lyrics-sync" onClick={() => { setManual(false); follow(); }}>Sync</button>
+      )}
     </div>
   );
 }
