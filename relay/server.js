@@ -401,7 +401,7 @@ async function browse() {
 const MUSIC_REQUESTS = process.env.MUSIC_REQUESTS_URL || 'http://192.168.1.85:8732';
 const normTitle = (t) => norm(String(t || '').replace(/\s*[\(\[](deluxe|expanded|remaster(ed)?|edition|version|bonus|anniversary|explicit|clean|drumless|feat\.?|ft\.?)[^\)\]]*[\)\]]/gi, '').replace(/\s*-\s*(single|ep)$/i, ''));
 async function discography(artistId, artistName) {
-  const hit = cached(`discog:${artistId}`, 60 * 60 * 1000); if (hit) return hit;
+  const hit = cached(`discog:${artistId}`, 30 * 60 * 1000); if (hit) return hit;
   const [mr, lib, reqs] = await Promise.all([
     fetch(`${MUSIC_REQUESTS}/api/artist?name=${encodeURIComponent(artistName)}`, { signal: AbortSignal.timeout(25000) }).then((r) => r.json()),
     meiliOne('albums', { q: '', limit: 200, filter: `artistIds = "${artistId}"` }).catch(() => ({ hits: [] })),
