@@ -20,11 +20,12 @@ export const EQ_STYLES = [
 ];
 export const GRADIENTS = ['prism', 'classic', 'rainbow', 'orangered', 'steelblue'];
 // `sync[deviceId]` (seconds): how far the picture must lag the speaker's
-// reported playhead so it lines up with the sound in the room. MEASURED with
-// the microphone (src/api/speakerSync.js), never assumed; `autoSync` (default
-// on) re-measures whenever the visualizer opens on a speaker and every so
-// often after that.
-export const DEFAULT_VIZ = { style: 'line', gradient: 'prism', sync: {}, autoSync: true };
+// reported playhead so it lines up with the sound. Set by the user with the
+// live sync slider (like a TV's lip-sync control) and remembered per speaker;
+// nothing is assumed and nothing listens on its own. An explicit "calibrate
+// with microphone" button (src/api/speakerSync.js) exists for when you are in
+// the room and want it measured.
+export const DEFAULT_VIZ = { style: 'line', gradient: 'prism', sync: {} };
 export function loadVizSettings() {
   try { return { ...DEFAULT_VIZ, ...JSON.parse(localStorage.getItem('conduit.viz') || '{}') }; } catch { return { ...DEFAULT_VIZ }; }
 }
@@ -134,15 +135,25 @@ export default function Visualizer({ player, active, jf, settings, onSetting, co
       setTimeout(() => setSyncMsg(''), 6000);
     }
   };
-  if (controls) controls.current = { sync: () => runSync(true) };
+  // Manual sync: the slider panel (⋯ menu / [ and ] keys) writes the value
+  // straight into the clock and saves it for this speaker.
+  const [adjust, setAdjust] = useState(false);
+  const setOffset = (v) => {
+    const next = Math.round(Math.max(-4, Math.min(4, v)) * 100) / 100;
+    delayRef.current = next;
+    if (deviceId) onSetting?.({ sync: { ...(cfg.sync || {}), [deviceId]: next } });
+  };
+  if (controls) controls.current = { sync: () => runSync(true), adjust: () => setAdjust((v) => !v), offset: () => delayRef.current, setOffset };
   useEffect(() => {
-    if (!active || local || !deviceId || cfg.autoSync === false || !player.playing) return undefined;
-    // First open on this speaker: measure after the shadow has had 2 s; then every 60 s.
-    const due = lastSyncRef.current.id !== deviceId || Date.now() - lastSyncRef.current.at > 60000;
-    const t = setTimeout(() => { if (due) runSync(false); }, learned === undefined ? 2500 : 4000);
-    const iv = setInterval(() => runSync(false), 60000);
-    return () => { clearTimeout(t); clearInterval(iv); };
-  }, [active, local, deviceId, cfg.autoSync, player.playing]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!active || local) return undefined;
+    const onKey = (e) => {
+      if (e.target.closest('input, textarea')) return;
+      if (e.key === '[') { setOffset(delayRef.current - 0.1); setAdjust(true); }
+      else if (e.key === ']') { setOffset(delayRef.current + 0.1); setAdjust(true); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active, local, deviceId, cfg.sync]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const graph = () => { const wa = local ? player.webAudio() : shadow(); wa?.ctx?.resume?.(); return wa; };
 
@@ -179,6 +190,21 @@ export default function Visualizer({ player, active, jf, settings, onSetting, co
       <div ref={stageRef} className="viz-stage" />
       {state === 'error' && <div className="viz-msg">The visualizer could not start here.</div>}
       {syncMsg && <div className="viz-sync">{syncMsg}</div>}
+      {adjust && !local && (
+        <div className="viz-adjust" onClick={(e) => e.stopPropagation()}>
+          <div className="viz-adjust-head">
+            <span>Sync to {player.nowPlaying?.device?.name || 'speaker'}</span>
+            <button onClick={() => setAdjust(false)} aria-label="Close">×</button>
+          </div>
+          <div className="viz-adjust-row">
+            <button onClick={() => setOffset(delayRef.current - 0.1)}>−</button>
+            <input type="range" min="-4" max="4" step="0.05" value={delayRef.current} onChange={(e) => setOffset(Number(e.target.value))} />
+            <button onClick={() => setOffset(delayRef.current + 0.1)}>+</button>
+            <b>{delayRef.current >= 0 ? '+' : ''}{delayRef.current.toFixed(2)} s</b>
+          </div>
+          <small>Picture behind the sound? Drag left. Ahead? Drag right. Keys [ and ] nudge by 0.1 s. Saved for this speaker.</small>
+        </div>
+      )}
     </div>
   );
 }
