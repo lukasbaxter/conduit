@@ -223,7 +223,12 @@ export function Lyrics({ player, jf }) {
     : -1;
 
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Scroll the lyrics' OWN container, not every scrollable ancestor:
+    // scrollIntoView also nudged the app shell and slid the footer up.
+    const el = activeRef.current; if (!el) return;
+    const box = el.closest('.panel-body, .fs-lyrics'); if (!box) return;
+    const er = el.getBoundingClientRect(), br = box.getBoundingClientRect();
+    box.scrollTo({ top: box.scrollTop + (er.top - br.top) - br.height / 2 + er.height / 2, behavior: 'smooth' });
   }, [activeIndex]);
 
   // Breadcrumb every ~2s: what the lyrics view believes.

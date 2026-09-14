@@ -34,7 +34,7 @@ const ConnectIcon = () => (
  * The device selector. Groups discovered players by family so the Bluesound gear
  * and the Cast gear read as distinct things rather than one flat list.
  */
-export default function DevicePicker({ devices, active, onSelect }) {
+export default function DevicePicker({ devices, active, onSelect, showName = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -85,7 +85,7 @@ export default function DevicePicker({ devices, active, onSelect }) {
   return (
     <div className="devicepicker" ref={ref}>
       <button
-        className={`devicebtn ${active.kind !== 'local' ? 'casting' : ''}`}
+        className={`devicebtn ${active.kind !== 'local' ? 'casting' : ''} ${showName ? 'with-name' : ''}`}
         onClick={() => setOpen((v) => !v)}
         title={`Playing on ${active.name}`}
       >

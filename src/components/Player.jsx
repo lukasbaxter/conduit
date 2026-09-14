@@ -92,6 +92,25 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
         </div>
       )}
 
+      {/* Progress strip across the whole footer, above art and controls. */}
+      <div className="player-seek">
+        <span className="t">{fmt(shown)}</span>
+        <input
+          type="range"
+          min="0"
+          max={Math.max(1, Math.floor(duration))}
+          value={Math.floor(shown)}
+          onChange={(e) => setScrub(Number(e.target.value))}
+          onMouseUp={commitScrub}
+          onTouchEnd={commitScrub}
+          onKeyUp={commitScrub}
+          onBlur={commitScrub}
+          disabled={!nowPlaying || !duration}
+          style={{ '--pct': `${pct}%` }}
+        />
+        <span className="t">{fmt(duration)}</span>
+      </div>
+
       <div
         className="player-row"
         style={mini ? { '--mini': mini } : undefined}
@@ -112,7 +131,21 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
             <div className="player-art placeholder" />
           )}
           <div className="player-meta">
-            <div className="player-title">{nowPlaying?.title || 'Nothing playing'}</div>
+            <div className="player-title-row">
+              <div className="player-title">{nowPlaying?.title || 'Nothing playing'}</div>
+              {nowPlaying?.itemId && (
+                // Follows the SESSION track (mirrored liked state included), so the
+                // heart works on a client that is only controlling another one.
+                <button
+                  className={`trackrow-like ${nowPlaying.liked ? 'on' : ''}`}
+                  style={{ opacity: 1 }}
+                  onClick={() => onLike?.(current || { Id: nowPlaying.itemId, Name: nowPlaying.title, _partial: true }, !nowPlaying.liked)}
+                  title={nowPlaying.liked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
+                >
+                  <Heart on={Boolean(nowPlaying.liked)} />
+                </button>
+              )}
+            </div>
             <div className="player-artist">
               {nowPlaying?.artists?.length ? (
                 <ArtistLinks artists={nowPlaying.artists} onOpen={onOpenArtist} className="linkish" />
@@ -122,19 +155,34 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
                 nowPlaying?.artist || ''
               )}
             </div>
+            {/* Bottom-left: where the sound is (green when it is a speaker or
+                another client) and the volume. */}
+            <div className="player-output">
+              <DevicePicker devices={devices} active={sessionDevice} onSelect={player.setDevice} showName />
+              <div className="player-volume" title={`Volume ${volume}%`}>
+                <button className="vol-ico" onClick={() => player.setVolume(volume > 0 ? 0 : 60)} title={volume > 0 ? 'Mute' : 'Unmute'}>
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+                    {volume === 0 ? (
+                      <>
+                        <path d="M13.86 5.47a.75.75 0 0 0-1.061 0l-1.47 1.47-1.47-1.47A.75.75 0 0 0 8.8 6.53L10.269 8l-1.47 1.47a.75.75 0 1 0 1.06 1.06l1.47-1.47 1.47 1.47a.75.75 0 0 0 1.06-1.06L12.39 8l1.47-1.47a.75.75 0 0 0 0-1.06z" />
+                        <path d="M10.116 1.5A.75.75 0 0 0 8.991.85l-6.925 4a3.642 3.642 0 0 0-1.33 4.967 3.639 3.639 0 0 0 1.33 1.332l6.925 4a.75.75 0 0 0 1.125-.649v-1.906a4.73 4.73 0 0 1-1.5-.694v1.3L2.817 9.852a2.141 2.141 0 0 1-.781-2.92c.187-.324.456-.594.78-.782l5.8-3.35v1.3c.45-.313.956-.55 1.5-.694V1.5z" />
+                      </>
+                    ) : (
+                      <>
+                        <path d="M9.741.85a.75.75 0 0 1 .375.65v13a.75.75 0 0 1-1.125.65l-6.925-4a3.642 3.642 0 0 1-1.33-4.967 3.639 3.639 0 0 1 1.33-1.332l6.925-4a.75.75 0 0 1 .75 0zm-6.924 5.3a2.139 2.139 0 0 0 0 3.7l5.8 3.35V2.8l-5.8 3.35zm8.683 4.29V5.56a2.75 2.75 0 0 1 0 4.88z" />
+                        {volume > 40 && <path d="M11.5 13.614a5.752 5.752 0 0 0 0-11.228v1.55a4.252 4.252 0 0 1 0 8.127v1.55z" />}
+                      </>
+                    )}
+                  </svg>
+                </button>
+                <input
+                  type="range" min="0" max="100" value={volume}
+                  onChange={(e) => player.setVolume(Number(e.target.value))}
+                  style={{ '--pct': `${volume}%` }}
+                />
+              </div>
+            </div>
           </div>
-          {nowPlaying?.itemId && (
-            // Follows the SESSION track (mirrored liked state included), so the
-            // heart works on a client that is only controlling another one.
-            <button
-              className={`trackrow-like ${nowPlaying.liked ? 'on' : ''}`}
-              style={{ opacity: 1 }}
-              onClick={() => onLike?.(current || { Id: nowPlaying.itemId, Name: nowPlaying.title, _partial: true }, !nowPlaying.liked)}
-              title={nowPlaying.liked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
-            >
-              <Heart on={Boolean(nowPlaying.liked)} />
-            </button>
-          )}
         </div>
 
         <div className="player-controls">
@@ -188,26 +236,11 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
               </svg>
             </button>
           </div>
-
-          <div className="player-seek">
-            <span className="t">{fmt(shown)}</span>
-            <input
-              type="range"
-              min="0"
-              max={Math.max(1, Math.floor(duration))}
-              value={Math.floor(shown)}
-              onChange={(e) => setScrub(Number(e.target.value))}
-              onPointerUp={commitScrub}
-              onKeyUp={commitScrub}
-              onBlur={commitScrub}
-              disabled={!nowPlaying || !duration}
-              style={{ '--pct': `${pct}%` }}
-            />
-            <span className="t">{fmt(duration)}</span>
-          </div>
         </div>
 
         <div className="player-right">
+          {/* Phone mini player only (desktop hides it here; its home is .player-output). */}
+          <DevicePicker devices={devices} active={sessionDevice} onSelect={player.setDevice} />
           <button
             className={`icon-btn ${panel === 'lyrics' ? 'on' : ''}`}
             onClick={() => onPanel(panel === 'lyrics' ? null : 'lyrics')}
@@ -226,30 +259,6 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
               <path d="M15 15H1v-1.5h14V15zm0-4.5H1V9h14v1.5zm-14-7A2.5 2.5 0 0 1 3.5 1h9a2.5 2.5 0 0 1 0 5h-9A2.5 2.5 0 0 1 1 3.5zm2.5-1a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2h-9z" />
             </svg>
           </button>
-          <DevicePicker devices={devices} active={sessionDevice} onSelect={player.setDevice} />
-          <div className="player-volume" title={`Volume ${volume}%`}>
-            {/* Spotify's speaker glyph, one arc per volume band; click = mute toggle. */}
-            <button className="vol-ico" onClick={() => player.setVolume(volume > 0 ? 0 : 60)} title={volume > 0 ? 'Mute' : 'Unmute'}>
-              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
-                {volume === 0 ? (
-                  <>
-                    <path d="M13.86 5.47a.75.75 0 0 0-1.061 0l-1.47 1.47-1.47-1.47A.75.75 0 0 0 8.8 6.53L10.269 8l-1.47 1.47a.75.75 0 1 0 1.06 1.06l1.47-1.47 1.47 1.47a.75.75 0 0 0 1.06-1.06L12.39 8l1.47-1.47a.75.75 0 0 0 0-1.06z" />
-                    <path d="M10.116 1.5A.75.75 0 0 0 8.991.85l-6.925 4a3.642 3.642 0 0 0-1.33 4.967 3.639 3.639 0 0 0 1.33 1.332l6.925 4a.75.75 0 0 0 1.125-.649v-1.906a4.73 4.73 0 0 1-1.5-.694v1.3L2.817 9.852a2.141 2.141 0 0 1-.781-2.92c.187-.324.456-.594.78-.782l5.8-3.35v1.3c.45-.313.956-.55 1.5-.694V1.5z" />
-                  </>
-                ) : (
-                  <>
-                    <path d="M9.741.85a.75.75 0 0 1 .375.65v13a.75.75 0 0 1-1.125.65l-6.925-4a3.642 3.642 0 0 1-1.33-4.967 3.639 3.639 0 0 1 1.33-1.332l6.925-4a.75.75 0 0 1 .75 0zm-6.924 5.3a2.139 2.139 0 0 0 0 3.7l5.8 3.35V2.8l-5.8 3.35zm8.683 4.29V5.56a2.75 2.75 0 0 1 0 4.88z" />
-                    {volume > 40 && <path d="M11.5 13.614a5.752 5.752 0 0 0 0-11.228v1.55a4.252 4.252 0 0 1 0 8.127v1.55z" />}
-                  </>
-                )}
-              </svg>
-            </button>
-            <input
-              type="range" min="0" max="100" value={volume}
-              onChange={(e) => player.setVolume(Number(e.target.value))}
-              style={{ '--pct': `${volume}%` }}
-            />
-          </div>
           <button className="icon-btn" onClick={onFullScreen} title="Now playing view">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M6.53 9.47a.75.75 0 0 1 0 1.06l-2.72 2.72h1.018a.75.75 0 0 1 0 1.5H1.25v-3.579a.75.75 0 0 1 1.5 0v1.018l2.72-2.72a.75.75 0 0 1 1.06 0zm2.94-2.94a.75.75 0 0 1 0-1.06l2.72-2.72h-1.018a.75.75 0 1 1 0-1.5h3.578v3.579a.75.75 0 0 1-1.5 0V3.81l-2.72 2.72a.75.75 0 0 1-1.06 0z" /></svg>
           </button>

@@ -4,7 +4,7 @@ import { usePlayer } from './player/usePlayer.js';
 import { Relay } from './relay.js';
 import Sidebar from './components/Sidebar.jsx';
 import Library, { LIKED_ID } from './components/Library.jsx';
-import Player, { PlayingElsewhereBar } from './components/Player.jsx';
+import Player from './components/Player.jsx';
 import RightPanel from './components/RightPanel.jsx';
 import FullScreen from './components/FullScreen.jsx';
 import { downloadTrack } from './api/download.js';
@@ -103,6 +103,13 @@ export default function App() {
   const [me, setMe] = useState(null);
   const [avatarOk, setAvatarOk] = useState(true);
   const [userMenu, setUserMenu] = useState(false);
+  const [appMenu, setAppMenu] = useState(false);
+  useEffect(() => {
+    if (!appMenu) return undefined;
+    const h = (e) => { if (!e.target.closest('.appmenuwrap')) setAppMenu(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [appMenu]);
   // Closes on a click anywhere outside (not on mouse-leave: the pointer
   // crossing the gap between the avatar and the menu used to dismiss it).
   useEffect(() => {
@@ -166,6 +173,22 @@ export default function App() {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   }, [railW]);
+
+  // Right panel (queue / lyrics) width: drag the gap between content and panel.
+  const PANEL_MIN = 280, PANEL_MAX = 560;
+  const [panelW, setPanelW] = useState(() => { try { const v = Number(localStorage.getItem('conduit.panelW')); return v >= PANEL_MIN ? Math.min(PANEL_MAX, v) : 340; } catch { return 340; } });
+  const onPanelDown = useCallback((e) => {
+    e.preventDefault();
+    const start = { x: e.clientX, w: panelW };
+    setResizing(true);
+    const move = (ev) => setPanelW(Math.min(PANEL_MAX, Math.max(PANEL_MIN, start.w - (ev.clientX - start.x))));
+    const up = () => {
+      setResizing(false);
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+      setPanelW((w) => { try { localStorage.setItem('conduit.panelW', String(w)); } catch {} return w; });
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  }, [panelW]);
 
   // Double-click toggles between collapsed and the default width.
   const onRailDouble = () => {
@@ -683,14 +706,32 @@ export default function App() {
         </button>
       )}
       <header className="navbar">
-        <div className="brand">Conduit</div>
+        {/* App menu (the ⋯ Spotify keeps at the top-left), then history arrows. */}
+        <div className="appmenuwrap">
+          <button className="appmenu-btn" onClick={() => setAppMenu((v) => !v)} title="Menu" aria-label="Menu">
+            <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor"><path d="M3 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm6.5 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM16 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" /></svg>
+          </button>
+          {appMenu && (
+            <div className="avatarmenu appmenu">
+              <button onClick={() => { setAppMenu(false); goView('home'); }}>Home</button>
+              <button onClick={() => { setAppMenu(false); goView('search'); }}>Search</button>
+              <div className="ctxmenu-sep" />
+              <button onClick={() => { setAppMenu(false); openProfile(); }}>Profile</button>
+              <button onClick={() => { setAppMenu(false); openHistory(); }}>History</button>
+              <button onClick={() => { setAppMenu(false); openSettings(); }}>Settings</button>
+              <div className="ctxmenu-sep" />
+              <button onClick={() => { setAppMenu(false); window.location.reload(); }}>Reload</button>
+              <button onClick={signOut}>Log out</button>
+            </div>
+          )}
+        </div>
         {isMobile && <div className="mobile-title">{mobileTitle}</div>}
         <div className="navarrows">
           <button className="navarrow" onClick={goBack} disabled={!canBack} title="Go back">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M11.03.47a.75.75 0 0 1 0 1.06L4.56 8l6.47 6.47a.75.75 0 1 1-1.06 1.06L2.44 8 9.97.47a.75.75 0 0 1 1.06 0z" /></svg>
+            <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.5 1.5 4 8l6.5 6.5" /></svg>
           </button>
           <button className="navarrow" onClick={goForward} disabled={!canForward} title="Go forward">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M4.97.47a.75.75 0 0 0 0 1.06L11.44 8l-6.47 6.47a.75.75 0 1 0 1.06 1.06L13.56 8 6.03.47a.75.75 0 0 0-1.06 0z" /></svg>
+            <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5.5 1.5 6.5 6.5-6.5 6.5" /></svg>
           </button>
         </div>
         <div className="navbar-right">
@@ -718,7 +759,7 @@ export default function App() {
 
       <div
         className={`shell ${panel ? 'with-panel' : ''} ${railW <= RAIL_COLLAPSED ? 'rail-collapsed' : ''} ${resizing ? 'resizing' : ''} ${isMobile && mobileLib ? 'show-lib' : ''}`}
-        style={{ '--rail-w': `${railW}px` }}
+        style={{ '--rail-w': `${railW}px`, '--panel-w': `${panelW}px` }}
       >
         <Sidebar
           view={view}
@@ -785,7 +826,7 @@ export default function App() {
           avatarV={avatarV}
           onFollowAlbum={onFollowAlbum}
         />
-        {panel && <div className="panel-spacer" />}
+        {panel && <div className="panel-spacer rail-resizer" onPointerDown={onPanelDown} title="Drag to resize" role="separator" aria-orientation="vertical" />}
         {panel && (
           <RightPanel
             mode={panel}
@@ -848,7 +889,6 @@ pos=${Math.round(player.position)} playing=${player.playing} vol=${player.volume
         onLike={onLike}
         onFullScreen={openFullScreen}
       />
-      <PlayingElsewhereBar player={player} />
       {fullScreen && <FullScreen player={player} jf={jf} onClose={closeFullScreen} onOpenArtist={openArtistById} onLike={onLike} prefs={prefs} onUpdatePrefs={updatePrefs} onPanel={setPanel} />}
     </div>
   );
