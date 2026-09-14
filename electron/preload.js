@@ -66,6 +66,8 @@ contextBridge.exposeInMainWorld('conduit', {
     seek: (device, seconds) => call('device:seek', device, seconds),
     setVolume: (device, level) => call('device:volume', device, level),
     status: (device) => call('device:status', device),
+    // Resolves when the device's status changes (BluOS long-poll); rejects for other kinds.
+    statusWait: (device, etag) => call('device:statusWait', device, etag),
     identify: (device) => call('device:identify', device),
   },
 });

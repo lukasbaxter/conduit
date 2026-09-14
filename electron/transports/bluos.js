@@ -252,8 +252,25 @@ class BluOSTransport {
     throw err;
   }
 
+  // Long-poll: BluOS answers the moment its status changes (etag differs),
+  // which for a playing stream is the instant <secs> ticks over. Arriving on
+  // that edge, the reported whole second is exact at arrival time, so the
+  // caller can anchor a sub-second clock on it instead of a +-0.5 s guess.
+  async statusWait(etag, timeoutSec = 30) {
+    const q = etag ? `?timeout=${timeoutSec}&etag=${encodeURIComponent(etag)}` : `?timeout=${timeoutSec}`;
+    const xml = await request(this.device.host, this.device.port, `/Status${q}`, (timeoutSec + 8) * 1000);
+    const s = this._parseStatus(xml);
+    s.etag = (/<status[^>]*\setag="([^"]*)"/.exec(xml) || [])[1] || null;
+    s.arrivedAt = Date.now();
+    return s;
+  }
+
   async status() {
     const xml = await this._get('/Status');
+    return this._parseStatus(xml);
+  }
+
+  _parseStatus(xml) {
     const state = tag(xml, 'state');
     // While muted (our own resume-at-offset dance, or the user's mute) BluOS
     // reports <volume>0</volume> with <mute>1</mute>. That 0 is not a level the

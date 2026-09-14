@@ -195,6 +195,8 @@ handle('device:stop', (device) => transportFor(device).stop());
 handle('device:seek', (device, seconds) => transportFor(device).seek(seconds));
 handle('device:volume', (device, level) => transportFor(device).setVolume(level));
 handle('device:status', (device) => transportFor(device).status());
+// BluOS only: block until the speaker's status changes (see BluOSTransport.statusWait).
+handle('device:statusWait', (device, etag) => { const t = transportFor(device); if (!t.statusWait) throw new Error('no long-poll'); return t.statusWait(etag); });
 handle('device:identify', (device) => {
   const t = transportFor(device);
   return typeof t.identify === 'function' ? t.identify() : { name: device.name };

@@ -172,6 +172,7 @@ export function usePlayer(jf) {
   const setRepeatModeRef = useRef(() => {});
   const setShuffleModeRef = useRef(() => {});
   const activePlayerRef = useRef(null); // clientId of the active player, if not us
+  const switchGenRef = useRef(0); // setDevice generation, see setDevice
   const wasMirroringRef = useRef(false); // this client has been mirroring another player since it last played itself
   const rosterRef = useRef({ players: [], lanDevices: [] });
   const repeatRef = useRef('off');
@@ -911,7 +912,12 @@ export function usePlayer(jf) {
       // which can be a render behind at the instant of the click.
       const a = anchorRef.current;
       const at = a.playing ? a.pos + (Date.now() - a.at) / 1000 : positionRef.current;
+      const startedAt = Date.now();
 
+      // Each switch gets a generation; a slow one (a Cast that never answers
+      // takes 10 s to fail) must not undo a newer switch made meanwhile.
+      const gen = (switchGenRef.current += 1);
+      const stillMine = () => switchGenRef.current === gen;
       transitionRef.current = true;
       setDeviceState(nextDevice);
       deviceRef.current = nextDevice;
@@ -925,18 +931,32 @@ export function usePlayer(jf) {
         // music never drops out while the target spins up (a Node takes a few
         // seconds to fetch, seek and unmute). The brief overlap is the price.
         if (track && wasPlaying) {
-          await startOn(nextDevice, track, at);
-          anchorAt(at, true);
+          // The target is already playing this very track (a TV we lost track
+          // of): adopt its playhead instead of restarting it from ours.
+          let adopted = false;
+          if (nextDevice.kind !== 'local' && remote) {
+            try {
+              const st = await remote.status(nextDevice);
+              const sameTrack = st?.playing && st.streamUrl && st.streamUrl.includes(track.Id);
+              if (sameTrack) { anchorAt(st.position || 0, true); adopted = true; }
+            } catch { /* status is advisory */ }
+          }
+          if (!stillMine()) return;
+          if (!adopted) await startOn(nextDevice, track, at);
+          if (!stillMine()) return;
+          if (!adopted) anchorAt(at, true);
           setPlaying(true);
-          stopOn(prev).catch(() => {});
+          if (prev.id !== nextDevice.id) stopOn(prev).catch(() => {});
         } else {
           await stopOn(prev);
         }
       } catch (e) {
-        // The target failed: the old device is still playing, leave it be.
+        if (!stillMine()) return;
+        // The target failed: the old device is still playing, go back to it
+        // with the playhead it has reached meanwhile.
         setDeviceState(prev); deviceRef.current = prev;
         setError(`Could not move playback to ${nextDevice.name}: ${e.message}`);
-        setPlaying(wasPlaying);
+        if (wasPlaying) { anchorAt(at + (Date.now() - startedAt) / 1000, true); setPlaying(true); }
       } finally {
         // Show the incoming device's real volume rather than carrying the old
         // one across; they are independent hardware levels.
@@ -992,84 +1012,114 @@ export function usePlayer(jf) {
   useEffect(() => {
     if (device.kind === 'local' || !remote) return undefined;
     let cancelled = false;
-    const timer = setInterval(async () => {
-      try {
-        if (transitionRef.current) return;
-        const s = await remote.status(device);
-        if (cancelled || !s || transitionRef.current) return;
+    // One status reading from the device. `exact` = the reading arrived on
+    // the speaker's own second tick (BluOS long-poll), so the whole second
+    // is the true position at `arrivedAt`; otherwise it is a floor value.
+    const apply = (s, arrivedAt, exact) => {
+      if (cancelled || !s || transitionRef.current) return;
+      const a = anchorRef.current;
+      const expected = a.playing ? a.pos + (Date.now() - a.at) / 1000 : a.pos;
+      const reported = s.position || 0;
 
-        const a = anchorRef.current;
-        const expected = a.playing ? a.pos + (Date.now() - a.at) / 1000 : a.pos;
-        const reported = s.position || 0;
-
-        // Track finished: advance the queue. Two signatures, because devices
-        // disagree about what "finished" looks like:
-        //   Cast:  playing=false with position sitting at the end.
-        //   BluOS: playing=false with position reset to 0 -- indistinguishable
-        //          from a stop unless we remember we were near the end.
-        // Only look for end-of-track while we actually believe we're playing.
-        // Crucially, clear the anchor's playing flag BEFORE advancing: skipping
-        // that let a.playing stay true after the queue ended, so every later
-        // poll re-fired "past the end" and stopped the device in a 2s loop.
-        const dur = s.duration || durationRef.current;
-        const atEnd = a.playing && dur > 0
-          && (reported >= dur - 1.5 || (reported === 0 && expected >= dur - 3));
-        if (!s.playing && atEnd) {
-          disagreeRef.current = 0;
-          anchorRef.current = { pos: reported, at: Date.now(), playing: false };
-          advanceRef.current(true);
-          return;
-        }
-
-        // A receiver reopening a stream briefly reports 0 (or a big rewind)
-        // while still claiming to play. Accepting that is what made the clock
-        // flicker 0,1,0. Hold our own estimate until the device says the same
-        // thing several polls running.
-        const rewound = a.playing && reported < expected - 5;
-        if (rewound && disagreeRef.current < 2) {
-          disagreeRef.current += 1;
-          if (s.duration) setDuration(s.duration);
-          return;
-        }
+      // Track finished: advance the queue. Two signatures, because devices
+      // disagree about what "finished" looks like:
+      //   Cast:  playing=false with position sitting at the end.
+      //   BluOS: playing=false with position reset to 0 -- indistinguishable
+      //          from a stop unless we remember we were near the end.
+      // Only look for end-of-track while we actually believe we're playing.
+      // Crucially, clear the anchor's playing flag BEFORE advancing: skipping
+      // that let a.playing stay true after the queue ended, so every later
+      // poll re-fired "past the end" and stopped the device in a 2s loop.
+      const dur = s.duration || durationRef.current;
+      const atEnd = a.playing && dur > 0
+        && (reported >= dur - 1.5 || (reported === 0 && expected >= dur - 3));
+      if (!s.playing && atEnd) {
         disagreeRef.current = 0;
-
-        // A playing device whose position never advances is a dead stream, not
-        // playback. Re-establish it once rather than showing a frozen 0.
-        if (s.playing && reported === a.pos && reported === 0) {
-          stalledRef.current += 1;
-          if (stalledRef.current === 3) {
-            const track = queueRef.current[indexRef.current];
-            if (track) {
-              setError('Stream stalled on the speaker, restarting it');
-              startOn(device, track, 0).catch(() => {});
-            }
-          }
-          if (stalledRef.current < 6) return;
-        } else {
-          stalledRef.current = 0;
-        }
-
-        // De-bias a whole-second clock: the reported value is the floor of the
-        // true position, so the expected true value is half a second later.
-        const debiased = s.coarsePosition && s.playing ? reported + 0.5 : reported;
-        anchorRef.current = { pos: debiased, at: Date.now(), playing: !!s.playing };
-        if (s.duration) setDuration(s.duration);
-        setPlaying(Boolean(s.playing));
-        // The ticker only runs while playing; once it stops nothing else would
-        // move the displayed position, so pin it to what the device reports.
-        if (!s.playing) setPosition(debiased);
-        // Mirror the speaker's own volume, including changes made from the
-        // BluOS app or a physical dial -- but never while the user is dragging.
-        // A muted speaker (the resume dance mutes for a moment) must not drag
-        // the slider to 0 and back.
-        if (typeof s.volume === 'number' && !s.muted && Date.now() > volumeHeldRef.current) {
-          setVolumeState((v) => (Math.abs(v - s.volume) > 1 ? s.volume : v));
-        }
-      } catch {
-        // Transient network blips are expected; keep polling.
+        anchorRef.current = { pos: reported, at: Date.now(), playing: false };
+        advanceRef.current(true);
+        return;
       }
-    }, 2000);
-    return () => { cancelled = true; clearInterval(timer); };
+
+      // A receiver reopening a stream briefly reports 0 (or a big rewind)
+      // while still claiming to play. Accepting that is what made the clock
+      // flicker 0,1,0. Hold our own estimate until the device says the same
+      // thing several polls running.
+      const rewound = a.playing && reported < expected - 5;
+      if (rewound && disagreeRef.current < 2) {
+        disagreeRef.current += 1;
+        if (s.duration) setDuration(s.duration);
+        return;
+      }
+      disagreeRef.current = 0;
+
+      // A playing device whose position never advances is a dead stream, not
+      // playback. Re-establish it once rather than showing a frozen 0.
+      if (s.playing && reported === a.pos && reported === 0) {
+        stalledRef.current += 1;
+        if (stalledRef.current === 3) {
+          const track = queueRef.current[indexRef.current];
+          if (track) {
+            setError('Stream stalled on the speaker, restarting it');
+            startOn(device, track, 0).catch(() => {});
+          }
+        }
+        if (stalledRef.current < 6) return;
+      } else {
+        stalledRef.current = 0;
+      }
+
+      // De-bias a whole-second clock: the reported value is the floor of the
+      // true position, so the expected true value is half a second later.
+      const debiased = exact ? reported : (s.coarsePosition && s.playing ? reported + 0.5 : reported);
+      anchorRef.current = { pos: debiased, at: arrivedAt, playing: !!s.playing };
+      if (s.duration) setDuration(s.duration);
+      setPlaying(Boolean(s.playing));
+      // The ticker only runs while playing; once it stops nothing else would
+      // move the displayed position, so pin it to what the device reports.
+      if (!s.playing) setPosition(debiased);
+      // Mirror the speaker's own volume, including changes made from the
+      // BluOS app or a physical dial -- but never while the user is dragging.
+      // A muted speaker (the resume dance mutes for a moment) must not drag
+      // the slider to 0 and back.
+      if (typeof s.volume === 'number' && !s.muted && Date.now() > volumeHeldRef.current) {
+        setVolumeState((v) => (Math.abs(v - s.volume) > 1 ? s.volume : v));
+      }
+
+    };
+    // BluOS: sit on the long-poll so every reading lands on the second tick
+    // (exact clock). Anything else: the 2 s poll.
+    let timer = null;
+    if (device.kind === 'bluos' && remote.statusWait) {
+      (async () => {
+        let etag = null;
+        while (!cancelled) {
+          try {
+            const s = await remote.statusWait(device, etag);
+            if (cancelled) return;
+            etag = s?.etag || etag;
+            // A reading that came back with a changed etag while playing is
+            // the tick edge (or a state change, equally exact).
+            apply(s, s?.arrivedAt || Date.now(), true);
+          } catch {
+            await new Promise((r) => setTimeout(r, 2000)); // blip: fall back to a beat
+            try { const s = await remote.status(device); if (!cancelled) apply(s, Date.now(), false); } catch { /* keep looping */ }
+          }
+        }
+      })();
+    } else {
+      timer = setInterval(async () => {
+        try {
+          if (transitionRef.current) return;
+          const t0 = Date.now();
+          const s = await remote.status(device);
+          // Cast reports a sub-second position; it was true roughly mid-request.
+          apply(s, (t0 + Date.now()) / 2, false);
+        } catch {
+          // Transient network blips are expected; keep polling.
+        }
+      }, 2000);
+    }
+    return () => { cancelled = true; if (timer) clearInterval(timer); };
   }, [device, next, remote, startOn]);
 
   // Interpolate the remote clock between polls so the seek bar moves smoothly.
