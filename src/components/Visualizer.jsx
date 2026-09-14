@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { paletteColors } from '../api/colors.js';
 
 // The visualizer is a graphic-EQ family (audioMotion-analyzer, the spectrum
 // engine Feishin ships). Settings come from the full-screen tab's ⋯ menu and
@@ -17,7 +18,8 @@ export const EQ_STYLES = [
   { id: 'mirror', name: 'Mirror', opts: { mode: 4, ledBars: false, barSpace: .2, reflexRatio: .5, reflexAlpha: .25, showPeaks: false, radial: false, mirror: -1, fillAlpha: 1, lineWidth: 0 } },
   { id: 'radial', name: 'Radial', opts: { mode: 5, radial: true, spinSpeed: 1, showPeaks: true, barSpace: .2, mirror: 0, reflexRatio: 0, ledBars: false, fillAlpha: 1, lineWidth: 0 } },
 ];
-export const GRADIENTS = ['prism', 'classic', 'rainbow', 'orangered', 'steelblue'];
+// 'album' = three colours pulled from the current cover (registered per track).
+export const GRADIENTS = ['album', 'prism', 'classic', 'rainbow', 'orangered', 'steelblue'];
 // `smoothing` 0..0.95: 0 = every frame raw (real time), higher = calmer bars.
 export const DEFAULT_VIZ = { style: 'line', gradient: 'prism', smoothing: 0.6 };
 export function loadVizSettings() {
@@ -114,7 +116,7 @@ export default function Visualizer({ player, active, jf, settings }) {
           audioCtx: wa.ctx, source: wa.source, connectSpeakers: false,
           overlay: true, bgAlpha: 0, showBgColor: false, showScaleX: false, showScaleY: false,
           minFreq: 30, maxFreq: 16000, weightingFilter: 'D', maxFPS: 60,
-          ...style.opts, gradient: cfg.gradient, smoothing: cfg.smoothing ?? style.opts.smoothing ?? .6,
+          ...style.opts, gradient: cfg.gradient === 'album' ? 'classic' : cfg.gradient, smoothing: cfg.smoothing ?? style.opts.smoothing ?? .6,
         });
         amRef.current = am;
         // Local playback re-captures the element on every new track: follow it.
@@ -125,6 +127,18 @@ export default function Visualizer({ player, active, jf, settings }) {
     })();
     return () => { alive = false; offSource?.(); try { amRef.current?.destroy(); } catch {} amRef.current = null; };
   }, [active, local, style.id, cfg.gradient]); // eslint-disable-line react-hooks/exhaustive-deps
+  // "Match album art": three colours from the cover, re-registered on every track.
+  const artUrl = player.nowPlaying?.artId ? jf.imageUrl(player.nowPlaying.artId, { maxHeight: 200 }) : player.nowPlaying?.artUrl || null;
+  useEffect(() => {
+    const am = amRef.current; if (!am || cfg.gradient !== 'album' || state !== 'ready') return undefined;
+    let alive = true;
+    paletteColors(artUrl).then((cols) => {
+      if (!alive || !amRef.current) return;
+      if (cols) { try { amRef.current.registerGradient('album', { bgColor: 'transparent', colorStops: cols }); amRef.current.gradient = 'album'; } catch { /* keep current */ } }
+      else amRef.current.gradient = 'classic';
+    });
+    return () => { alive = false; };
+  }, [artUrl, cfg.gradient, state]);
   // Smoothing changes apply live to the running analyser.
   useEffect(() => { if (amRef.current && cfg.smoothing != null) amRef.current.smoothing = cfg.smoothing; }, [cfg.smoothing]);
 
