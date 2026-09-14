@@ -44,6 +44,7 @@ const DATA_DIR = (process.env.SESSIONS_FILE || '/data/sessions.json').replace(/[
 const DB_FILE = process.env.DB_FILE || `${DATA_DIR}relay.db`;
 const store = openDb(DB_FILE);
 const lastSession = new Map(); // hot copy of the sessions table
+const lastActive = new Map();  // uid -> the client that most recently held the active claim
 function rememberSession(uid, patch) {
   const cur = lastSession.get(uid) || { nowPlaying: null, queue: null, at: 0 };
   const next = { ...cur, ...patch, at: Date.now() };
@@ -896,9 +897,16 @@ wss.on('connection', (ws, req) => {
         // that are merely mirroring another session report nothing -- so this
         // never steals playback, it only recovers a dropped claim.
         if (self.nowPlaying && self.nowPlaying.playing && !active.has(self.uid)) {
-          active.set(self.uid, self.id);
+          active.set(self.uid, self.id); lastActive.set(self.uid, self.id);
         }
-        if (self.nowPlaying && (!active.has(self.uid) || active.get(self.uid) === self.id)) {
+        // Remember the session from the active player -- or, with no active
+        // player, only from a client that is actually playing or was the last
+        // one active. A paused mirror reporting its OWN old queue the moment
+        // the active client dropped used to overwrite the real session (a
+        // reload of the playing browser then came back on that stale track).
+        const noActive = !active.has(self.uid);
+        const trusted = active.get(self.uid) === self.id || (noActive && (self.nowPlaying?.playing || lastActive.get(self.uid) === self.id));
+        if (self.nowPlaying && trusted) {
           rememberSession(self.uid, { nowPlaying: self.nowPlaying, queue: self.queue || (lastSession.get(self.uid) || {}).queue || null });
         }
         broadcastRoster(self.uid);
@@ -937,7 +945,7 @@ wss.on('connection', (ws, req) => {
       // tell every other client of this user to yield (pause). Spotify Connect's
       // single-active-device model.
       case 'claim': {
-        active.set(self.uid, self.id);
+        active.set(self.uid, self.id); lastActive.set(self.uid, self.id);
         for (const c of userMap(self.uid).values()) {
           if (c.id !== self.id) send(c.ws, { type: 'command', from: self.id, command: { action: 'yield' } });
         }
