@@ -152,12 +152,12 @@ export function usePlayer(jf) {
   const transitionRef = useRef(false);
   // Counts consecutive polls that disagree with our interpolated clock. One
   // bad reading is a hiccup (a receiver reopening a stream reports secs=0 for a
-  // beat); several in a row means the device really did move and we should
-  // believe it.
+  // beat); a few seconds of it means the device really did move and we should
+  // believe it. Holds the time the disagreement started (0 = none).
   const disagreeRef = useRef(0);
-  // Consecutive polls where the device claims to play but the playhead has not
-  // moved at all. BluOS lands in exactly this state if a stream is disturbed
-  // mid-setup: playing=true, position frozen, silence.
+  // The device claims to play but the playhead sits at 0. BluOS lands in
+  // exactly this state if a stream is disturbed mid-setup: playing=true,
+  // position frozen, silence. { since, restarted } while it lasts, else 0.
   const stalledRef = useRef(0);
   // Set while the user is dragging the volume slider, so the device poll does
   // not yank the handle back to the last value it reported.
@@ -1046,26 +1046,30 @@ export function usePlayer(jf) {
       // while still claiming to play. Accepting that is what made the clock
       // flicker 0,1,0. Hold our own estimate until the device says the same
       // thing several polls running.
+      // Both holds below are measured in TIME, not readings: the BluOS loop
+      // polls five times a second while it hunts for the tick, and counting
+      // readings there restarted a stream that merely took a second to start.
+      const now = Date.now();
       const rewound = a.playing && reported < expected - 5;
-      if (rewound && disagreeRef.current < 2) {
-        disagreeRef.current += 1;
-        if (s.duration) setDuration(s.duration);
-        return;
-      }
-      disagreeRef.current = 0;
+      if (rewound) {
+        if (!disagreeRef.current) disagreeRef.current = now;
+        if (now - disagreeRef.current < 4000) { if (s.duration) setDuration(s.duration); return; }
+      } else disagreeRef.current = 0;
 
       // A playing device whose position never advances is a dead stream, not
       // playback. Re-establish it once rather than showing a frozen 0.
-      if (s.playing && reported === a.pos && reported === 0) {
-        stalledRef.current += 1;
-        if (stalledRef.current === 3) {
+      if (s.playing && reported === 0 && a.pos <= 0.5) {
+        if (!stalledRef.current) stalledRef.current = { since: now, restarted: false };
+        const st = stalledRef.current;
+        if (now - st.since > 6000 && !st.restarted) {
+          st.restarted = true;
           const track = queueRef.current[indexRef.current];
           if (track) {
             setError('Stream stalled on the speaker, restarting it');
             startOn(device, track, 0).catch(() => {});
           }
         }
-        if (stalledRef.current < 6) return;
+        if (now - st.since < 12000) return;
       } else {
         stalledRef.current = 0;
       }
@@ -1108,27 +1112,32 @@ export function usePlayer(jf) {
       (async () => {
         let prev = null;    // { secs, t1 } of the last reading while playing
         let locked = false; // the anchor sits on a caught tick
+        let hunting = 0;    // when the fast polling started (0 = not hunting)
         while (!cancelled) {
           try {
-            if (transitionRef.current) { prev = null; locked = false; await new Promise((r) => setTimeout(r, 300)); continue; }
+            if (transitionRef.current) { prev = null; locked = false; hunting = 0; await new Promise((r) => setTimeout(r, 300)); continue; }
             const t0 = Date.now();
             const s = await remote.status(device);
             const t1 = Date.now();
             if (cancelled) return;
-            if (!s.playing) { apply(s, (t0 + t1) / 2, false); prev = null; locked = false; await new Promise((r) => setTimeout(r, 1000)); continue; }
+            if (!s.playing) { apply(s, (t0 + t1) / 2, false); prev = null; locked = false; hunting = 0; await new Promise((r) => setTimeout(r, 1000)); continue; }
             const a = anchorRef.current;
             const expected = a.playing ? a.pos + (t1 - a.at) / 1000 : a.pos;
             const agrees = a.playing && expected >= s.position && expected < s.position + 1;
-            if (locked && !agrees) locked = false;
+            if (locked && !agrees) { locked = false; hunting = 0; }
             if (!locked && prev && s.position === prev.secs + 1 && t0 - prev.t1 < 600) {
               // The counter ticked between prev's response and this request.
               apply(s, (prev.t1 + t0) / 2, true);
-              locked = true;
+              locked = true; hunting = 0;
             } else {
               apply(s, (t0 + t1) / 2, false);
             }
             prev = { secs: s.position, t1 };
-            await new Promise((r) => setTimeout(r, locked ? 1000 : 200));
+            // Hunt for the tick at 250 ms, but not forever: a counter that is
+            // not moving (start-up, a stall) gets the ordinary 1 s cadence.
+            if (s.position === 0) hunting = 0; else if (!locked && !hunting) hunting = t1;
+            const fast = !locked && s.position > 0 && t1 - hunting < 8000;
+            await new Promise((r) => setTimeout(r, fast ? 250 : 1000));
           } catch {
             prev = null;
             await new Promise((r) => setTimeout(r, 2000));
