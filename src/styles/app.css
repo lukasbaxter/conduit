@@ -360,7 +360,9 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 
 .trackrow-name { display: flex; flex-direction: column; min-width: 0; }
 .trackrow-name span { color: var(--fg); font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.trackrow-name small { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trackrow-name small { font-size: 12px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.trackrow-name small .rowlink { color: var(--fg-dim); }
+.trackrow-name small .rowlink:hover { color: var(--fg); }
 .trackrow-album { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trackrow-album:hover { color: var(--fg); text-decoration: underline; cursor: pointer; }
 .trackrow-dur { font-size: 14px; font-variant-numeric: tabular-nums; text-align: right; }
