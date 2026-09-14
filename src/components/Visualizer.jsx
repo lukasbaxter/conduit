@@ -109,7 +109,10 @@ export default function Visualizer({ player, active, jf, settings }) {
         const mod = await import('audiomotion-analyzer');
         const AudioMotion = mod.default || mod;
         const wa = graph();
-        if (!wa || !alive) { setState('error'); return; }
+        // A superseded run (the effect re-ran while the module loaded) must
+        // just stop -- it used to mark the NEW, working analyser as an error.
+        if (!alive) return;
+        if (!wa) { setState('error'); return; }
         const stage = stageRef.current;
         stage.innerHTML = '';
         const am = new AudioMotion(stage, {
@@ -123,14 +126,15 @@ export default function Visualizer({ player, active, jf, settings }) {
         if (wa.onSource) offSource = wa.onSource((next, prev) => { try { if (prev) am.disconnectInput(prev); } catch { /* not connected */ } try { am.connectInput(next); } catch { /* ignore */ } });
         if (window.location.search.includes('debug')) window.__vizAm = am;
         setState('ready');
-      } catch (e) { console.error('visualizer', e); if (alive) setState('error'); }
+      } catch (e) { if (alive) { console.error('visualizer', e); setState('error'); } }
     })();
     return () => { alive = false; offSource?.(); try { amRef.current?.destroy(); } catch {} amRef.current = null; };
   }, [active, local, style.id, cfg.gradient]); // eslint-disable-line react-hooks/exhaustive-deps
   // "Match album art": three colours from the cover, re-registered on every track.
   const artUrl = player.nowPlaying?.artId ? jf.imageUrl(player.nowPlaying.artId, { maxHeight: 200 }) : player.nowPlaying?.artUrl || null;
   useEffect(() => {
-    const am = amRef.current; if (!am || cfg.gradient !== 'album' || state !== 'ready') return undefined;
+    const am = amRef.current;
+    if (!am || cfg.gradient !== 'album' || state !== 'ready') return undefined;
     let alive = true;
     paletteColors(artUrl).then((cols) => {
       if (!alive || !amRef.current) return;

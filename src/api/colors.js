@@ -107,9 +107,9 @@ export function paletteColors(url) {
         const floor = [.66, .54, .42];
         const lifted = out.map((e, i) => ({ h: e.h, s: Math.min(.62, Math.max(e.s, .38)), l: Math.max(e.l, floor[i]) }));
         resolve(lifted.map((e) => `rgb(${hslToRgb(e.h, e.s, e.l).join(',')})`));
-      } catch { resolve(null); }
+      } catch (e) { console.warn('palette failed', e); resolve(null); }
     };
-    img.onerror = () => resolve(null);
+    img.onerror = () => { console.warn('palette image failed', url); resolve(null); };
     img.src = url;
   });
   pcache.set(url, p);
