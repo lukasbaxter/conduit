@@ -629,12 +629,16 @@ export class Jellyfin {
   }
 
   // Transcode to MP3 for receivers that will not take FLAC.
-  transcodeUrl(itemId, { codec = 'mp3', bitrate = 320000 } = {}) {
+  // `startAt` (seconds) makes ffmpeg begin the transcode exactly there -- the
+  // only accurate way to start mid-track on a VBR rip (byte-range seeking on
+  // the original lands seconds off and still reports the requested time).
+  transcodeUrl(itemId, { codec = 'mp3', bitrate = 320000, startAt = 0 } = {}) {
     const q = new URLSearchParams({
       audioCodec: codec,
       audioBitRate: String(bitrate),
       api_key: this.token,
     });
+    if (startAt > 0) q.set('startTimeTicks', String(Math.round(startAt * 1e7)));
     return `${this.baseUrl}/Audio/${itemId}/universal?${q}`;
   }
 

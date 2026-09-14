@@ -18,7 +18,13 @@ export const EQ_STYLES = [
   { id: 'radial', name: 'Radial', opts: { mode: 5, radial: true, spinSpeed: 1, showPeaks: true, barSpace: .2, mirror: 0, reflexRatio: 0, ledBars: false, fillAlpha: 1, lineWidth: 0 } },
 ];
 export const GRADIENTS = ['prism', 'classic', 'rainbow', 'orangered', 'steelblue'];
-export const DEFAULT_VIZ = { style: 'line', gradient: 'prism' };
+// `delay` (seconds): how far the visualizer lags the speaker's reported
+// playhead when the sound is on a Node / Cast. Their output runs behind the
+// position they report (buffering + DAC), so without it the picture is early.
+// null = per-device default below.
+export const DEFAULT_VIZ = { style: 'line', gradient: 'prism', delay: null };
+export const DELAY_OPTIONS = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
+export const defaultDelayFor = (kind) => (kind === 'bluos' ? 1.2 : kind === 'cast' ? 0.8 : 0.5);
 export function loadVizSettings() {
   try { return { ...DEFAULT_VIZ, ...JSON.parse(localStorage.getItem('conduit.viz') || '{}') }; } catch { return { ...DEFAULT_VIZ }; }
 }
@@ -44,37 +50,57 @@ export default function Visualizer({ player, active, jf, settings }) {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     const ctx = new Ctx();
     const source = ctx.createMediaElementSource(el);
-    shadowRef.current = { el, ctx, source, id: null };
+    // base: the track time the current stream starts at; lead: how far ahead
+    // of the playhead to ask for, to cover the transcode's start-up (learned).
+    shadowRef.current = { el, ctx, source, id: null, base: 0, lead: 1.0, loading: false };
     return shadowRef.current;
   };
   useEffect(() => () => { const sh = shadowRef.current; if (sh) { sh.el.pause(); sh.el.src = ''; sh.ctx.close?.(); shadowRef.current = null; } }, []);
   // The session playhead as a live clock: the position the player last
   // reported plus the time since. The sync tick below reads THIS, never a
-  // position captured when the effect ran -- that copy stood still while the
-  // shadow ran on, so every couple of seconds it was dragged back to it and
-  // the picture jerked behind the speaker.
+  // position captured when the effect ran.
   const clockRef = useRef({ pos: 0, at: Date.now(), playing: false });
   clockRef.current = { pos: player.position || 0, at: Date.now(), playing: !!player.playing };
   useEffect(() => {
     if (!active || local) { const sh = shadowRef.current; if (sh) sh.el.pause(); return undefined; }
     const sh = shadow();
-    // The original file (byte-range seekable), not a transcode: seeking a live
-    // transcode is unreliable and the analyser does not care about bitrate.
-    if (trackId && sh.id !== trackId && jf) { sh.id = trackId; sh.el.src = jf.streamUrl(trackId); }
-    const want = () => { const c = clockRef.current; return c.pos + (c.playing ? (Date.now() - c.at) / 1000 : 0); };
-    const tick = () => {
-      const w = want();
-      if (Math.abs((sh.el.currentTime || 0) - w) > 0.35) { try { sh.el.currentTime = w; } catch { /* not seekable yet */ } }
-      if (player.playing && sh.el.paused) sh.el.play().catch(() => {});
-      if (!player.playing && !sh.el.paused) sh.el.pause();
+    const kind = player.nowPlaying?.device?.kind || player.device?.kind;
+    const delay = cfg.delay != null ? Number(cfg.delay) : defaultDelayFor(kind);
+    const want = () => { const c = clockRef.current; return c.pos + (c.playing ? (Date.now() - c.at) / 1000 : 0) - delay; };
+    // Seeking the ORIGINAL file is not accurate on VBR rips, so every (re)sync
+    // is a fresh transcode that ffmpeg starts exactly at `base`; from then on
+    // the element's clock is exact and small drift is taken out with
+    // playbackRate instead of another seek.
+    const load = () => {
+      const at = Math.max(0, want() + sh.lead);
+      sh.base = at; sh.id = trackId; sh.loading = true;
+      sh.el.src = jf.transcodeUrl(trackId, { codec: 'mp3', bitrate: 192000, startAt: at });
+      sh.el.playbackRate = 1;
+      if (clockRef.current.playing) sh.el.play().catch(() => {});
     };
-    // Snap as soon as the element can seek, instead of waiting for the next tick.
-    const onReady = () => tick();
-    sh.el.addEventListener('loadedmetadata', onReady);
+    const onPlaying = () => {
+      if (!sh.loading) return;
+      sh.loading = false;
+      // Behind at start-up (drift < 0) means ask further ahead next time.
+      const drift = (sh.base + sh.el.currentTime) - want();
+      sh.lead = Math.min(3, Math.max(0.2, sh.lead - drift));
+    };
+    const tick = () => {
+      const c = clockRef.current;
+      if (!c.playing) { if (!sh.el.paused) sh.el.pause(); return; }
+      if (sh.id !== trackId || !sh.el.src) { load(); return; }
+      if (sh.el.paused) sh.el.play().catch(() => {});
+      if (sh.loading) return;
+      const drift = (sh.base + sh.el.currentTime) - want();
+      if (Math.abs(drift) > 2) { load(); return; }
+      // Ahead -> slow down, behind -> speed up; inaudible, it is silent anyway.
+      sh.el.playbackRate = Math.abs(drift) < 0.04 ? 1 : Math.min(1.25, Math.max(0.8, 1 - drift * 0.6));
+    };
+    sh.el.addEventListener('playing', onPlaying);
     tick();
-    const t = setInterval(tick, 500);
-    return () => { clearInterval(t); sh.el.removeEventListener('loadedmetadata', onReady); };
-  }, [active, local, trackId, player.playing]); // eslint-disable-line react-hooks/exhaustive-deps
+    const t = setInterval(tick, 250);
+    return () => { clearInterval(t); sh.el.removeEventListener('playing', onPlaying); };
+  }, [active, local, trackId, player.playing, cfg.delay, player.nowPlaying?.device?.kind]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const graph = () => { const wa = local ? player.webAudio() : shadow(); wa?.ctx?.resume?.(); return wa; };
 
