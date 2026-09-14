@@ -4,6 +4,25 @@ Pick-up notes for the next session. Open: the HTTPS/DNS fix (still blocking the
 phone PWA), the rest of the Liked Songs audit (#2.2-2.5), and a few library
 leftovers listed at the bottom.
 
+## 2026-09-14 (night) -- state at hand-off
+Everything below is deployed (web :8748 / music.baxtergroup.io, relay redeployed, desktop dev via `npm run dev`). Earlier-today sections were never written into this file; the commit log (`git log --since=2026-09-13`) and the memory note carry them.
+
+### Shipped 2026-09-13/14
+- **Relay store = SQLite** (`relay/db.js`, node:sqlite, `/data/relay.db`): sessions, listens/matches/history, caches, `likes`. Old JSON files imported once (`*.migrated`). Rule from Lukas: persistent state goes in a DB, never growing JSON.
+- **Likes**: timestamps in relay `likes` (ws `like` msg, `GET/POST /likes`). Root cause of the liked-songs mess: `likedAt` lived in the Jellyfin DisplayPreferences blob and every client wrote its stale copy of the whole blob back (3 timestamps left for 1,419 favourites). Prefs now travel as PATCHES (relay + Jellyfin) and `setPrefs` re-reads before writing. Test `test/.probe/likes.mjs`.
+- **Fast playlists**: relay `GET /playlist?id=` reads Jellyfin's `playlist.xml` (compose mounts `jellyfin/config/data/playlists` ro at `/jfdata/playlists`), derives item ids = .NET-Guid-ordered MD5 of UTF-16LE("MediaBrowser.Controller.Entities.Audio.Audio"+path) (verified), pulls rows from Meili (`id` filterable now); ~100 ms vs 780 ms. Client paints from it, Jellyfin's copy reconciles behind. PlaylistItemId == item id (XML has no per-entry ids).
+- **Session memory**: relay remembers the session only from the active / last-active / actually-playing client (a paused mirror overwrote it when the active browser reloaded). Client: a client that has been mirroring adopts the session when its player vanishes instead of falling back to its old loaded track. Test `test/.probe/mirror-reload.mjs` (fails before, passes after).
+- **Remote play latency**: the active player starts the chosen track as soon as its own record arrives and backfills the queue (~1 s saved). **Device switch** starts the new device before stopping the old one.
+- **Music Requests -> Jellyfin**: requests download to the UNAS share, Conduit reads the SSD copy, nothing copied across since Sep 10. `sync_to_jellyfin()` in `app.py` rsyncs each finished album, writes `cover.jpg` (embedded -> Deezer; Jellyfin never uses embedded art for the ALBUM), notifies Jellyfin, schedules a hygiene pass 3 min later. `hygiene.sh` has a flock. Discography caches: relay 30 min, MR 6 h.
+- **Jellyfin providers**: Fanart / Cover Art Archive / Discogs installed; library fetchers MusicBrainz+TheAudioDB (meta), TheAudioDB > CAA > Fanart (album images), TheAudioDB > Fanart (artists); MusicBrainz RateLimit 1.5 (SECONDS). They need MBIDs (~half the library), so hygiene `artist_images.py` + `album_covers.py` stay nightly; `fix_covers.py` squares non-square cover files (90 fixed). Lyrics were already Jellyfin's LrcLib.
+- **UI**: History page = stats.fm clone (`src/components/History.jsx`, `.sf-*` CSS, relay `/history` ranges today/week/4w/6m/year/all, deltas, per-day charts, clocks); phone layout to Spotify iOS measurements (`@media (max-width:760px)` block, `isMobile`/`mobileLib` in App.jsx) + Expo shell `mobile/` (WebView; `npx expo start --lan`); now-playing view: seek on top, icon tabs vinyl/note/wave, device+volume bottom-right, lyrics Sync pill; footer untouched; pins in Your Library; mouse back/forward; header dots menu; context menus survive auto-scroll; playlist Recommended section; genre buckets by head word (`bucketsOf`); next always lands on a track (`artist:` contexts); artist Popular via relay `/popular` (Deezer); Milkdrop + all speaker-sync code REMOVED; visualizer shadow stream = transcode from exact offset + playbackRate trim.
+
+### Open / check tomorrow
+- Hygiene pass ran ~01:40 PDT for missing artist portraits (Tool, Tyla, Alex Isley), orphan "Calvin Harris; X" entries, "Tyla feat. X" splits (4 files retagged). Verify artists have images; nightly 04:30 covers the rest. Before: 29 artists / 12 albums without images.
+- A stray **Windows Chrome tab** ("Web Player (1)") holds Lukas's session; close it or transfer.
+- Jellyfin logs a PlaybackReporting DbUpdateConcurrencyException every 2 min since Sep 13 18:29 (two sessions of the same user); recheck once the Windows tab is gone.
+- Discogs plugin is metadata-only, needs a token if enabled. Expo shell only wraps the web app.
+
 ## Shipped 2026-09-13 (later; deployed, relay redeployed)
 - Genre browse fixed: `bucketsOf(tag)` in relay/server.js files each of the
   600 raw genre tags under ONE bucket by its HEAD word ("Emo Rap" is rap,
