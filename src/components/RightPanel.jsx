@@ -3,6 +3,7 @@ import { ArtistLinks, PlayGlyph } from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import { ctxItemId } from '../api/context.js';
 import { isLiked } from '../api/likes.js';
+import { usePhone } from './Player.jsx';
 
 const Close = () => (
   <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
@@ -10,17 +11,30 @@ const Close = () => (
   </svg>
 );
 
+// Phone: the queue page closes with a chevron-down, like Spotify's.
+const ChevronDown = () => (
+  <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+    <path d="M2.793 8.043a1 1 0 0 1 1.414 0L12 15.836l7.793-7.793a1 1 0 1 1 1.414 1.414L12 18.664 2.793 9.457a1 1 0 0 1 0-1.414z" />
+  </svg>
+);
+const Handle = () => (
+  <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
+    <path d="M3 8.25h18v1.5H3v-1.5zm0 6h18v1.5H3v-1.5z" />
+  </svg>
+);
+
 function secs(ticks) {
   return ticks ? ticks / 10_000_000 : 0;
 }
 
-function QueueRow({ track, jf, active, onPlay, onOpenArtist, onOpenAlbum, menuItems, draggable, onDragStart, onDragOver, onDrop, onDragEnd, over, dragging }) {
+function QueueRow({ track, jf, active, onPlay, onOpenArtist, onOpenAlbum, menuItems, draggable, onDragStart, onDragOver, onDrop, onDragEnd, over, dragging, pos, onHandleDown }) {
   const [menu, setMenu] = useState(null);
   const art = jf.imageUrl(track.AlbumId || track.Id, { maxHeight: 80 });
   const artists = track.ArtistItems?.length ? track.ArtistItems : (track.Artists || []).map((n) => ({ Name: n }));
   return (
     <div
       className={`qrow ${active ? 'active' : ''} ${over ? 'dropbefore' : ''} ${dragging ? 'dragging' : ''}`}
+      data-pos={pos}
       draggable={draggable}
       onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
       onContextMenu={menuItems ? (e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); } : undefined}
@@ -40,6 +54,10 @@ function QueueRow({ track, jf, active, onPlay, onOpenArtist, onOpenAlbum, menuIt
         </button>
       )}
       {menu && <ContextMenu x={menu.x} y={menu.y} anchorRight={Boolean(menu.fromButton)} items={menuItems} onClose={() => setMenu(null)} />}
+      {/* Phone: Spotify's drag handle at the right; HTML5 drag does not fire on touch. */}
+      {onHandleDown && (
+        <span className="qrow-handle" onPointerDown={onHandleDown} title="Drag to reorder" aria-label="Drag to reorder"><Handle /></span>
+      )}
     </div>
   );
 }
@@ -129,6 +147,27 @@ function Queue({ player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlis
   }, [contextId, jf]);
   const [drag, setDrag] = useState(null); // absolute queue index being dragged
   const [over, setOver] = useState(null);
+  const phone = usePhone();
+  // Phone reorder: the handle captures the pointer, the row under the finger
+  // becomes the drop target, release moves the track.
+  const handleDown = (pos) => (e) => {
+    e.preventDefault();
+    const el = e.currentTarget; let target = pos;
+    try { el.setPointerCapture(e.pointerId); } catch {}
+    setDrag(pos); setOver(pos);
+    const move = (ev) => {
+      const row = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.qrow[data-pos]');
+      if (!row) return;
+      const p = Number(row.dataset.pos); if (Number.isNaN(p) || p === target) return;
+      target = p; setOver(p);
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+      if (target !== pos) player.moveInQueue(pos, target);
+      setDrag(null); setOver(null);
+    };
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  };
 
   if (!queue.length) {
     return (
@@ -148,7 +187,7 @@ function Queue({ player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlis
   ];
   const row = (t, pos, key) => (
     <QueueRow key={key} track={t} jf={jf} onPlay={() => player.skipTo(pos)} onOpenArtist={onOpenArtist} onOpenAlbum={onOpenAlbum}
-      menuItems={items(t, pos)} draggable
+      menuItems={items(t, pos)} draggable={!phone} pos={pos} onHandleDown={phone ? handleDown(pos) : undefined}
       onDragStart={() => setDrag(pos)} onDragOver={(e) => { e.preventDefault(); setOver(pos); }}
       onDrop={(e) => { e.preventDefault(); if (drag != null && drag !== pos) player.moveInQueue(drag, pos); setDrag(null); setOver(null); }}
       onDragEnd={() => { setDrag(null); setOver(null); }} over={over === pos && drag != null && drag !== pos} dragging={drag === pos} />
@@ -295,6 +334,7 @@ export function Lyrics({ player, jf }) {
 
 export default function RightPanel({ mode, onClose, onMode, player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlists }) {
   const titles = { npv: 'Now playing', queue: 'Queue', lyrics: 'Lyrics' };
+  const phone = usePhone();
   // Lyrics sit on the blurred cover, like the now-playing view does.
   const np = player.nowPlaying;
   const bg = mode === 'lyrics' ? (np?.artId ? jf.imageUrl(np.artId, { maxHeight: 640 }) : np?.artUrl || null) : null;
@@ -302,7 +342,7 @@ export default function RightPanel({ mode, onClose, onMode, player, jf, onOpenAr
     <aside className={`rightpanel ${bg ? 'with-bg' : ''}`}>
       {bg && <div className="panel-bg" style={{ backgroundImage: `url("${bg}")` }} />}
       <div className="panel-header">
-        <button className="icon-btn" onClick={onClose} title="Close panel"><Close /></button>
+        <button className="icon-btn" onClick={onClose} title="Close panel">{phone ? <ChevronDown /> : <Close />}</button>
         <span className="title">{titles[mode]}</span>
       </div>
       {mode !== 'npv' && (

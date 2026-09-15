@@ -5,6 +5,20 @@ import { vibrantColor } from '../api/colors.js';
 import { seekHover } from '../api/seekHover.js';
 import { useLiked } from '../api/likes.js';
 
+// True on the phone layout (the same breakpoint as the CSS). Phone-only
+// markup in the player screens gates on this so the desktop DOM is untouched.
+const PHONE_MQ = '(max-width: 760px)';
+export function usePhone() {
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(PHONE_MQ).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(PHONE_MQ);
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
+
 function fmt(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
   const m = Math.floor(seconds / 60);
