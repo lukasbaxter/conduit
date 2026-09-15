@@ -66,7 +66,7 @@ const CloseGlyph = () => (
 );
 
 // One row of the phone search list: 48pt art (round for artists), name 16,
-// "Kind · detail" 13 grey. Songs are TrackRows (they carry the ⋯ menu).
+// "Kind • detail" 13 grey. Songs are TrackRows (they carry the ⋯ menu).
 function SearchRow({ image, round, name, sub, onClick, onRemove, icon, className = '' }) {
   return (
     <div className={`srow ${round ? 'round' : ''} ${className}`} onClick={onClick} role="button" tabIndex={0}
@@ -461,7 +461,7 @@ export default function Library({
             <div style={{ minWidth: 0 }}>
               <div className="kind">Made for you</div>
               <FittedTitle text="Release Radar" maxLines={2} />
-              <p className="hero-meta">{rels == null ? 'Checking the last 90 days for the artists you play most…' : `${rels.length} new releases from the artists you play most · last 90 days`}</p>
+              <p className="hero-meta">{rels == null ? 'Checking the last 90 days for the artists you play most…' : `${rels.length} new releases from the artists you play most • last 90 days`}</p>
             </div>
           </header>
           <div className="actions slim" />
@@ -470,7 +470,7 @@ export default function Library({
             {rels && rels.length > 0 && (
               <div className="grid">
                 {rels.map((r) => r.inLibrary ? (
-                  <Card key={r.album_id} title={r.title} subtitle={`${r.artistName} · ${r.date}`} image={jf.imageUrl(r.inLibrary, { maxHeight: 320 })}
+                  <Card key={r.album_id} title={r.title} subtitle={`${r.artistName} • ${r.date}`} image={jf.imageUrl(r.inLibrary, { maxHeight: 320 })}
                     onOpen={() => openAlbum({ Id: r.inLibrary, Name: r.title })} onPlay={() => playItem({ Id: r.inLibrary, Type: 'MusicAlbum' })} />
                 ) : (
                   <div key={r.album_id} className="card missing">
@@ -484,7 +484,7 @@ export default function Library({
                       })()}
                     </div>
                     <div className="card-title">{r.title}</div>
-                    <div className="card-sub"><button className="rowlink" onClick={() => onOpenArtistById(r.artistId)}>{r.artistName}</button> · {r.rtype} · {r.date}</div>
+                    <div className="card-sub"><button className="rowlink" onClick={() => onOpenArtistById(r.artistId)}>{r.artistName}</button> • {r.rtype} • {r.date}</div>
                   </div>
                 ))}
               </div>
@@ -737,7 +737,7 @@ export default function Library({
                 )}
                 {phone && !isArtist ? (
                   /* Spotify iOS: owner line (avatar + name, bold), then
-                     "Playlist · 3h 7min" / "Album · 2025" in grey. */
+                     "Playlist • 3h 7min" / "Album • 2025" in grey. */
                   <p className="hero-meta phone">
                     {lead && (
                       <span className="hero-owner">
@@ -757,10 +757,10 @@ export default function Library({
                     {item._mix && <span className="hero-owner"><b>Made for you</b></span>}
                     <span className="hero-stats">
                       {kind === 'Album'
-                        ? [releaseType({ ...item, ChildCount: item.ChildCount ?? tracks.length, RunTimeTicks: item.RunTimeTicks || totalTicks }), item.ProductionYear].filter(Boolean).join(' · ')
-                        : isLiked ? `Playlist · ${tracks.length} song${tracks.length === 1 ? '' : 's'}`
-                        : item._mix ? [item._sub, totalTicks ? fmtTotalShort(totalTicks) : null].filter(Boolean).join(' · ')
-                        : ['Playlist', totalTicks ? fmtTotalShort(totalTicks) : `${tracks.length} songs`].join(' · ')}
+                        ? [releaseType({ ...item, ChildCount: item.ChildCount ?? tracks.length, RunTimeTicks: item.RunTimeTicks || totalTicks }), item.ProductionYear].filter(Boolean).join(' • ')
+                        : isLiked ? `Playlist • ${tracks.length} song${tracks.length === 1 ? '' : 's'}`
+                        : item._mix ? [item._sub, totalTicks ? fmtTotalShort(totalTicks) : null].filter(Boolean).join(' • ')
+                        : ['Playlist', totalTicks ? fmtTotalShort(totalTicks) : `${tracks.length} songs`].join(' • ')}
                     </span>
                   </p>
                 ) : (
@@ -772,12 +772,12 @@ export default function Library({
                       {(item.AlbumArtists || []).slice(1).map((a) => (
                         <React.Fragment key={a.Id}>, <button className="rowlink strong" onClick={() => onOpenArtistById(a.Id)}>{a.Name}</button></React.Fragment>
                       ))}
-                      {item.ProductionYear ? <> · {item.ProductionYear}</> : null}
-                      {' · '}
+                      {item.ProductionYear ? <> • {item.ProductionYear}</> : null}
+                      {' • '}
                     </>
                   )}
-                  {isPlaylist && !item._mix && <><button className="rowlink strong" onClick={onOpenProfile}>{me?.Name || 'You'}</button>{' · '}</>}
-                  {item._mix && <><b>Made for you</b>{item._sub ? ` · ${item._sub}` : ''}{' · '}</>}
+                  {isPlaylist && !item._mix && <><button className="rowlink strong" onClick={onOpenProfile}>{me?.Name || 'You'}</button>{' • '}</>}
+                  {item._mix && <><b>Made for you</b>{item._sub ? ` • ${item._sub}` : ''}{' • '}</>}
                   {isArtist ? `${tracks.length} songs in your library` : `${tracks.length} songs`}
                   {!isArtist && totalTicks ? `, ${fmtTotal(totalTicks)}` : ''}
                 </p>
@@ -929,7 +929,7 @@ export default function Library({
                   </div>
                   <div className="grid">
                     {shown.map(({ key, r, type, year, inLib }) => inLib ? (
-                      <Card key={key} title={r.localName || r.title} subtitle={year ? `${year} · ${type}` : type}
+                      <Card key={key} title={r.localName || r.title} subtitle={year ? `${year} • ${type}` : type}
                         image={jf.imageUrl(inLib, { maxHeight: 320 })} onOpen={() => openAlbum({ Id: inLib, Name: r.localName || r.title })} onPlay={() => playItem({ Id: inLib, Type: 'MusicAlbum' })} />
                     ) : (
                       <div key={key} className="card missing" role="group">
@@ -947,7 +947,7 @@ export default function Library({
                           })()}
                         </div>
                         <div className="card-title">{r.title}</div>
-                        <div className="card-sub">{year ? `${year} · ${type}` : type}{r.total_tracks ? ` · ${r.total_tracks} tracks` : ''}</div>
+                        <div className="card-sub">{year ? `${year} • ${type}` : type}{r.total_tracks ? ` • ${r.total_tracks} tracks` : ''}</div>
                       </div>
                     ))}
                   </div>
@@ -1101,9 +1101,9 @@ export default function Library({
     // in score order, so the top result leads and the types take turns, then
     // the tail of each. No headings, no Top result card.
     const subOf = (kind, item) => kind === 'Artist' ? 'Artist'
-      : kind === 'Album' ? `Album · ${item.AlbumArtist || ''}`.replace(/ · $/, '')
+      : kind === 'Album' ? `Album • ${item.AlbumArtist || ''}`.replace(/ • $/, '')
       : kind === 'Playlist' ? 'Playlist'
-      : `Song · ${item.Artists?.join(', ') || item.AlbumArtist || ''}`.replace(/ · $/, '');
+      : `Song • ${item.Artists?.join(', ') || item.AlbumArtist || ''}`.replace(/ • $/, '');
     const phoneRows = (() => {
       if (!phone || !r || r.scoped) return null;
       const rows = [], seen = new Set();
@@ -1300,7 +1300,7 @@ export default function Library({
               <div className="shelf-head"><h2>Albums</h2></div>
               <div className="grid">
                 {r.albums.map((a) => (
-                  <Card key={a.Id} title={a.Name} subtitle={`${a.ProductionYear ? a.ProductionYear + ' · ' : ''}${a.AlbumArtist || 'Album'}`}
+                  <Card key={a.Id} title={a.Name} subtitle={`${a.ProductionYear ? a.ProductionYear + ' • ' : ''}${a.AlbumArtist || 'Album'}`}
                     image={jf.imageUrl(a.Id, { maxHeight: 320 })} onOpen={() => openAlbum(a)} onPlay={() => playItem(a)} />
                 ))}
               </div>

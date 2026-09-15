@@ -78,7 +78,7 @@ export default function DevicePicker({ devices, active, onSelect, showName = fal
   };
   const subtitleFor = (d) => {
     if (d.kind === 'bluos' && d.slaves?.length) {
-      return `Grouped · ${d.slaves.length + 1} speakers`;
+      return `Grouped • ${d.slaves.length + 1} speakers`;
     }
     return d.model;
   };

@@ -15,7 +15,8 @@ function fmt(seconds) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-export function PlayingElsewhereBar({ player }) {
+/** "Playing on X" when the sound is not coming out of this client, else null. */
+export function elsewhereLabel(player) {
   const { roster, relay, device } = player;
   // Where the sound is coming out, if not this client's own output:
   //  - the session is on another of my clients -> that client's name, unless
@@ -31,16 +32,25 @@ export function PlayingElsewhereBar({ player }) {
   let label = null;
   if (active) label = isSpeaker(active.nowPlaying?.device) ? active.nowPlaying.device.name : active.name;
   else if (isSpeaker(device)) label = device.name;
+  return label;
+}
+
+const CastGlyph = () => (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6" />
+    <path d="M2 12a9 9 0 0 1 8 8" />
+    <path d="M2 16a5 5 0 0 1 4 4" />
+    <path d="M2 20h.01" />
+  </svg>
+);
+
+export function PlayingElsewhereBar({ player }) {
+  const label = elsewhereLabel(player);
   if (!label) return null;
   return (
     <div className="playing-elsewhere">
-      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
-        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6" />
-        <path d="M2 12a9 9 0 0 1 8 8" />
-        <path d="M2 16a5 5 0 0 1 4 4" />
-        <path d="M2 20h.01" />
-      </svg>
+      <CastGlyph />
       <span>Playing on {label}</span>
     </div>
   );
@@ -66,6 +76,8 @@ export function sessionDeviceOf(player, devices) {
 }
 
 export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist, panel, onPanel, onLike, onFullScreen }) {
+  const phone = usePhone();
+  const elsewhere = elsewhereLabel(player);
   const { current, nowPlaying, playing, position, duration, volume, device, error, roster, relay, repeat, shuffle } = player;
   const sessionDevice = sessionDeviceOf(player, devices);
   const liked = useLiked(nowPlaying?.itemId);
@@ -125,6 +137,10 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
           )}
           <div className="player-meta">
             <div className="player-title">{nowPlaying?.title || 'Nothing playing'}</div>
+            {/* Phone, sound elsewhere: Spotify puts the device line inside the card, in green. */}
+            {phone && elsewhere ? (
+              <div className="player-artist player-elsewhere"><CastGlyph /><span>Playing on {elsewhere}</span></div>
+            ) : (
             <div className="player-artist">
               {nowPlaying?.artists?.length ? (
                 <ArtistLinks artists={nowPlaying.artists} onOpen={onOpenArtist} className="linkish" />
@@ -134,6 +150,7 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
                 nowPlaying?.artist || ''
               )}
             </div>
+            )}
           </div>
           {nowPlaying?.itemId && (
             // Follows the SESSION track (mirrored liked state included), so the

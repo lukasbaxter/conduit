@@ -195,7 +195,7 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
             <LikedCover />
             <span className="libitem-text">
               <span className="libitem-name">Liked Songs</span>
-              <span className="libitem-sub"><Pin />Playlist{likedCount != null ? ` · ${likedCount} songs` : ''}</span>
+              <span className="libitem-sub"><Pin />Playlist{likedCount != null ? ` • ${likedCount} songs` : ''}</span>
             </span>
           </button>}
 
@@ -212,8 +212,8 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
             const it = e.item;
             const art = jf.imageUrl(it.Id, { maxHeight: 84 });
             const sub = e.kind === 'album'
-              ? `Album · ${it.AlbumArtist || it.AlbumArtists?.[0]?.Name || ''}`
-              : `Playlist${it.ChildCount ? ` · ${it.ChildCount} songs` : ''}`;
+              ? `Album • ${it.AlbumArtist || it.AlbumArtists?.[0]?.Name || ''}`
+              : `Playlist${it.ChildCount ? ` • ${it.ChildCount} songs` : ''}`;
             return (
               <button
                 key={e.id}
