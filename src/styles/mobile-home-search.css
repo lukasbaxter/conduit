@@ -85,13 +85,13 @@
      at the top (Spotify), leaving the screen to the field, chips and results. */
   .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .contentbar > .search-cancel) { grid-template-rows: 0 minmax(0, 1fr); }
   .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .contentbar > .search-cancel) .navbar { height: 0; min-height: 0; padding: 0; overflow: hidden; }
-  .content:has(> .contentbar > .search-cancel) .contentbar { padding-top: calc(8px + env(safe-area-inset-top)); }
 
   /* ---- Search: empty state ----
      "Search" title beside the avatar; white 44pt bar (radius 4, black
      magnifier) that stays put while results scroll; the type chips share the
      sticky block. */
   .content:has(> .contentbar > .search) .contentbar { position: sticky; top: 0; z-index: 9; flex-wrap: wrap; gap: 8px 12px; padding: 4px 16px 8px; background: var(--bg-base); }
+  .content:has(> .contentbar > .search-cancel) .contentbar { padding-top: calc(8px + env(safe-area-inset-top)); }
   .search-cancel { flex: none; font-size: 16px; font-weight: 400; color: #fff; padding: 0 0 0 4px; height: 44px; animation: cancel-in .2s ease-out; }
   @keyframes cancel-in { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: none; } }
   .content:has(> .contentbar > .search-cancel) .search { flex: 1 1 0; }
