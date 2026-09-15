@@ -229,8 +229,24 @@ export default function App() {
     const h = histRef.current;
     h.stack = h.stack.slice(0, h.idx + 1); h.stack.push(e); h.idx = h.stack.length - 1;
     setHistTick((t) => t + 1);
+    // Mirror into the browser's history so the phone's back gesture / Android
+    // back / browser Back walk the in-app stack instead of leaving the app.
+    try { window.history.pushState({ conduit: h.idx }, ''); } catch { /* sandboxed */ }
   };
   const currentEntry = () => histRef.current.stack[histRef.current.idx];
+  // Browser Back/Forward -> our stack. The state carries the target index, so
+  // a jump of several entries lands on the right one.
+  useEffect(() => {
+    try { window.history.replaceState({ conduit: 0 }, ''); } catch { /* ignore */ }
+    const onPop = (ev) => {
+      const h = histRef.current;
+      const to = ev.state && typeof ev.state.conduit === 'number' ? ev.state.conduit : 0;
+      if (to === h.idx || to < 0 || to >= h.stack.length) return;
+      h.idx = to; applyEntry(h.stack[to]); setHistTick((t) => t + 1);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const setDetail = (next) => {
     setDetailRaw((prev) => {
       const d = typeof next === 'function' ? next(prev) : next;
@@ -245,8 +261,11 @@ export default function App() {
     });
   };
   const setSeeAll = (v) => { setSeeAllRaw(v); setDetailRaw(null); pushEntry({ view: 'home', detail: null, seeAll: v }); setView('home'); };
-  const goBack = () => { const h = histRef.current; if (h.idx > 0) { h.idx -= 1; applyEntry(h.stack[h.idx]); setHistTick((t) => t + 1); } };
-  const goForward = () => { const h = histRef.current; if (h.idx < h.stack.length - 1) { h.idx += 1; applyEntry(h.stack[h.idx]); setHistTick((t) => t + 1); } };
+  // When the browser history is in step with ours, let it drive (so its own
+  // Back/Forward and ours stay consistent); otherwise walk the stack directly.
+  const inStep = () => { try { return window.history.state?.conduit === histRef.current.idx; } catch { return false; } };
+  const goBack = () => { const h = histRef.current; if (h.idx <= 0) return; if (inStep()) { window.history.back(); return; } h.idx -= 1; applyEntry(h.stack[h.idx]); setHistTick((t) => t + 1); };
+  const goForward = () => { const h = histRef.current; if (h.idx >= h.stack.length - 1) return; if (inStep()) { window.history.forward(); return; } h.idx += 1; applyEntry(h.stack[h.idx]); setHistTick((t) => t + 1); };
   const canBack = histRef.current.idx > 0;
   // Mouse back / forward buttons (buttons 3 and 4) drive the in-app history in
   // the browser and on the desktop; the browser's own navigation is suppressed.
