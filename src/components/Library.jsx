@@ -50,19 +50,8 @@ function Shelf({ title, items, jf, round, onOpen, onPlay, onSeeAll, subtitle }) 
 
 const SEARCH_TYPES = ['All', 'Songs', 'Artists', 'Albums', 'Playlists'];
 
-// Phone layout flag (same breakpoint as the phone CSS). The search page
-// renders a flat Spotify-style result list there instead of the desktop grid.
-const PHONE_MQ = '(max-width: 760px)';
-function usePhone() {
-  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(PHONE_MQ).matches);
-  useEffect(() => {
-    const mq = window.matchMedia(PHONE_MQ);
-    const on = () => setPhone(mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  }, []);
-  return phone;
-}
+// Phone layout flag: usePhone() from TrackRow.jsx (same breakpoint as the
+// phone CSS). The search page renders a flat Spotify-style result list there.
 
 // A recent search is either a bare query (older entries) or the thing that
 // was tapped: { q, kind, id, name, sub }. Spotify lists the tapped items.
