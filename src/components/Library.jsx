@@ -210,7 +210,6 @@ export default function Library({
     onUpdatePrefs({ recentSearches: [entry, ...recents.filter((x) => recentKey(x) !== key)].slice(0, 10) });
   };
   const forgetRecent = (entry) => onUpdatePrefs?.({ recentSearches: recents.filter((x) => recentKey(x) !== recentKey(entry)) });
-  const phone = usePhone();
   const searchRef = useRef(null);
   useEffect(() => {
     const onKey = (e) => {
