@@ -65,7 +65,9 @@ const HeartPath = ({ on }) => (on
  * Visualizer / Lyrics), the track and transport along the bottom.
  */
 export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAlbum, onLike, onAddTo, onNewPlaylist, playlists = [], prefs, onUpdatePrefs, onPanel, devices = [], sessionDevice = null }) {
-  const [tab, setTab] = useState(() => localStorage.getItem('conduit.fsTab') || 'album');
+  // Phone: the mini bar always opens on the album view (Spotify); lyrics and
+  // the visualizer are a tap away. Desktop remembers the last tab.
+  const [tab, setTab] = useState(() => (typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches) ? 'album' : (localStorage.getItem('conduit.fsTab') || 'album'));
   const phone = usePhone();
   // Phone: the ⋯ up top opens the track's menu as a bottom sheet (the track
   // row's menu: header, playlist, queue, like, artist, album, radio, share).
