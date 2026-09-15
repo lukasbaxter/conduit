@@ -126,6 +126,8 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
         <div className="player-now">
           {art ? (
             <img
+              // Keyed by the image so a track change never shows the previous cover next to the new title.
+              key={art}
               className={`player-art ${nowPlaying?.albumId ? 'clickable' : ''}`}
               src={art}
               alt=""
