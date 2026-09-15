@@ -204,7 +204,7 @@ function Queue({ player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlis
   }
   const items = (t, pos) => [
     { label: 'Remove from queue', onClick: () => player.removeFromQueue(pos) },
-    { label: isLiked(t.Id) ? 'Remove from your Liked Songs' : 'Save to your Liked Songs', onClick: () => onLike?.(t, !isLiked(t.Id)) },
+    { label: isLiked(t.Id) ? 'Remove from Liked Songs' : 'Add to Liked Songs', onClick: () => onLike?.(t, !isLiked(t.Id)) },
     playlists.length ? { label: 'Add to playlist', sub: playlists.map((p) => ({ key: p.Id, label: p.Name, onClick: () => onAddTo?.(p, t) })) } : null,
     { sep: true },
     t.ArtistItems?.[0]?.Id ? { label: 'Go to artist', onClick: () => onOpenArtist?.(t.ArtistItems[0].Id) } : null,
