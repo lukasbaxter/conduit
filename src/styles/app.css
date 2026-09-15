@@ -1043,7 +1043,16 @@ button:disabled { cursor: default; }
   .avatar { width: 32px; height: 32px; font-size: 13px; }
   .mobile-title { display: block; font-size: 24px; font-weight: 700; letter-spacing: -.3px; }
   .avatarmenu { left: 0; right: auto; }
-  .mobile-back { display: grid; position: fixed; top: calc(12px + env(safe-area-inset-top)); left: 16px; z-index: 40; width: 32px; height: 32px; border-radius: 50%; background: rgba(0,0,0,.5); color: #fff; place-items: center; backdrop-filter: blur(6px); }
+  /* Detail header: floating back chevron that turns into a solid title bar
+     (tinted with the page's hero colour) as the hero scrolls out. */
+  .mobile-topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 40; display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; height: calc(56px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); pointer-events: none; }
+  .mobile-topbar::before { content: ''; position: absolute; inset: 0; background: color-mix(in srgb, var(--topbar-bg, #121212) 55%, #121212); opacity: var(--topbar, 0); }
+  .mobile-topbar-title { position: relative; text-align: center; font-size: 16px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: clamp(0, calc(var(--topbar, 0) * 2 - 1), 1); }
+  .mobile-back { display: grid; position: relative; justify-self: center; pointer-events: auto; width: 32px; height: 32px; border-radius: 50%; background: rgba(0,0,0,.5); color: #fff; place-items: center; backdrop-filter: blur(6px); transition: background .15s; }
+  .mobile-topbar[style*="--topbar: 1"] .mobile-back { background: transparent; }
+  /* Pushed pages slide in from the right like a native navigation stack. */
+  .app.mobile-detail .content { animation: page-in .22s cubic-bezier(.2,.7,.2,1); }
+  @keyframes page-in { from { transform: translateX(24px); opacity: .4; } to { transform: none; opacity: 1; } }
   .shell { grid-template-columns: minmax(0, 1fr) !important; }
   .shell .sidebar, .shell .rail-resizer, .shell .panel-spacer { display: none; }
   .shell.show-lib .sidebar { display: grid; }

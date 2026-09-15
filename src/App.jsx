@@ -714,6 +714,44 @@ export default function App() {
     }
   }, [jf, player]);
 
+  // Phone detail pages: how far the page has scrolled (0..1 over the hero) drives
+  // the top bar's opacity, and its tint comes from the page's --hero colour.
+  // Scroll events do not bubble, so the shell listens in the capture phase.
+  const shellRef = useRef(null);
+  const [topbar, setTopbar] = useState(0);
+  const [topbarBg, setTopbarBg] = useState('#121212');
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell || !isMobile) return undefined;
+    const onScroll = (e) => {
+      const el = e.target;
+      if (!(el instanceof HTMLElement) || !el.classList.contains('content')) return;
+      const hero = el.querySelector('.hero');
+      const span = hero ? Math.max(120, hero.offsetHeight - 60) : 160;
+      setTopbar(Math.max(0, Math.min(1, (el.scrollTop - 40) / span)));
+      setTopbarBg(getComputedStyle(el).getPropertyValue('--hero').trim() || '#121212');
+    };
+    shell.addEventListener('scroll', onScroll, true);
+    return () => shell.removeEventListener('scroll', onScroll, true);
+  }, [isMobile, booting, jf]); // the shell only exists once signed in
+  useEffect(() => { setTopbar(0); const el = shellRef.current?.querySelector('.content'); if (el) setTopbarBg(getComputedStyle(el).getPropertyValue('--hero').trim() || '#121212'); }, [detail?.item?.Id, seeAll]);
+  // iOS-style edge swipe: a drag that starts on the left edge goes back.
+  useEffect(() => {
+    if (!isMobile) return undefined;
+    let start = null;
+    const down = (e) => { const t = e.touches?.[0]; start = t && t.clientX < 28 ? { x: t.clientX, y: t.clientY, at: Date.now() } : null; };
+    const up = (e) => {
+      if (!start) return;
+      const t = e.changedTouches?.[0]; if (!t) return;
+      const dx = t.clientX - start.x, dy = Math.abs(t.clientY - start.y);
+      if (dx > 70 && dy < 60 && Date.now() - start.at < 700 && !fullScreen && !panel) goBack();
+      start = null;
+    };
+    window.addEventListener('touchstart', down, { passive: true });
+    window.addEventListener('touchend', up, { passive: true });
+    return () => { window.removeEventListener('touchstart', down); window.removeEventListener('touchend', up); };
+  }, [isMobile, fullScreen, panel]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (booting) return <div className="boot">Starting Conduit...</div>;
   if (!jf) return <Login onConnected={setJf} />;
 
@@ -721,12 +759,18 @@ export default function App() {
   // Library headers); detail pages hide the bar and float a back chevron.
   const mobileDetail = isMobile && !mobileLib && (detail || seeAll);
   const mobileTitle = mobileLib ? 'Your Library' : view === 'search' ? 'Search' : '';
+  const detailTitle = detail?.item?.Name || (seeAll === 'albums' ? 'Albums' : seeAll === 'artists' ? 'Artists' : '');
   return (
     <div className={`app ${isMobile ? 'mobile' : ''} ${mobileDetail ? 'mobile-detail' : ''}`}>
       {mobileDetail && (
-        <button className="mobile-back" onClick={goBack} title="Go back" aria-label="Go back">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.957 2.793a1 1 0 0 1 0 1.414L8.164 12l7.793 7.793a1 1 0 1 1-1.414 1.414L5.336 12l9.207-9.207a1 1 0 0 1 1.414 0z" /></svg>
-        </button>
+        // Spotify's detail header: a round back chevron floating over the hero
+        // that becomes a solid bar carrying the title once the hero scrolls away.
+        <div className="mobile-topbar" style={{ '--topbar': topbar, '--topbar-bg': topbarBg }}>
+          <button className="mobile-back" onClick={goBack} title="Go back" aria-label="Go back">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.957 2.793a1 1 0 0 1 0 1.414L8.164 12l7.793 7.793a1 1 0 1 1-1.414 1.414L5.336 12l9.207-9.207a1 1 0 0 1 1.414 0z" /></svg>
+          </button>
+          <div className="mobile-topbar-title">{detailTitle}</div>
+        </div>
       )}
       <header className="navbar">
         {/* App menu (the ⋯ Spotify keeps at the top-left), then history arrows. */}
@@ -781,6 +825,7 @@ export default function App() {
       </header>
 
       <div
+        ref={shellRef}
         className={`shell ${panel ? 'with-panel' : ''} ${railW <= RAIL_COLLAPSED ? 'rail-collapsed' : ''} ${resizing ? 'resizing' : ''} ${isMobile && mobileLib ? 'show-lib' : ''}`}
         style={{ '--rail-w': `${railW}px`, '--panel-w': `${panelW}px` }}
       >
