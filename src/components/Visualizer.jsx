@@ -12,6 +12,20 @@ import Calibrate from './Calibrate.jsx';
 // (its graph has no destination, so nothing is heard twice). `offset` is the
 // speaker's measured output delay (seconds, from the calibration): the shadow
 // runs that far behind the reported playhead so the bars match the sound.
+// iOS only lets an AudioContext run when it was resumed inside a user
+// gesture, and a media element captured by a SUSPENDED context plays out
+// loud through the speaker instead of into the graph. So the shadow stream's
+// context is a shared one that the visualizer button unlocks on tap, and the
+// shadow element is never started unless that context is running.
+let sharedCtx = null;
+export function unlockShadowAudio() {
+  const Ctx = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
+  if (!Ctx) return null;
+  if (!sharedCtx || sharedCtx.state === 'closed') sharedCtx = new Ctx();
+  sharedCtx.resume?.().catch(() => {});
+  return sharedCtx;
+}
+
 export const EQ_STYLES = [
   // "Line": Feishin's default preset (mode 10 line graph, 1.9px, prism, faint reflection).
   { id: 'line', name: 'Line', opts: { mode: 10, lineWidth: 1.9, fillAlpha: 0, barSpace: .7, reflexRatio: .5, reflexAlpha: .1, reflexBright: 1, showPeaks: false, ledBars: false, lumiBars: false, radial: false, mirror: 0, smoothing: .6, fftSize: 16384, maxFreq: 22050, minFreq: 20, gravity: 11, linearBoost: 4, maxDecibels: -25, minDecibels: -85 } },
@@ -47,15 +61,14 @@ export default function Visualizer({ player, active, jf, settings, offset = 0, c
   const shadow = () => {
     if (shadowRef.current) return shadowRef.current;
     const el = new Audio(); el.crossOrigin = 'anonymous'; el.preload = 'auto';
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    const ctx = new Ctx();
+    const ctx = unlockShadowAudio();
     const source = ctx.createMediaElementSource(el);
     // base: the track time the current stream starts at; lead: how far ahead
     // of the playhead to ask for, to cover the transcode's start-up (learned).
     shadowRef.current = { el, ctx, source, id: null, base: 0, lead: 1.0, loading: false };
     return shadowRef.current;
   };
-  useEffect(() => () => { const sh = shadowRef.current; if (sh) { sh.el.pause(); sh.el.src = ''; sh.ctx.close?.(); shadowRef.current = null; } }, []);
+  useEffect(() => () => { const sh = shadowRef.current; if (sh) { sh.el.pause(); sh.el.src = ''; try { sh.source.disconnect(); } catch { /* not connected */ } shadowRef.current = null; } }, []);
   // The session playhead as a live clock: the position the player last
   // reported plus the time since. The sync tick below reads THIS, never a
   // position captured when the effect ran.
@@ -80,7 +93,7 @@ export default function Visualizer({ player, active, jf, settings, offset = 0, c
       sh.base = at; sh.id = trackId; sh.loading = true;
       sh.el.src = jf.transcodeUrl(trackId, { codec: 'mp3', bitrate: 192000, startAt: at });
       sh.el.playbackRate = 1;
-      if (clockRef.current.playing) sh.el.play().catch(() => {});
+      if (clockRef.current.playing && sh.ctx.state === 'running') sh.el.play().catch(() => {});
     };
     const onPlaying = () => {
       if (!sh.loading) return;
@@ -93,6 +106,7 @@ export default function Visualizer({ player, active, jf, settings, offset = 0, c
       const c = clockRef.current;
       if (!c.playing) { if (!sh.el.paused) sh.el.pause(); return; }
       if (sh.id !== trackId || !sh.el.src) { load(); return; }
+      if (sh.ctx.state !== 'running') { sh.ctx.resume?.().catch(() => {}); return; } // never audible: wait for the unlock
       if (sh.el.paused) sh.el.play().catch(() => {});
       if (sh.loading) return;
       const drift = (sh.base + sh.el.currentTime) - want();

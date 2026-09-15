@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Lyrics } from './RightPanel.jsx';
-import Visualizer, { EQ_STYLES, GRADIENTS, DEFAULT_VIZ, loadVizSettings } from './Visualizer.jsx';
+import Visualizer, { EQ_STYLES, GRADIENTS, DEFAULT_VIZ, loadVizSettings, unlockShadowAudio } from './Visualizer.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import DevicePicker from './DevicePicker.jsx';
 import { seekHover } from '../api/seekHover.js';
@@ -72,6 +72,20 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
   // Phone: the ⋯ up top opens the track's menu as a bottom sheet (the track
   // row's menu: header, playlist, queue, like, artist, album, radio, share).
   const [more, setMore] = useState(false);
+  // Scrubbing: while the finger is on the seek bar the thumb follows it, not
+  // the playhead the relay mirrors from another device (that made the thumb
+  // snap back every tick). The seek is sent on release; the local value is
+  // held until the mirrored position has caught up.
+  const [scrub, setScrub] = useState(null);
+  const scrubHold = useRef(null);
+  const onScrubStart = () => { clearTimeout(scrubHold.current); setScrub((s) => (s == null ? Math.min(player.position || 0, player.duration || 0) : s)); };
+  const onScrubMove = (e) => setScrub(Number(e.target.value));
+  const onScrubEnd = (e) => {
+    const v = Number(e.target.value);
+    setScrub(v); player.seek(v);
+    clearTimeout(scrubHold.current);
+    scrubHold.current = setTimeout(() => setScrub(null), player.mirroring ? 1500 : 250);
+  };
   const rootRef = useRef(null);
   // Phone: slide the page down before App unmounts it (the desktop closes at once).
   const close = () => slideOut(rootRef.current, onClose);
@@ -184,7 +198,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
             <span key={k} className={`fs-tab ${tab === k ? 'on' : ''}`}>
               {/* Visualizer: a second click on the active icon (or right-click) opens its settings. */}
               <button
-                onClick={(e) => { if (k === 'viz' && tab === 'viz') { const r = e.currentTarget.getBoundingClientRect(); setVizMenu({ x: r.left - 8, y: r.bottom + 8 }); } else setTab(k); }}
+                onClick={(e) => { if (k === 'viz' && tab === 'viz') { const r = e.currentTarget.getBoundingClientRect(); setVizMenu({ x: r.left - 8, y: r.bottom + 8 }); } else { if (k === 'viz') unlockShadowAudio(); setTab(k); } }}
                 onContextMenu={k === 'viz' ? (e) => { e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); setVizMenu({ x: r.left - 8, y: r.bottom + 8 }); } : undefined}
                 title={k === 'viz' && tab === 'viz' ? 'Visualizer settings' : label} aria-label={label} aria-pressed={tab === k}
               >{icon}</button>
@@ -218,9 +232,12 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
       <div className="fs-bottom">
         {/* Progress across the top of the block, above the album thumb and the controls. */}
         <div className="fs-seek">
-          <span>{fmt(position || 0)}</span>
-          <input type="range" min="0" max={Math.max(1, duration || 0)} value={Math.min(position || 0, duration || 0)} onChange={(e) => player.seek(Number(e.target.value))} style={{ '--pct': `${duration ? (position / duration) * 100 : 0}%` }} {...seekHover} />
-          <span>{phone ? `-${fmt(Math.max(0, (duration || 0) - (position || 0)))}` : fmt(duration || 0)}</span>
+          <span>{fmt(scrub ?? (position || 0))}</span>
+          <input type="range" min="0" max={Math.max(1, duration || 0)} value={Math.min(scrub ?? (position || 0), duration || 0)}
+            onChange={onScrubMove} onInput={onScrubMove} onPointerDown={onScrubStart} onTouchStart={onScrubStart} onKeyDown={onScrubStart}
+            onPointerUp={onScrubEnd} onTouchEnd={onScrubEnd} onKeyUp={onScrubEnd}
+            style={{ '--pct': `${duration ? ((scrub ?? position) / duration) * 100 : 0}%` }} {...seekHover} />
+          <span>{phone ? `-${fmt(Math.max(0, (duration || 0) - (scrub ?? (position || 0))))}` : fmt(duration || 0)}</span>
         </div>
         <div className="fs-meta">
           {art && <img className="fs-thumb" src={art} alt="" />}
@@ -270,7 +287,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
             </div>
             <button className={tab === 'lyrics' ? 'on' : ''} onClick={() => setTab(tab === 'lyrics' ? 'album' : 'lyrics')} title="Lyrics" aria-label="Lyrics">{G.lyrics}</button>
             {/* Visualizer: a second tap on the active icon opens its settings sheet. */}
-            <button className={tab === 'viz' ? 'on' : ''} onClick={() => { if (tab === 'viz') setVizMenu({ x: 0, y: window.innerHeight }); else setTab('viz'); }} title={tab === 'viz' ? 'Visualizer settings' : 'Visualizer'} aria-label="Visualizer">{G.viz}</button>
+            <button className={tab === 'viz' ? 'on' : ''} onClick={() => { if (tab === 'viz') setVizMenu({ x: 0, y: window.innerHeight }); else { unlockShadowAudio(); setTab('viz'); } }} title={tab === 'viz' ? 'Visualizer settings' : 'Visualizer'} aria-label="Visualizer">{G.viz}</button>
             <button onClick={share} title="Share" aria-label="Share">{G.share}</button>
             <button onClick={() => { close(); onPanel?.('queue'); }} title="Queue" aria-label="Queue">{G.queue}</button>
           </div>
