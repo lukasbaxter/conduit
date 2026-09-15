@@ -86,6 +86,7 @@
      at the top (Spotify), leaving the screen to the field, chips and results. */
   .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .contentbar > .search-cancel) { grid-template-rows: 0 minmax(0, 1fr); }
   .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .contentbar > .search-cancel) .navbar { height: 0; min-height: 0; padding: 0; overflow: hidden; }
+  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .contentbar > .search-cancel) .navbar > * { display: none; }
 
   /* ---- Search: empty state ----
      "Search" title beside the avatar; white 44pt bar (radius 4, black
