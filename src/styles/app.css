@@ -1285,6 +1285,9 @@ button:disabled { cursor: default; }
   .devicemenu { position: fixed !important; left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: 100% !important; max-width: none; border-radius: 16px 16px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); max-height: 80vh; overflow-y: auto; box-shadow: 0 -8px 40px rgba(0,0,0,.6); }
   .devicemenu::before { content: ''; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: -1; }
 
+  /* Now playing and the queue rise from the bottom like Spotify's sheets. */
+  .fs, .rightpanel { animation: rise-in .3s cubic-bezier(.2,.7,.2,1); }
+  @keyframes rise-in { from { transform: translateY(100%); } to { transform: none; } }
   /* ---- Now playing: lyrics scroll inside the stage. ---- */
   .fs-stage { overflow: hidden; }
   .fs-stage:has(.fs-lyrics) { display: block; }
