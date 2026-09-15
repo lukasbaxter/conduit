@@ -57,13 +57,14 @@ export function usePlayingFrom(player, jf) {
  * (the phone CSS animates translateY(100%) over 250ms), then runs `done`.
  * Off the phone it just runs `done`.
  */
-// Spotify's lyrics glyph: an outlined microphone at 45 degrees, rounded head,
-// flat (square) end on the handle. Same drawing everywhere.
+// The lyrics glyph, traced from the icon Lukas picked (icons8 "mic"): a ball
+// head, a straight handle with a flat end and a small slot near the neck, at
+// 45 degrees. Outline only (his call), one drawing everywhere.
 export const LyricsGlyph = ({ size = 24 }) => (
-  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <g transform="rotate(45 12 12)">
-      <path d="M7.5 6a4.5 4.5 0 0 1 9 0v6.5h-9V6z" />
-      <path d="M12 12.5V21" />
+      <path d="M8.4 9.67A4.8 4.8 0 1 1 15.6 9.67V19.8a1.2 1.2 0 0 1-1.2 1.2H9.6a1.2 1.2 0 0 1-1.2-1.2z" />
+      <path d="M12 12.4v3.4" />
     </g>
   </svg>
 );
