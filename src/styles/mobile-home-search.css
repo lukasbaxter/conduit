@@ -58,8 +58,13 @@
   .card { padding: 0; gap: 0; border-radius: 0; }
   .card-art img, .card-art .ph { border-radius: 2px; box-shadow: none; }
   .card.round .card-art img, .card.round .card-art .ph { border-radius: 50%; }
-  .card-title { font-size: 14px; font-weight: 700; line-height: 1.3; margin-top: 8px; -webkit-line-clamp: 2; }
-  .card-sub { font-size: 13px; color: #a7a7a7; line-height: 1.3; margin-top: 2px; }
+  /* Scoped to the home / see-all pages so they beat the unscoped .card-title
+     rule in mobile-library.css, which loads later. */
+  .content:has(> .pad.home) .card-title, .content:has(> .contentbar > .pills) .card-title { font-size: 14px; font-weight: 700; line-height: 1.3; margin-top: 8px; -webkit-line-clamp: 2; text-align: left; }
+  .content:has(> .pad.home) .card-sub, .content:has(> .contentbar > .pills) .card-sub { font-size: 13px; color: #a7a7a7; line-height: 1.3; margin-top: 2px; text-align: left; }
+  /* Covers fade in once loaded instead of popping. */
+  .card-art img, .shortcut-art { opacity: 0; transition: opacity .15s ease-out; }
+  .card-art img.loaded, .shortcut-art.loaded, .shortcut-art.liked-art, .shortcut-art.ph { opacity: 1; }
   .card .card-play { display: none; }
   .mixband { font-size: 14px; padding: 6px 10px; border-radius: 0 0 2px 2px; }
 
@@ -68,7 +73,10 @@
      magnifier) that stays put while results scroll; the type chips share the
      sticky block. */
   .content:has(> .contentbar > .search) .contentbar { position: sticky; top: 0; z-index: 9; flex-wrap: wrap; gap: 8px 12px; padding: 4px 16px 8px; background: var(--bg-base); }
-  .search { flex: 1 1 100%; max-width: none; height: 44px; border-radius: 4px; background-color: #fff; color: #000; font-size: 16px; font-weight: 500; padding: 0 16px 0 48px; }
+  .search-cancel { flex: none; font-size: 16px; font-weight: 400; color: #fff; padding: 0 0 0 4px; height: 44px; animation: cancel-in .2s ease-out; }
+  @keyframes cancel-in { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: none; } }
+  .content:has(> .contentbar > .search-cancel) .search { flex: 1 1 0; }
+  .search { font-family: inherit; flex: 1 1 100%; max-width: none; height: 44px; border-radius: 4px; background-color: #fff; color: #000; font-size: 16px; font-weight: 500; padding: 0 16px 0 48px; }
   .search::placeholder { color: #121212; opacity: .85; font-weight: 500; }
   .contentbar .searchtypes { flex: 1 1 100%; display: flex; flex-wrap: nowrap; gap: 8px; padding: 0; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
   .contentbar .searchtypes::-webkit-scrollbar { display: none; }
@@ -96,6 +104,11 @@
   .srow-x { flex: none; width: 44px; height: 44px; margin-right: -12px; display: grid; place-items: center; color: #a7a7a7; }
   .clear-recents { display: flex; margin: 16px auto 0; background: transparent; border: 1px solid #727272; color: #fff; font-size: 14px; font-weight: 700; padding: 0 16px; min-block-size: 32px; }
 
+  /* Nothing for a query (or a filter): Spotify's centred message. */
+  .search-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 96px 24px 0; }
+  .search-empty b { font-size: 16px; font-weight: 700; color: #fff; }
+  .search-empty span { font-size: 13px; color: #a7a7a7; }
+
   /* ---- Search results: a plain list. Song rows are TrackRows (48pt art,
      title 16, "Song • Artist" 13 grey, ⋯ at the right); the rest are the
      same 64pt rows with round art for artists. No Top result card. ---- */
@@ -107,6 +120,7 @@
   .searchlist .trackrow-name > small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; color: #a7a7a7; line-height: 1.3; }
   .searchlist .trackrow-name > small span, .searchlist .trackrow-name > small .rowlink { font-size: 13px; color: #a7a7a7; }
   .searchlist .trackrow-name > small:not(.lyric-snippet)::before { content: 'Song • '; }
+  .searchlist .trackrow-name > small:empty::before { content: 'Song'; }
   .searchlist .trackrow-name > small.lyric-snippet { white-space: normal; }
   .searchlist .trackrow-more { width: 44px; height: 44px; margin-right: -12px; color: #a7a7a7; display: grid; place-items: center; }
   .searchlist .trackrow-menu { flex: none; }

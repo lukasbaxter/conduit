@@ -160,6 +160,17 @@ export default function Library({
 }) {
   const [results, setResults] = useState(null);
   const phone = usePhone();
+  // Phone search: tapping the field enters Spotify's focus mode (Cancel at the
+  // right, browse tiles hidden, recent searches shown) until Cancel or leaving
+  // the tab. Blur alone does not end it: taps on the recents would be lost.
+  const [searchFocus, setSearchFocus] = useState(false);
+  useEffect(() => { if (view !== 'search') setSearchFocus(false); }, [view]);
+  // Cover for the Charts browse tile: the album of the most played track.
+  const [chartsTop, setChartsTop] = useState(() => jf?.persisted('browse.chartsTop') || null);
+  useEffect(() => {
+    if (!jf) return;
+    jf.topTracks({ limit: 1 }).then((t) => { const id = t[0]?.AlbumId || null; setChartsTop(id); jf._persist('browse.chartsTop', id); }).catch(() => {});
+  }, [jf]);
   // Keyboard navigation in search: -1 = nothing, 0 = Top result, 1.. = songs.
   const [hi, setHi] = useState(-1);
   // Search inside the open playlist / album / Liked Songs (engine-scoped).
@@ -1078,9 +1089,9 @@ export default function Library({
     const top = r?.top || null;
     const show = (t) => searchType === 'All' || searchType === t;
     const subOf = (kind, item) => kind === 'Artist' ? 'Artist'
-      : kind === 'Album' ? `Album • ${item.AlbumArtist || ''}`.replace(/ • $/, '')
+      : kind === 'Album' ? ['Album', item.AlbumArtist || ''].filter(Boolean).join(' • ')
       : kind === 'Playlist' ? 'Playlist'
-      : `Song • ${item.Artists?.join(', ') || item.AlbumArtist || ''}`.replace(/ • $/, '');
+      : ['Song', item.Artists?.join(', ') || item.AlbumArtist || ''].filter(Boolean).join(' • ');
     const hit = (kind, item) => ({ kind, item, sub: subOf(kind, item) });
     const actOn = (kind, item, i) => {
       remember(query, hit(kind, item));
@@ -1153,16 +1164,23 @@ export default function Library({
         <span>{t.name}</span>{t.coverId && <img src={jf.imageUrl(t.coverId, { maxHeight: 200 })} alt="" />}
       </button>
     ));
+    // Phone: recents only in focus mode; the browse page is field + tiles.
+    const focusMode = phone && (searchFocus || Boolean(query.trim()));
+    const mixCover = (jf.persisted('home.topArtists') || [])[0]?.Id || artists[0]?.Id || null;
+    const newestCover = (jf.persisted('home.added') || [])[0]?.Id || albums[0]?.Id || null;
+    const chartsCover = chartsTop || (jf.persisted('home.recent') || [])[0]?.Id || albums[1]?.Id || null;
     const startTiles = (
       <>
+        {/* Covers: Daily Mix 1's seed artist, the newest album, the most
+            played track's album (Home persists the first two). */}
         <button className="tile" style={{ '--tile': '#1e3264' }} onClick={() => onView('home')}>
-          <span>Made For You</span>{artists[0] && <img src={jf.imageUrl(artists[0].Id, { maxHeight: 200 })} alt="" />}
+          <span>Made For You</span>{mixCover && <img src={jf.imageUrl(mixCover, { maxHeight: 200 })} alt="" />}
         </button>
         <button className="tile" style={{ '--tile': '#e13300' }} onClick={() => setSeeAll('albums')}>
-          <span>New Releases</span>{albums[0] && <img src={jf.imageUrl(albums[0].Id, { maxHeight: 200 })} alt="" />}
+          <span>New Releases</span>{newestCover && <img src={jf.imageUrl(newestCover, { maxHeight: 200 })} alt="" />}
         </button>
         <button className="tile" style={{ '--tile': '#8d67ab' }} onClick={() => openBrowse({ id: 'charts', name: 'Charts', color: '#8d67ab', filter: 'plays > 0' })}>
-          <span>Charts</span>{albums[1] && <img src={jf.imageUrl(albums[1].Id, { maxHeight: 200 })} alt="" />}
+          <span>Charts</span>{chartsCover && <img src={jf.imageUrl(chartsCover, { maxHeight: 200 })} alt="" />}
         </button>
         <button className="tile" style={{ '--tile': '#5038a0' }} onClick={onOpenLiked}>
           <span>Liked Songs</span><LikedCover className="tile-liked" heart={50} />
@@ -1173,8 +1191,12 @@ export default function Library({
     return (
       <div className="content">
         <div className="contentbar">
-          <input ref={searchRef} className="search" autoFocus placeholder={phone ? 'What do you want to listen to?' : 'What do you want to play?'}
-            value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onSearchKey} spellCheck="false" />
+          <input ref={searchRef} className="search" autoFocus={!phone} placeholder={phone ? 'What do you want to listen to?' : 'What do you want to play?'}
+            value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onSearchKey} spellCheck="false"
+            onFocus={() => setSearchFocus(true)} />
+          {phone && focusMode && (
+            <button className="search-cancel" onClick={() => { setQuery(''); setSearchFocus(false); searchRef.current?.blur(); }}>Cancel</button>
+          )}
           {/* Invisible marker for the tests: which engine answered and how fast. */}
           {r?.tookMs != null && <span className="search-took" hidden>{r.engine === 'meili' ? `${r.tookMs} ms` : 'basic search'}</span>}
           {/* On the phone the filter chips stick with the bar. */}
@@ -1183,7 +1205,7 @@ export default function Library({
         {!phone && typeChips}
         <div className="pad">
           {err && <div className="banner error">{err}</div>}
-          {!query.trim() && recents.length > 0 && (phone ? (
+          {!query.trim() && recents.length > 0 && (!phone || focusMode) && (phone ? (
             <section className="recentlist">
               <div className="shelf-head"><h2>Recent searches</h2></div>
               {recents.map((x) => (
@@ -1207,13 +1229,13 @@ export default function Library({
               </div>
             </section>
           ))}
-          {!query.trim() && phone && (
+          {!query.trim() && phone && !focusMode && (
             <section className="startbrowse">
               <div className="shelf-head"><h2>Start browsing</h2></div>
               <div className="tilegrid">{startTiles}</div>
             </section>
           )}
-          {!query.trim() && (
+          {!query.trim() && !focusMode && (
             <section className="browseall">
               <div className="shelf-head"><h2>Browse all</h2></div>
               <div className="tilegrid">
@@ -1330,7 +1352,13 @@ export default function Library({
               </div>
             </section>
           )}
-          {r && !r.tracks.length && !r.albums.length && !r.artists.length && !r.playlists.length && (
+          {phoneRows && phoneRows.length === 0 && (
+            <div className="search-empty">
+              <b>Couldn&rsquo;t find &ldquo;{query.trim()}&rdquo;</b>
+              <span>Try searching again using a different spelling or keyword.</span>
+            </div>
+          )}
+          {!phone && r && !r.tracks.length && !r.albums.length && !r.artists.length && !r.playlists.length && (
             <div className="banner">No results found for &ldquo;{query}&rdquo;. Check the spelling, or try a different search.</div>
           )}
         </div>
