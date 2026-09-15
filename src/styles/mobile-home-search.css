@@ -24,10 +24,10 @@
      across the first ~250pt. The avatar lives in the app header, so on the
      home tab the header collapses to nothing and the avatar floats over the
      sticky chip row, which reads as one row. */
-  .app.mobile:not(.mobile-detail):has(.content > .pad.home) { grid-template-rows: 0 minmax(0, 1fr) auto auto; }
-  .app.mobile:not(.mobile-detail):has(.content > .pad.home) .navbar { height: 0; min-height: 0; padding: 0; overflow: visible; position: relative; z-index: 30; }
-  .app.mobile:not(.mobile-detail):has(.content > .pad.home) .navbar-right { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 16px; margin: 0; }
-  .app.mobile:not(.mobile-detail):has(.content > .pad.home) .mobile-title { display: none; }
+  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .pad.home) { grid-template-rows: 0 minmax(0, 1fr) auto auto; }
+  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .pad.home) .navbar { height: 0; min-height: 0; padding: 0; overflow: visible; position: relative; z-index: 30; }
+  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .pad.home) .navbar-right { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 16px; margin: 0; }
+  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .pad.home) .mobile-title { display: none; }
   .content:has(> .pad.home) { background: linear-gradient(180deg, #2a2a2a 0, #121212 250px) no-repeat, var(--bg-base); background-attachment: local; }
   .content:has(> .pad.home) .contentbar { position: sticky; top: 0; z-index: 9; padding: calc(8px + env(safe-area-inset-top)) 16px 8px 56px; background: transparent; transition: background .2s; }
   .content:has(> .pad.home) .contentbar.stuck { background: var(--bg-base); }
