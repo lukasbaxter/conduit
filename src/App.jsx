@@ -783,7 +783,7 @@ export default function App() {
         // The finger lifting still produces the browser's synthesized
         // mousedown/click, which would close the sheet (outside click) or
         // play the row. Swallow them until the touch ends.
-        const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+        const swallow = (ev) => { ev.stopImmediatePropagation(); ev.preventDefault(); };
         for (const type of ['mousedown', 'mouseup', 'click']) document.addEventListener(type, swallow, true);
         const release = () => { setTimeout(() => { for (const type of ['mousedown', 'mouseup', 'click']) document.removeEventListener(type, swallow, true); }, 400); window.removeEventListener('touchend', release); window.removeEventListener('touchcancel', release); };
         window.addEventListener('touchend', release, { passive: true });

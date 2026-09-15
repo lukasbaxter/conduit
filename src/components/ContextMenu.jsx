@@ -140,5 +140,14 @@ export default function ContextMenu({ x, y, items, onClose, anchorRight = false,
       document.removeEventListener('touchmove', scrolled, true);
     };
   }, [onClose]);
-  return createPortal(<Panel x={x} y={y} items={items} onClose={onClose} anchorRight={anchorRight} header={header} />, document.body);
+  // The phone scrim is a real element: a tap on it closes the sheet and goes
+  // no further (a tap that fell through used to open whatever row was under
+  // the finger). Desktop hides it.
+  return createPortal(
+    <>
+      <div className="ctxmenu-scrim" onClick={(e) => { e.stopPropagation(); onClose(); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }} />
+      <Panel x={x} y={y} items={items} onClose={onClose} anchorRight={anchorRight} header={header} />
+    </>,
+    document.body,
+  );
 }

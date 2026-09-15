@@ -6,7 +6,7 @@ import { PlayGlyph, Heart, LikedCover, usePhone } from './TrackRow.jsx';
 export function FadeImg({ className = '', ...props }) {
   const [ok, setOk] = useState(false);
   return (
-    <img {...props} className={`${className} ${ok ? 'loaded' : ''}`.trim()} alt="" loading="lazy"
+    <img {...props} className={`fade ${className} ${ok ? 'loaded' : ''}`.trim()} alt="" loading="lazy"
       ref={(el) => { if (el?.complete && el.naturalWidth && !ok) setOk(true); }} onLoad={() => setOk(true)} />
   );
 }

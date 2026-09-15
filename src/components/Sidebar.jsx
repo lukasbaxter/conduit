@@ -293,7 +293,7 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
           {!q && phone && libFilter === 'album' && !shownEntries.length && !loading && (
             <div className="libempty">
               <b>Save your first album</b>
-              <p>Tap the heart on an album to keep it here.</p>
+              <p>Add an album to Your Library and it shows up here.</p>
             </div>
           )}
         </div>

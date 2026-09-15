@@ -68,8 +68,10 @@
   .content:has(> .pad.home) .card-title, .content:has(> .contentbar > .pills) .card-title { font-size: 14px; font-weight: 700; line-height: 1.3; margin-top: 8px; -webkit-line-clamp: 2; text-align: left; }
   .content:has(> .pad.home) .card-sub, .content:has(> .contentbar > .pills) .card-sub { font-size: 13px; color: #a7a7a7; line-height: 1.3; margin-top: 2px; text-align: left; }
   /* Covers fade in once loaded instead of popping. */
-  .card-art img, .shortcut-art { opacity: 0; transition: opacity .15s ease-out; }
-  .card-art img.loaded, .shortcut-art.loaded, .shortcut-art.liked-art, .shortcut-art.ph { opacity: 1; }
+  /* Only images that opt in (FadeImg adds .fade) start hidden; plain <img>
+     cards elsewhere (artist grids, profile, browse) must stay visible. */
+  img.fade { opacity: 0; transition: opacity .15s ease-out; }
+  img.fade.loaded { opacity: 1; }
   .card .card-play { display: none; }
   .mixband { font-size: 14px; padding: 6px 10px; border-radius: 0 0 2px 2px; }
 

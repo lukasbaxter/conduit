@@ -1074,7 +1074,7 @@ export default function Library({
               // Library albums Jellyfin knows but the discography call has not (yet) covered.
               const libOnly = (detail.albums || []).filter((a) => !rels.some((r) => r.inLibrary === a.Id));
               const all = [
-                ...rels.map((r) => ({ key: r.inLibrary || r.album_id || r.title, r, type: r.rtype || 'Album', year: r.year, inLib: r.inLibrary })),
+                ...rels.map((r, i) => ({ key: `${r.inLibrary || r.album_id || r.title}-${i}`, r, type: r.rtype || 'Album', year: r.year, inLib: r.inLibrary })),
                 ...libOnly.map((a) => ({ key: a.Id, r: { title: a.Name, inLibrary: a.Id, image: null }, type: releaseType(a), year: a.ProductionYear ? String(a.ProductionYear) : '', inLib: a.Id })),
               ];
               if (!all.length && dg !== null) return null;

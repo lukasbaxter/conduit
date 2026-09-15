@@ -109,6 +109,7 @@ export default function DevicePicker({ devices, active, onSelect, showName = fal
         <span className="devicebtn-name">{labelFor(active)}</span>
       </button>
 
+      {open && phone && <div className="ctxmenu-scrim" onClick={(e) => { e.stopPropagation(); close(); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); close(); }} />}
       {open && phone && (
         /* Spotify's "Connect to a device" sheet: the current device up top in
            green, then the others, then a line on where speakers come from. */

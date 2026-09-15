@@ -6,7 +6,7 @@ import DevicePicker from './DevicePicker.jsx';
 import { seekHover } from '../api/seekHover.js';
 import { useLiked } from '../api/likes.js';
 import { useOffset } from '../api/offsets.js';
-import { ArtistLinks, PlayGlyph, PauseGlyph, ShuffleGlyph } from './TrackRow.jsx';
+import { ArtistLinks, PlayGlyph, PauseGlyph, ShuffleGlyph, I } from './TrackRow.jsx';
 import { usePhone, usePlayingFrom, slideOut } from './Player.jsx';
 import { vibrantColor } from '../api/colors.js';
 
@@ -131,7 +131,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
       ...playlists.map((p) => ({ key: p.Id, label: p.Name, onClick: () => onAddTo(p, fullTrack) })),
     ] } : null,
     player.addToQueue ? { label: 'Add to queue', icon: G16.queue, onClick: () => player.addToQueue([fullTrack]) } : null,
-    { label: liked ? 'Remove from Liked Songs' : 'Add to Liked Songs', icon: <svg viewBox="0 0 16 16" width="16" height="16" fill={liked ? 'var(--seek-accent, #1db954)' : 'currentColor'}><HeartPath on={liked} /></svg>, onClick: toggleLike },
+    { label: liked ? 'Remove from Liked Songs' : 'Add to Liked Songs', icon: liked ? I.checkCircle : I.plusCircle, onClick: toggleLike },
     { sep: true },
     { label: 'Go to song radio', icon: G16.radio, onClick: () => { jf.instantMix(nowPlaying.itemId).then((items) => { if (items?.length) player.playQueue(items, 0); }).catch(() => {}); } },
     artistsOf.length > 1

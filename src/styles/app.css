@@ -407,6 +407,7 @@ input, textarea, select { font-family: inherit; }
 .ctxslider input[type="range"] { width: 100%; }
 
 .ctxmenu-head { display: none; }
+.ctxmenu-scrim { display: none; }
 .ctxmenu-sep { height: 1px; background: #3d3c3c; margin: 4px 0; }
 
 /* Liked Songs: Spotify's purple-to-blue gradient tile with a white heart. */
@@ -1307,7 +1308,7 @@ button:disabled { cursor: default; }
   .ctxmenu-fixed { left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: 100%; max-width: none; min-width: 0; border-radius: 16px 16px 0 0; padding: 12px 8px calc(28px + env(safe-area-inset-bottom)); max-height: 80vh; overflow-y: auto; background: #282828; box-shadow: 0 -8px 40px rgba(0,0,0,.6); }
   .ctxmenu-fixed .ctx-chev { display: none; }
   .ctxmenu-fixed .ctxmenu-sep { margin: 4px 0; border-color: rgba(255,255,255,.08); }
-  .ctxmenu-fixed::before { content: ''; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: -1; }
+  .ctxmenu-scrim { display: block; position: fixed; inset: 0; z-index: 299; background: rgba(0,0,0,.6); animation: fade-in .2s; }
   .ctxmenu-fixed::after { content: ''; display: block; position: absolute; top: 6px; left: 50%; width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.25); transform: translateX(-50%); }
   .ctxmenu-fixed button, .ctxmenu-fixed .ctxitem { padding: 14px 12px; font-size: 16px; }
   .ctxmenu-fixed:not(.ctxmenu-sub) { animation: sheet-in .22s cubic-bezier(.2,.7,.2,1); }
@@ -1322,7 +1323,7 @@ button:disabled { cursor: default; }
   /* A submenu is a second sheet over the first, tall enough to read as a page. */
   .ctxmenu-sub { position: fixed !important; z-index: 301; min-height: 45vh; }
   .devicemenu { position: fixed !important; left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: 100% !important; max-width: none; border-radius: 16px 16px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); max-height: 80vh; overflow-y: auto; box-shadow: 0 -8px 40px rgba(0,0,0,.6); }
-  .devicemenu::before { content: ''; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: -1; }
+  .devicemenu { z-index: 300; }
 
   /* Now playing and the queue rise from the bottom like Spotify's sheets. */
   .fs, .rightpanel { animation: rise-in .3s cubic-bezier(.2,.7,.2,1); }

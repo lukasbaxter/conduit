@@ -102,7 +102,7 @@
   /* Sung + active lines white, only the upcoming ones dim; unsynced lyrics all white. */
   .fs.fs-tab-lyrics .lyric-line, .fs.fs-tab-lyrics .fs-lyrics p { font-size: 24px; font-weight: 700; letter-spacing: -.2px; line-height: 1.3; color: #fff; opacity: 1; text-align: left; }
   .fs.fs-tab-lyrics .lyrics.synced .lyric-line { color: rgba(255,255,255,.5); }
-  .fs.fs-tab-lyrics .lyrics.synced .lyric-line.sung, .fs.fs-tab-lyrics .lyric-line.now { color: #fff; }
+  .fs.fs-tab-lyrics .lyrics.synced .lyric-line.sung, .fs.fs-tab-lyrics .lyrics.synced .lyric-line.now, .fs.fs-tab-lyrics .lyric-line.now { color: #fff; }
   .fs.fs-tab-lyrics .lyric-line.gap { letter-spacing: .1em; }
   .fs.fs-tab-lyrics .fs-bottom { display: none; }
   .fs.fs-tab-lyrics .lyric-line:hover { text-decoration: none; }
@@ -117,6 +117,7 @@
   .fs-viz-hint { position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; color: #b3b3b3; pointer-events: none; }
   .fs-art-behind { display: none; }
   .fs.fs-tab-viz.sheet .fs-art-behind, .fs.fs-tab-viz:has(.devicemenu) .fs-art-behind { display: block; position: absolute; left: 24px; right: 24px; top: 50%; width: auto; transform: translateY(-50%); }
+  .fs-art-behind .fs-art { width: 100%; max-width: none; }
   .fs.fs-tab-viz.sheet .viz, .fs.fs-tab-viz:has(.devicemenu) .viz { visibility: hidden; }
 
   /* ---- Exit motion: pages and sheets slide down for 250ms before they unmount. ---- */
@@ -224,11 +225,11 @@
      the sheet itself, so a tap on the dimmed page landed INSIDE the menu and
      never closed it (no Escape on a phone). Dim with a shadow instead. ---- */
   .ctxmenu.ctxmenu-fixed::before { display: none; }
-  .ctxmenu.ctxmenu-fixed { box-shadow: 0 0 0 100vmax rgba(0,0,0,.6), 0 -8px 40px rgba(0,0,0,.6); }
+  .ctxmenu.ctxmenu-fixed { box-shadow: 0 -8px 40px rgba(0,0,0,.6); }
   .ctxmenu.ctxmenu-fixed.ctxmenu-sub { box-shadow: 0 -8px 40px rgba(0,0,0,.6); }
 
   /* ================= "Connect to a device" sheet ================= */
-  .devicemenu { position: fixed !important; left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: 100% !important; max-width: none; border-radius: 16px 16px 0 0; padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); max-height: 85vh; overflow-y: auto; background: #282828; box-shadow: 0 0 0 100vmax rgba(0,0,0,.6), 0 -8px 40px rgba(0,0,0,.6); }
+  .devicemenu { position: fixed !important; left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: 100% !important; max-width: none; border-radius: 16px 16px 0 0; padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); max-height: 85vh; overflow-y: auto; background: #282828; box-shadow: 0 -8px 40px rgba(0,0,0,.6); }
   .devicemenu::before { display: none; }
   .devicemenu::after { content: ''; display: block; position: absolute; top: 6px; left: 50%; width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.3); transform: translateX(-50%); }
   .devicemenu-head { display: block; padding: 12px 0 16px; }
