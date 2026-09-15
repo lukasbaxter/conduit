@@ -799,11 +799,14 @@ export default function App() {
       }, 450);
     };
     const move = (e) => { const t = e.touches?.[0]; if (start && t && (Math.abs(t.clientX - start.x) > 10 || Math.abs(t.clientY - start.y) > 10)) cancel(); };
-    window.addEventListener('touchstart', down, { passive: true });
-    window.addEventListener('touchmove', move, { passive: true });
-    window.addEventListener('touchend', cancel, { passive: true });
-    window.addEventListener('touchcancel', cancel, { passive: true });
-    return () => { window.removeEventListener('touchstart', down); window.removeEventListener('touchmove', move); window.removeEventListener('touchend', cancel); window.removeEventListener('touchcancel', cancel); };
+    // Capture phase: a React handler that stops propagation on touchend (the
+    // sheet scrim does) must not hide the lift from us, or the timer fires
+    // after the finger is gone and the swallow eats the NEXT tap.
+    window.addEventListener('touchstart', down, { passive: true, capture: true });
+    window.addEventListener('touchmove', move, { passive: true, capture: true });
+    window.addEventListener('touchend', cancel, { passive: true, capture: true });
+    window.addEventListener('touchcancel', cancel, { passive: true, capture: true });
+    return () => { window.removeEventListener('touchstart', down, true); window.removeEventListener('touchmove', move, true); window.removeEventListener('touchend', cancel, true); window.removeEventListener('touchcancel', cancel, true); };
   }, [isMobile]);
   // Swipe the mini player sideways to skip (Spotify): left = next, right = previous.
   useEffect(() => {
