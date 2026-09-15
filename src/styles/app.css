@@ -1238,7 +1238,7 @@ button:disabled { cursor: default; }
 
   /* ---- Safe areas (the Expo shell draws full-bleed; viewport-fit=cover). ---- */
   .app { grid-template-rows: calc(48px + env(safe-area-inset-top)) minmax(0, 1fr) auto auto; }
-  .navbar { height: auto; padding-top: env(safe-area-inset-top); }
+  .navbar { height: auto; min-height: 48px; padding-top: env(safe-area-inset-top); }
   .app.mobile-detail .content > .pad:first-child, .app.mobile-detail .content > .contentbar:first-child, .app.mobile-detail .sf-hero { padding-top: calc(56px + env(safe-area-inset-top)); }
   .app.mobile-detail .settings { padding-top: calc(56px + env(safe-area-inset-top)); }
   .rightpanel .panel-header { padding-top: calc(8px + env(safe-area-inset-top)); height: auto; }

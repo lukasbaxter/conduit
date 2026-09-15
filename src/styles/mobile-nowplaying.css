@@ -149,7 +149,10 @@
      the card's top edge. The scroll containers pad their bottoms to match. */
   .app.mobile .player { position: fixed; left: 0; right: 0; bottom: calc(49px + env(safe-area-inset-bottom)); z-index: 47; min-width: 0; padding: 24px 8px 0; background: linear-gradient(to bottom, transparent, rgba(18,18,18,.92) 24px, #121212); }
   .app.mobile .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 46; background: #121212; }
-  .app.mobile:not(.mobile-detail) { grid-template-rows: calc(48px + env(safe-area-inset-top)) minmax(0, 1fr); }
+  /* The header row is sized by the header itself (its content plus the notch
+     inset), never a fixed number: on the iPhone the fixed row was shorter than
+     the real navbar, which then overlapped the Library chips. */
+  .app.mobile:not(.mobile-detail) { grid-template-rows: auto minmax(0, 1fr); }
   .app.mobile.mobile-detail { grid-template-rows: minmax(0, 1fr); }
   .app.mobile .content, .app.mobile .shell.show-lib .liblist { padding-bottom: calc(24px + 56px + 8px + 49px + env(safe-area-inset-bottom)); }
   .app.mobile .content { box-sizing: border-box; }

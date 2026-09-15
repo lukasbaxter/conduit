@@ -63,7 +63,7 @@
      across the first ~250pt. The avatar lives in the app header, so on the
      home tab the header collapses to nothing and the avatar floats over the
      sticky chip row, which reads as one row. */
-  .app.mobile.tab-home { grid-template-rows: 0 minmax(0, 1fr) auto auto; }
+  .app.mobile.tab-home { grid-template-rows: 0 minmax(0, 1fr); }
   /* z-index above the floating mini player (47) and tab bar (46): the account
      drawer lives inside this navbar and must cover them. */
   .app.mobile.tab-home .navbar { height: 0; min-height: 0; padding: 0; overflow: visible; position: relative; z-index: 60; }
