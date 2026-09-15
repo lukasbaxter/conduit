@@ -57,6 +57,18 @@ export function usePlayingFrom(player, jf) {
  * (the phone CSS animates translateY(100%) over 250ms), then runs `done`.
  * Off the phone it just runs `done`.
  */
+// Spotify's lyrics glyph: an outlined microphone at 45 degrees, rounded head,
+// flat (square) end on the handle. Same drawing everywhere.
+export const LyricsGlyph = ({ size = 24 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <g transform="rotate(45 12 12)">
+      <path d="M7.5 5.5a4.5 4.5 0 0 1 9 0V12h-9V5.5z" />
+      <path d="M12 12v9" />
+      <path d="M8.5 21h7" />
+    </g>
+  </svg>
+);
+
 export function slideOut(target, done) {
   const phone = typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches;
   const els = typeof target === 'string' ? [...document.querySelectorAll(target)] : target ? [target] : [];
@@ -356,9 +368,7 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
             onClick={() => onPanel(panel === 'lyrics' ? null : 'lyrics')}
             title="Lyrics"
           >
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
-              <path d="M13.426 2.574a2.831 2.831 0 0 0-4.797 1.55l3.247 3.247a2.831 2.831 0 0 0 1.55-4.797zM10.5 8.118l-2.619-2.62A63303.13 63303.13 0 0 0 4.74 9.075L1 15l5.925-3.74 3.575-3.142z" />
-            </svg>
+            <LyricsGlyph size={18} />
           </button>
           <button
             className={`icon-btn ${panel === 'queue' ? 'on' : ''}`}

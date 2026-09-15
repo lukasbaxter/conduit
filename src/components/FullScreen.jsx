@@ -7,7 +7,7 @@ import { seekHover } from '../api/seekHover.js';
 import { useLiked } from '../api/likes.js';
 import { useOffset } from '../api/offsets.js';
 import { ArtistLinks, PlayGlyph, PauseGlyph, ShuffleGlyph, I } from './TrackRow.jsx';
-import { usePhone, usePlayingFrom, slideOut } from './Player.jsx';
+import { usePhone, usePlayingFrom, slideOut, LyricsGlyph } from './Player.jsx';
 import { vibrantColor } from '../api/colors.js';
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -17,7 +17,7 @@ const G = {
   dots: <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M4.5 13.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm7.5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm7.5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z" /></svg>,
   share: <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M12 2.25 7.47 6.78l1.06 1.06 2.72-2.72V15h1.5V5.12l2.72 2.72 1.06-1.06L12 2.25z" /><path d="M4.5 10.5h4V12h-2.5v8.25h12V12h-2.5v-1.5h4v11.25h-15V10.5z" /></svg>,
   queue: <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M22.5 21.75h-21v-1.5h21v1.5zm0-6.75h-21v-1.5h21V15zM1.5 5.25A3 3 0 0 1 4.5 2.25h15a3 3 0 0 1 0 6h-15a3 3 0 0 1-3-3zm3-1.5a1.5 1.5 0 0 0 0 3h15a1.5 1.5 0 0 0 0-3h-15z" /></svg>,
-  lyrics: <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M20.14 3.86a4.25 4.25 0 0 0-7.2 2.33l4.87 4.87a4.25 4.25 0 0 0 2.33-7.2zM15.75 12.18l-3.93-3.93L7.11 13.6 1.5 22.5l8.89-5.61 5.36-4.71z" /></svg>,
+  lyrics: <LyricsGlyph />,
   viz: <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M3 12h1.5M6.5 8v8M10 4.5v15M13.5 8v8M17 6v12M20.5 10v4" /></svg>,
   plus: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M15.25 8a.75.75 0 0 1-.75.75H8.75v5.75a.75.75 0 0 1-1.5 0V8.75H1.5a.75.75 0 0 1 0-1.5h5.75V1.5a.75.75 0 0 1 1.5 0v5.75h5.75a.75.75 0 0 1 .75.75z" /></svg>,
   artist: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M6.233.371a4.388 4.388 0 0 1 5.002 1.052c.421.459.713.992.904 1.554.143.421.263 1.173.22 1.894-.078 1.322-.638 2.408-1.399 3.316l-.127.152a.75.75 0 0 0 .201 1.13l2.209 1.275a4.75 4.75 0 0 1 2.375 4.114V16H0v-1.142a4.75 4.75 0 0 1 2.375-4.114l2.209-1.275a.75.75 0 0 0 .201-1.13l-.126-.152c-.761-.908-1.322-1.994-1.4-3.316-.043-.721.077-1.473.22-1.894a4.346 4.346 0 0 1 .904-1.554c.411-.448.91-.807 1.85-1.052zM8 1.5a2.9 2.9 0 0 0-2.8 2.087 5.53 5.53 0 0 0-.131 1.293c.055.934.44 1.717 1.062 2.459l.126.152a2.25 2.25 0 0 1-.603 3.39L3.445 12.156A3.25 3.25 0 0 0 1.5 14.5h13a3.25 3.25 0 0 0-1.945-2.344L10.346 10.88a2.25 2.25 0 0 1-.603-3.39l.127-.152c.62-.742 1.006-1.525 1.061-2.46a5.53 5.53 0 0 0-.13-1.292A2.9 2.9 0 0 0 8 1.5z" /></svg>,
@@ -286,9 +286,6 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
               {sessionDevice && <DevicePicker devices={devices} active={sessionDevice} onSelect={player.setDevice} showName />}
             </div>
             <button className={tab === 'lyrics' ? 'on' : ''} onClick={() => setTab(tab === 'lyrics' ? 'album' : 'lyrics')} title="Lyrics" aria-label="Lyrics">{G.lyrics}</button>
-            {/* Visualizer: a second tap on the active icon opens its settings sheet. */}
-            <button className={tab === 'viz' ? 'on' : ''} onClick={() => { if (tab === 'viz') setVizMenu({ x: 0, y: window.innerHeight }); else { unlockShadowAudio(); setTab('viz'); } }} title={tab === 'viz' ? 'Visualizer settings' : 'Visualizer'} aria-label="Visualizer">{G.viz}</button>
-            <button onClick={share} title="Share" aria-label="Share">{G.share}</button>
             <button onClick={() => { close(); onPanel?.('queue'); }} title="Queue" aria-label="Queue">{G.queue}</button>
           </div>
         )}
