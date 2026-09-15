@@ -4,6 +4,18 @@ Pick-up notes for the next session. Open: the HTTPS/DNS fix (still blocking the
 phone PWA), the rest of the Liked Songs audit (#2.2-2.5), and a few library
 leftovers listed at the bottom.
 
+## 2026-09-15 (00:00-02:00) -- phone layout rebuilt to Spotify iOS
+Deployed to music.baxtergroup.io (the Expo shell wraps it; force-quit Expo Go to drop a cached bundle). Work was split across three git worktrees (`~/Projects/conduit-wt/{nowplaying,home-search,library}`, branches `wt/*`, all merged into master) plus review agents comparing screenshots against real Spotify shots (`scratchpad/spotify-ref`). Reviews: `scratchpad/review-1.md`, `review-2-browse.md`, `review-2-player.md`, `review-3.md`.
+
+- **Per-area phone stylesheets** load after `app.css`: `src/styles/mobile-nowplaying.css`, `mobile-home-search.css`, `mobile-library.css` (all inside `@media (max-width: 760px)`). `usePhone()` (TrackRow.jsx) gates phone-only markup.
+- **Navigation feel** (App.jsx): in-app stack mirrored into `history.pushState` (browser/Android back + iOS edge swipe walk it; WebView's own gesture disabled in `mobile/App.js`), edge-swipe back, page slide-in, detail top bar (`.mobile-topbar`) that turns solid with the title as the hero scrolls, per-tab stacks (the tab you came from stays lit; tapping the lit tab pops/scrolls to top), long-press = `contextmenu` (+haptic, synthesized click swallowed), swipe-down closes now playing (follows the finger; touches starting in sheets/lyrics/viz are ignored), mini player swipe = skip, account avatar = left drawer.
+- **Sheets** (ContextMenu.jsx): `header` prop (art/title/sub) shown on the phone, slide-up, submenus stack as a second sheet (no hover-open on touch), Spotify's circled-plus / green check for likes ("Add to Liked Songs").
+- **Track rows on the phone are flex** (the desktop grid template kept winning and squeezed titles to a third of the row).
+- **Home/Search**: avatar + sticky chips row (chips filter in place), no greeting / Show all, 150pt cards, search focus mode with Cancel + recents (recents = items you opened, on every client), flat result list, empty states, browse tiles with covers. Navbar collapse rule is scoped with `:not(:has(.shell.show-lib))` (it used to fire on the Library tab and put the avatar over the chips).
+- **Library/detail**: pinned header/chips/sort (only `.liblist` scrolls), 2-col grid, create-playlist sheet + name page, hero tints clamped/darkened on the phone (`heroTint(rgb, phone)`), Liked Songs with Find/Sort on top, artist "Popular releases" rows + See discography, Follow wired to Jellyfin favourite, Spotify-style Settings (Scrobbling sub-page), History chips, Profile Edit/⋯, skeleton rows while lists load.
+- **Player**: NP = chevron / PLAYING FROM two-liner (`usePlayingFrom`) / ⋯ (full track sheet), cover on the 24pt gutter, circled-plus like, marquee titles, 44pt seek hit area, devices left / lyrics·viz·share·queue right; lyrics page = lyrics only over the blurred cover (owner's call), sung white / upcoming dim, no blank holes; queue page with long-press, lifted drag, pinned transport; device sheet "Connect to a device"; mini player floats over content (content padded), device line inside the card when the sound is elsewhere, keyed art, exit animations; `usePlayer.setError` swallows AbortError noise.
+- Not done: NP cover carousel swipe, remaining-time display, search ranking of features vs primary artist (relay/Meili), Spotify Mix font.
+
 ## 2026-09-14 (night) -- state at hand-off
 Everything below is deployed (web :8748 / music.baxtergroup.io, relay redeployed, desktop dev via `npm run dev`). Earlier-today sections were never written into this file; the commit log (`git log --since=2026-09-13`) and the memory note carry them.
 
