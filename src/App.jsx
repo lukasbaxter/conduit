@@ -778,6 +778,21 @@ export default function App() {
     window.addEventListener('touchcancel', cancel, { passive: true });
     return () => { window.removeEventListener('touchstart', down); window.removeEventListener('touchmove', move); window.removeEventListener('touchend', cancel); window.removeEventListener('touchcancel', cancel); };
   }, [isMobile]);
+  // Swipe the mini player sideways to skip (Spotify): left = next, right = previous.
+  useEffect(() => {
+    if (!isMobile) return undefined;
+    let start = null;
+    const down = (e) => { const t = e.touches?.[0]; start = t && e.target.closest?.('.player-row') ? { x: t.clientX, y: t.clientY, at: Date.now() } : null; };
+    const up = (e) => {
+      if (!start) return; const t = e.changedTouches?.[0]; if (!t) { start = null; return; }
+      const dx = t.clientX - start.x, dy = Math.abs(t.clientY - start.y);
+      if (Math.abs(dx) > 60 && dy < 40 && Date.now() - start.at < 600) { if (dx < 0) player.next(); else player.previous(); }
+      start = null;
+    };
+    window.addEventListener('touchstart', down, { passive: true });
+    window.addEventListener('touchend', up, { passive: true });
+    return () => { window.removeEventListener('touchstart', down); window.removeEventListener('touchend', up); };
+  }, [isMobile, player.next, player.previous]);
   // Swipe down on the now-playing screen closes it (Spotify). The sheet follows
   // the finger, then either snaps back or drops away.
   useEffect(() => {
