@@ -206,6 +206,12 @@ export default function App() {
   const [detail, setDetailRaw] = useState(null);
   const [seeAll, setSeeAllRaw] = useState(null); // 'albums' | 'artists' | null
   useEffect(() => { setMobileLib(false); }, [view, detail?.item?.Id, seeAll]); // any navigation leaves the phone's Library tab
+  // Which tab's stack the phone is in: a detail opened from Your Library keeps
+  // the Library tab lit (Spotify's per-tab navigation stacks); Home/Search
+  // follow the view.
+  const [mobileTab, setMobileTab] = useState('home');
+  useEffect(() => { if (view === 'home' || view === 'search') setMobileTab(view); }, [view]);
+  useEffect(() => { if (mobileLib) setMobileTab('library'); }, [mobileLib]);
   const [query, setQuery] = useState('');
 
   // Back / forward like Spotify's header arrows. One entry per place you can
@@ -937,9 +943,15 @@ pos=${Math.round(player.position)} playing=${player.playing} vol=${player.volume
       {isMobile && (
         <nav className="tabbar">
           {[['home', 'Home', TabHome], ['search', 'Search', TabSearch], ['library', 'Your Library', TabLib]].map(([k, label, Icon]) => {
-            const on = k === 'library' ? mobileLib : !mobileLib && view === k && !detail && !seeAll;
+            const on = mobileTab === k;
+            // Tapping the lit tab pops its stack to the root, or scrolls a root page to the top.
+            const tap = () => {
+              if (on && !mobileDetail) { document.querySelector('.shell .content')?.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+              setMobileTab(k);
+              if (k === 'library') setMobileLib(true); else { setMobileLib(false); goView(k); }
+            };
             return (
-              <button key={k} className={on ? 'on' : ''} onClick={() => { if (k === 'library') setMobileLib(true); else { setMobileLib(false); goView(k); } }}>
+              <button key={k} className={on ? 'on' : ''} onClick={tap}>
                 <Icon on={on} /><span>{label}</span>
               </button>
             );
