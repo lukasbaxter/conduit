@@ -89,7 +89,15 @@ export function usePlayer(jf) {
   // 'smart' (smart = keep going past the queue with similar songs).
   const [repeat, setRepeat] = useState('off');
   const [shuffle, setShuffle] = useState('off');
-  const [error, setError] = useState(null);
+  const [error, setErrorRaw] = useState(null);
+  // Browser noise is not a user-facing error: a play() that was cut short by
+  // the next track (AbortError) or a load that superseded it just means the
+  // user skipped quickly. Everything else shows in the toast.
+  const setError = useCallback((msg) => {
+    const text = msg == null ? null : String(msg);
+    if (text && (/interrupted by a new load|AbortError|The operation was aborted|goo\.gl\/LdLk22/i.test(text))) return;
+    setErrorRaw(text);
+  }, []);
   // What a speaker reports playing when we did not start it ourselves (another
   // client, or this app on another machine). Lets a freshly opened window show
   // the house's current playback instead of claiming nothing is on.

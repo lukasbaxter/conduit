@@ -11,7 +11,11 @@
   .libhead-actions .icon-btn { width: 40px; height: 40px; color: #fff; }
   .libhead-actions .icon-btn.on { color: var(--accent); }
   .libhead-actions .icon-btn svg { stroke-width: 1.7; }
-  .libpanel { border-top: 0; }
+  /* Header, chips and sort row stay put; only the list scrolls (the desktop
+     grid gave the list an implicit auto row, so the whole tab scrolled). */
+  .libpanel { border-top: 0; display: flex; flex-direction: column; min-height: 0; }
+  .shell.show-lib .sidebar { overflow: hidden; }
+  .liblist { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
   /* Chips: 32pt, radius 500, #2a2a2a; active green / black. */
   .libchips { padding: 8px 16px 8px; gap: 8px; }

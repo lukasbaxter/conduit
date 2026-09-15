@@ -215,7 +215,8 @@ export default function App() {
   // the Library tab lit (Spotify's per-tab navigation stacks); Home/Search
   // follow the view.
   const [mobileTab, setMobileTab] = useState('home');
-  useEffect(() => { if (view === 'home' || view === 'search') setMobileTab(view); }, [view]);
+  // Detail pages set view='home' for the desktop model; only a ROOT page moves the lit tab.
+  useEffect(() => { if (!detail && !seeAll && (view === 'home' || view === 'search')) setMobileTab(view); }, [view, detail, seeAll]);
   useEffect(() => { if (mobileLib) setMobileTab('library'); }, [mobileLib]);
   const [query, setQuery] = useState('');
 
@@ -817,7 +818,9 @@ export default function App() {
   useEffect(() => {
     if (!isMobile || !fullScreen) return undefined;
     let start = null, el = null;
-    const scrolledInside = (t) => { const sc = t.closest?.('.fs-lyrics, .viz, .ctxmenu, input'); return sc && (sc.scrollTop > 0 || sc.tagName === 'INPUT' || sc.classList.contains('viz')); };
+    // Sheets over the player (device picker, ⋯ menu), the visualizer, inputs and
+    // a scrolled lyrics pane own their touches; only the player itself drags.
+    const scrolledInside = (t) => { const sc = t.closest?.('.fs-lyrics, .viz, .ctxmenu, .devicemenu, .rightpanel, input'); return sc && (sc.scrollTop > 0 || !sc.classList.contains('fs-lyrics')); };
     const down = (e) => {
       const t = e.touches?.[0]; el = document.querySelector('.fs');
       if (!t || !el || e.touches.length !== 1 || scrolledInside(e.target)) { start = null; return; }
@@ -925,8 +928,8 @@ export default function App() {
                   <span className="who-text"><b>{me?.Name || 'Signed in'}</b><small>View profile</small></span>
                 </button>
                 <div className="sub">{jf.baseUrl.replace(/^https?:\/\//, '')}</div>
-                <button onClick={() => { setUserMenu(false); openProfile(); }}><MenuIco d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 8a7 7 0 0 1 14 0" />Profile</button>
-                <button onClick={() => { setUserMenu(false); openHistory(); }}><MenuIco d="M12 8v4l3 2M21 12a9 9 0 1 1-3-6.7M21 3v5h-5" />History</button>
+                <button className="desktop-only" onClick={() => { setUserMenu(false); openProfile(); }}><MenuIco d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 8a7 7 0 0 1 14 0" />Profile</button>
+                <button onClick={() => { setUserMenu(false); openHistory(); }}><MenuIco d="M12 8v4l3 2M21 12a9 9 0 1 1-3-6.7M21 3v5h-5" /><span className="phone-only">Listening history</span><span className="desktop-only">History</span></button>
                 <button onClick={() => { setUserMenu(false); openSettings(); }}><MenuIco d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />Settings</button>
                 <button onClick={signOut}><MenuIco d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />Log out</button>
               </div>
