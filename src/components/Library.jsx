@@ -4,7 +4,7 @@ import ContextMenu from './ContextMenu.jsx';
 import { ctxOf } from '../api/context.js';
 import { vibrantColor } from '../api/colors.js';
 import { QUALITIES, THEME_PRESETS, DEFAULT_THEME, themeEquals } from '../api/prefs.js';
-import { search as relaySearch, browse as relayBrowse, discography as relayDiscography, similar as relaySimilar, requestAlbum as relayRequest, radar as relayRadar } from '../api/search.js';
+import { search as relaySearch, browse as relayBrowse, discography as relayDiscography, similar as relaySimilar, requestAlbum as relayRequest, radar as relayRadar, globalSearch as relayGlobal } from '../api/search.js';
 import Home from './Home.jsx';
 import History from './History.jsx';
 import FittedTitle from './FittedTitle.jsx';
@@ -48,7 +48,9 @@ function Shelf({ title, items, jf, round, onOpen, onPlay, onSeeAll, subtitle }) 
   );
 }
 
-const SEARCH_TYPES = ['All', 'Songs', 'Artists', 'Albums', 'Playlists'];
+// "Everywhere" searches all of Spotify's catalogue (through Music Requests)
+// and offers a Request button for what the library does not have.
+const SEARCH_TYPES = ['All', 'Songs', 'Artists', 'Albums', 'Playlists', 'Everywhere'];
 
 // Phone layout flag: usePhone() from TrackRow.jsx (same breakpoint as the
 // phone CSS). The search page renders a flat Spotify-style result list there.
@@ -63,7 +65,7 @@ const CloseGlyph = () => (
 
 // One row of the phone search list: 48pt art (round for artists), name 16,
 // "Kind • detail" 13 grey. Songs are TrackRows (they carry the ⋯ menu).
-function SearchRow({ image, round, name, sub, onClick, onRemove, className = '' }) {
+function SearchRow({ image, round, name, sub, onClick, onRemove, action = null, className = '' }) {
   return (
     <div className={`srow ${round ? 'round' : ''} ${className}`} onClick={onClick} role="button" tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && onClick?.()}>
@@ -72,6 +74,7 @@ function SearchRow({ image, round, name, sub, onClick, onRemove, className = '' 
         <span className="srow-name">{name}</span>
         {sub && <small className="srow-sub">{sub}</small>}
       </div>
+      {action}
       {onRemove && (
         <button className="srow-x" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove" aria-label="Remove">
           <CloseGlyph />
@@ -250,6 +253,17 @@ export default function Library({
     return () => window.removeEventListener('keydown', onKey);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [searchType, setSearchType] = useState('All');
+  // "Everywhere": Spotify's catalogue for the query, flagged with what the
+  // library has and what is already requested.
+  const [gres, setGres] = useState(null);
+  useEffect(() => {
+    if (view !== 'search' || searchType !== 'Everywhere' || !query.trim()) { setGres(null); return undefined; }
+    let alive = true; const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      relayGlobal(jf, query.trim(), ctrl.signal).then((r) => { if (alive) setGres(r); }).catch((e) => { if (alive && e.name !== 'AbortError' && e.name !== 'TimeoutError') setErr(e.message); });
+    }, 300);
+    return () => { alive = false; ctrl.abort(); clearTimeout(t); };
+  }, [view, query, searchType]); // eslint-disable-line react-hooks/exhaustive-deps
   const [err, setErr] = useState(null);
   const [heroMenu, setHeroMenu] = useState(null);
   // The column header is see-through over the hero's colour band and turns
@@ -1340,7 +1354,7 @@ export default function Library({
     // in score order, so the top result leads and the types take turns, then
     // the tail of each. No headings, no Top result card.
     const phoneRows = (() => {
-      if (!phone || !r || r.scoped) return null;
+      if (!phone || !r || r.scoped || searchType === 'Everywhere') return null;
       const rows = [], seen = new Set();
       const push = (kind, item, i = -1) => { const k = `${kind}:${item.Id}`; if (seen.has(k)) return; seen.add(k); rows.push({ kind, item, i }); };
       const songs = show('Songs') ? r.tracks : [], ars = show('Artists') ? r.artists : [], als = show('Albums') ? r.albums : [], pls = show('Playlists') ? r.playlists : [];
@@ -1370,7 +1384,7 @@ export default function Library({
       else openAlbum({ Id: x.id, Name: x.name, Type: 'MusicAlbum' });
       remember(x.q, { kind: x.kind, item: { Id: x.id, Name: x.name, AlbumId: x.art }, sub: x.sub });
     };
-    const typeChips = r && (
+    const typeChips = (r || (searchType === 'Everywhere' && query.trim())) && (
       <div className="searchtypes">
         {SEARCH_TYPES.map((t) => (
           <button key={t} className={`pill ${searchType === t ? 'on' : ''}`} onClick={(e) => { setSearchType(t); e.currentTarget.scrollIntoView?.({ inline: 'nearest', block: 'nearest', behavior: 'smooth' }); }}>{t}</button>
@@ -1483,6 +1497,49 @@ export default function Library({
             </section>
           )}
 
+          {searchType === 'Everywhere' && query.trim() && (() => {
+            const btn = (a) => {
+              const st = requesting[a.album_id] || a.requestStatus;
+              const label = a.inLibrary ? 'In library' : st === 'queued' || st === 'exists' ? 'Requested' : st === 'downloading' ? 'Downloading…' : st === 'done' ? 'Added' : st === 'failed' ? 'Retry' : st === 'error' ? 'Failed' : 'Request';
+              const busy = Boolean(a.inLibrary) || st === 'queued' || st === 'exists' || st === 'downloading' || st === 'done';
+              return (
+                <button className={`card-request ${busy ? 'busy' : ''}`} disabled={busy} onClick={(e) => { e.stopPropagation(); requestRelease(a.artistId, a); }} title="Download this release into your library">{label}</button>
+              );
+            };
+            const openOrRequest = (a) => { if (a.inLibrary) openAlbum({ Id: a.inLibrary, Name: a.title }); else if (!(requesting[a.album_id] || a.requestStatus)) requestRelease(a.artistId, a); };
+            const sub = (a) => [a.rtype, a.year, a.artist].filter(Boolean).join(' • ');
+            if (!gres) return <p className="placeholder-note gsearch-note">Searching everywhere…</p>;
+            if (!gres.albums?.length) return (
+              <div className="search-empty"><b>Couldn&rsquo;t find &ldquo;{query.trim()}&rdquo; anywhere</b><span>Try a different spelling, or the artist and album together.</span></div>
+            );
+            return (
+              <section className="gsearch">
+                <div className="shelf-head"><h2>Everywhere</h2><span className="settings-hint">{gres.albums.filter((a) => a.inLibrary).length} of {gres.albums.length} in your library</span></div>
+                {phone ? (
+                  <div className="searchlist">
+                    {gres.albums.map((a) => (
+                      <SearchRow key={a.album_id} image={a.inLibrary ? jf.imageUrl(a.inLibrary, { maxHeight: 96 }) : a.image} name={a.title} sub={sub(a)}
+                        className={a.inLibrary ? '' : 'missing'} onClick={() => openOrRequest(a)} action={a.inLibrary ? null : btn(a)} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid">
+                    {gres.albums.map((a) => (
+                      <div key={a.album_id} className={`card ${a.inLibrary ? '' : 'missing'}`} role="button" tabIndex={0} onClick={() => openOrRequest(a)} onKeyDown={(e) => e.key === 'Enter' && openOrRequest(a)}>
+                        <div className="card-art">
+                          {a.inLibrary ? <img src={jf.imageUrl(a.inLibrary, { maxHeight: 320 })} alt="" loading="lazy" /> : a.image ? <img src={a.image} alt="" loading="lazy" /> : <div className="ph" />}
+                          {!a.inLibrary && btn(a)}
+                        </div>
+                        <div className="card-title">{a.title}</div>
+                        <div className="card-sub">{sub(a)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })()}
+
           {phoneRows && phoneRows.length > 0 && (
             <div className="searchlist">
               {phoneRows.map(({ kind, item, i }, n) => kind === 'Song' ? (
@@ -1570,13 +1627,13 @@ export default function Library({
               </div>
             </section>
           )}
-          {phoneRows && phoneRows.length === 0 && (
+          {phoneRows && phoneRows.length === 0 && searchType !== 'Everywhere' && (
             <div className="search-empty">
               <b>Couldn&rsquo;t find &ldquo;{query.trim()}&rdquo;</b>
               <span>Try searching again using a different spelling or keyword.</span>
             </div>
           )}
-          {!phone && r && !r.tracks.length && !r.albums.length && !r.artists.length && !r.playlists.length && (
+          {!phone && r && searchType !== 'Everywhere' && !r.tracks.length && !r.albums.length && !r.artists.length && !r.playlists.length && (
             <div className="banner">No results found for &ldquo;{query}&rdquo;. Check the spelling, or try a different search.</div>
           )}
         </div>

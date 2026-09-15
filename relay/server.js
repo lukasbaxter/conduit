@@ -426,6 +426,37 @@ async function discography(artistId, artistName) {
   return remember(`discog:${artistId}`, v);
 }
 
+// Global search: every album Spotify knows for the query (via Music Requests),
+// each flagged with the library album it matches (so the app opens it) or the
+// request state (so the app offers "Request"). Artists come from the albums.
+async function globalSearch(q) {
+  const key = `gsearch:${norm(q)}`;
+  const hit = cached(key, 10 * 60 * 1000); if (hit) return hit;
+  const [mr, reqs] = await Promise.all([
+    fetch(`${MUSIC_REQUESTS}/api/search?q=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(15000) }).then((r) => r.json()),
+    fetch(`${MUSIC_REQUESTS}/api/requests?limit=5000`, { signal: AbortSignal.timeout(8000) }).then((r) => r.json()).catch(() => ({ requests: [] })),
+  ]);
+  const status = new Map((reqs.requests || []).map((r) => [r.album_id, r.status]));
+  const results = mr.results || [];
+  // One Meili lookup per distinct artist: its library albums by base title.
+  const byArtist = new Map();
+  await Promise.all([...new Set(results.map((r) => r.artist.split(',')[0].trim()))].slice(0, 25).map(async (name) => {
+    try {
+      const a = await meiliOne('artists', { q: name, limit: 3, attributesToRetrieve: ['id', 'name'] });
+      const art = (a.hits || []).find((h) => norm(h.name) === norm(name)) || null;
+      const albums = art ? await meiliOne('albums', { q: '', limit: 200, filter: `artistIds = "${art.id}"`, attributesToRetrieve: ['id', 'name'] }) : { hits: [] };
+      byArtist.set(norm(name), { artist: art, exact: new Map((albums.hits || []).map((x) => [norm(x.name), x.id])), base: new Map((albums.hits || []).map((x) => [normTitle(x.name), x.id])) });
+    } catch { byArtist.set(norm(name), { artist: null, exact: new Map(), base: new Map() }); }
+  }));
+  const albums = results.map((r) => {
+    const lib = byArtist.get(norm(r.artist.split(',')[0].trim()));
+    const inLibrary = lib ? (lib.exact.get(norm(r.title)) || lib.base.get(normTitle(r.title)) || null) : null;
+    return { ...r, inLibrary, artistId: lib?.artist?.id || null, requestStatus: status.get(r.album_id) || null };
+  });
+  const artists = [...byArtist.entries()].map(([k, v]) => ({ name: results.find((r) => norm(r.artist.split(',')[0].trim()) === k)?.artist.split(',')[0].trim(), id: v.artist?.id || null })).filter((a) => a.name);
+  return remember(key, { albums, artists });
+}
+
 async function releaseRadar() {
   const hit = cached('radar', 6 * 60 * 60 * 1000); if (hit) return hit;
   // The library's most played artists; their releases from the last 90 days.
@@ -738,7 +769,7 @@ const server = http.createServer(async (req, res) => {
   if (req.url === '/healthz') { res.writeHead(200); res.end('ok'); return; }
   const url = new URL(req.url, 'http://x');
   const path = url.pathname.replace(/^\/relay/, '');
-  if (path === '/discography' || path === '/radar' || path === '/request' || path === '/similar' || path === '/popular' || path === '/history' || path === '/likes' || path === '/playlist') {
+  if (path === '/discography' || path === '/radar' || path === '/request' || path === '/similar' || path === '/popular' || path === '/history' || path === '/likes' || path === '/playlist' || path === '/gsearch') {
     const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, X-Emby-Token, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }
     try {
@@ -759,6 +790,7 @@ const server = http.createServer(async (req, res) => {
       }
       else if (path === '/playlist') out = await playlistFast(who, token, url.searchParams.get('id') || '');
       else if (path === '/discography') out = await discography(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '');
+      else if (path === '/gsearch') out = await globalSearch((url.searchParams.get('q') || '').slice(0, 200));
       else if (path === '/radar') out = { releases: await releaseRadar() };
       else if (path === '/similar') out = { artists: await similarArtists(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '') };
       else if (path === '/popular') out = await popularTracks(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '');

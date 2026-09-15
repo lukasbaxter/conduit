@@ -142,6 +142,15 @@
   .search-empty b { font-size: 16px; font-weight: 700; color: #fff; }
   .search-empty span { font-size: 13px; color: #a7a7a7; }
 
+  /* "Everywhere" results: the Request pill sits at the right of the row;
+     releases the library lacks are dimmed like the artist page's. */
+  .gsearch .shelf-head { margin: 12px 0 4px; }
+  .gsearch .shelf-head .settings-hint { font-size: 13px; color: #a7a7a7; }
+  .gsearch .srow .card-request { position: static; transform: none; box-shadow: none; flex: none; font-size: 12px; padding: 6px 12px; margin-left: 4px; }
+  .gsearch .srow.missing .srow-art { filter: grayscale(.4) brightness(.7); }
+  .gsearch .srow.missing .srow-name { color: #b3b3b3; }
+  .gsearch-note { padding: 24px 0; text-align: center; }
+
   /* ---- Search results: a plain list. Song rows are TrackRows (48pt art,
      title 16, "Song • Artist" 13 grey, ⋯ at the right); the rest are the
      same 64pt rows with round art for artists. No Top result card. ---- */

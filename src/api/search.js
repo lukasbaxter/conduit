@@ -68,12 +68,15 @@ export async function browse(jf) {
   return (await res.json()).tiles || [];
 }
 
-async function relayGet(jf, path, params = {}, timeout = 30000) {
+async function relayGet(jf, path, params = {}, timeout = 30000, signal = null) {
   const q = new URLSearchParams(params);
-  const res = await fetch(`${relayBase()}${path}?${q}`, { headers: { 'X-Emby-Token': jf.token }, signal: AbortSignal.timeout(timeout) });
+  const res = await fetch(`${relayBase()}${path}?${q}`, { headers: { 'X-Emby-Token': jf.token }, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout) });
   if (!res.ok) throw new Error(`${path} ${res.status}`);
   return res.json();
 }
+// Everything Spotify knows for a query (albums, EPs, singles), each flagged with
+// the library album it matches or its download-request state.
+export const globalSearch = (jf, q, signal) => relayGet(jf, '/gsearch', { q }, 20000, signal);
 // Every release Spotify lists for an artist, flagged with what the library has.
 export const discography = (jf, artistId, name) => relayGet(jf, '/discography', { artistId, name });
 export const similar = (jf, artistId, name) => relayGet(jf, '/similar', { artistId, name }, 15000);
