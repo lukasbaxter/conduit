@@ -167,7 +167,7 @@
   .player-buttons { gap: 0; }
   .player-buttons .ctl-mode, .player-buttons button[title="Previous"], .player-buttons button[title="Next"] { display: none; }
   .player-buttons .play { background: none; color: #fff; width: 44px; height: 44px; margin-right: -8px; }
-  .player-buttons .play svg { width: 24px; height: 24px; }
+  .player-buttons .play svg { width: 20px; height: 20px; }
   /* Touch: the desktop hover state (black glyph, scaled up) sticks after a tap. */
   .player-buttons .play:hover:not(:disabled), .player-buttons .play:active { color: #fff; transform: none; background: none; }
   .player-seek { position: absolute; left: 8px; right: 8px; bottom: 0; width: auto; height: 2px; pointer-events: none; display: block; }

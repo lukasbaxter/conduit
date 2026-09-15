@@ -620,7 +620,14 @@ export default function App() {
         setDetail((d) => (d && d.item?.Id === LIKED_ID ? { ...d, tracks: likedRows(likedIds()), loading: i + 150 < missing.length } : d));
       }
       setDetail((d) => (d && d.item?.Id === LIKED_ID ? { ...d, tracks: likedRows(likedIds()), loading: false } : d));
-      jf._persist('liked', likedRows(likedIds()).slice(0, 1500));
+      // Cache every row (slimmed: blurhashes and media sources are dead weight
+      // here) so the next open needs no fetch at all; a 1,500-row cap meant a
+      // bigger library refetched the tail on every open. Serialised off the
+      // tap so a phone does not stall on the JSON.
+      if (missing.length) setTimeout(() => {
+        const slim = ({ ImageBlurHashes, MediaSources, MediaStreams, Chapters, People, ...t }) => t; // eslint-disable-line no-unused-vars
+        jf._persist('liked', likedRows(likedIds()).slice(0, 6000).map(slim));
+      }, 250);
     } catch { setDetail((d) => (d && d.item?.Id === LIKED_ID ? { ...d, loading: false } : d)); }
   };
   // Keep the open Liked Songs page in step with the store (likes from any client).
