@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import TrackRow, { PlayGlyph, PauseGlyph, Heart, ShuffleGlyph, LikedCover } from './TrackRow.jsx';
+import TrackRow, { PlayGlyph, PauseGlyph, Heart, ShuffleGlyph, LikedCover, usePhone } from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import { ctxOf } from '../api/context.js';
 import { vibrantColor } from '../api/colors.js';
@@ -82,6 +82,12 @@ function fmtTotal(ticks) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
   return h ? `${h} hr ${m} min` : `${m} min ${sec} sec`;
 }
+// Spotify's phone headers: "3h 7min", "9min 39sec".
+function fmtTotalShort(ticks) {
+  const s = Math.round((ticks || 0) / 10_000_000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return h ? `${h}h ${m}min` : `${m}min ${sec}sec`;
+}
 const Clock = () => (
   <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8z" /><path d="M8 3.25a.75.75 0 0 1 .75.75v3.25H11a.75.75 0 0 1 0 1.5H7.25V4A.75.75 0 0 1 8 3.25z" /></svg>
 );
@@ -122,6 +128,7 @@ export default function Library({
   prefs, onUpdatePrefs, onUploadAvatar, avatarV, onFollowAlbum, onOpenSettings,
 }) {
   const [results, setResults] = useState(null);
+  const phone = usePhone();
   // Keyboard navigation in search: -1 = nothing, 0 = Top result, 1.. = songs.
   const [hi, setHi] = useState(-1);
   // Search inside the open playlist / album / Liked Songs (engine-scoped).
@@ -598,7 +605,7 @@ export default function Library({
             <div style={{ minWidth: 0 }}>
               <div className="kind">Profile</div>
               <FittedTitle text={item.Name} maxLines={2} />
-              <p className="hero-meta"><b>{playlists.length} Public Playlist{playlists.length === 1 ? '' : 's'}</b></p>
+              <p className="hero-meta">{phone ? `${playlists.length} public playlist${playlists.length === 1 ? '' : 's'}` : <b>{playlists.length} Public Playlist{playlists.length === 1 ? '' : 's'}</b>}</p>
             </div>
           </header>
           <div className="actions slim" />
@@ -688,6 +695,35 @@ export default function Library({
                 ) : (
                   <FittedTitle text={item.Name} maxLines={2} />
                 )}
+                {phone && !isArtist ? (
+                  /* Spotify iOS: owner line (avatar + name, bold), then
+                     "Playlist · 3h 7min" / "Album · 2025" in grey. */
+                  <p className="hero-meta phone">
+                    {lead && (
+                      <span className="hero-owner">
+                        <img className="hero-avatar" src={jf.imageUrl(lead.Id, { maxHeight: 48 })} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                        <button className="rowlink strong" onClick={() => onOpenArtistById(lead.Id)}>{lead.Name}</button>
+                        {(item.AlbumArtists || []).slice(1).map((a) => (
+                          <React.Fragment key={a.Id}>, <button className="rowlink strong" onClick={() => onOpenArtistById(a.Id)}>{a.Name}</button></React.Fragment>
+                        ))}
+                      </span>
+                    )}
+                    {isPlaylist && !item._mix && (
+                      <span className="hero-owner">
+                        <img className="hero-avatar" src={jf.userImageUrl({ maxHeight: 48 })} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                        <button className="rowlink strong" onClick={onOpenProfile}>{me?.Name || 'You'}</button>
+                      </span>
+                    )}
+                    {item._mix && <span className="hero-owner"><b>Made for you</b></span>}
+                    <span className="hero-stats">
+                      {kind === 'Album'
+                        ? [releaseType({ ...item, ChildCount: item.ChildCount ?? tracks.length, RunTimeTicks: item.RunTimeTicks || totalTicks }), item.ProductionYear].filter(Boolean).join(' · ')
+                        : isLiked ? `Playlist · ${tracks.length} song${tracks.length === 1 ? '' : 's'}`
+                        : item._mix ? [item._sub, totalTicks ? fmtTotalShort(totalTicks) : null].filter(Boolean).join(' · ')
+                        : ['Playlist', totalTicks ? fmtTotalShort(totalTicks) : `${tracks.length} songs`].join(' · ')}
+                    </span>
+                  </p>
+                ) : (
                 <p className="hero-meta">
                   {lead && (
                     <>
@@ -705,6 +741,7 @@ export default function Library({
                   {isArtist ? `${tracks.length} songs in your library` : `${tracks.length} songs`}
                   {!isArtist && totalTicks ? `, ${fmtTotal(totalTicks)}` : ''}
                 </p>
+                )}
               </div>
             </header>
           );
@@ -738,8 +775,8 @@ export default function Library({
                 >
                   {showPause ? <PauseGlyph size={24} /> : <PlayGlyph size={24} />}
                 </button>
-                {!isArtist && (
-                  <button className={`iconbtn ${shuffled ? 'on' : ''}`} onClick={() => player.setShuffle(shuffled ? 'off' : 'on')} title={shuffled ? 'Disable shuffle' : 'Enable shuffle'}>
+                {(!isArtist || phone) && (
+                  <button className={`iconbtn shuffle ${shuffled ? 'on' : ''}`} onClick={() => player.setShuffle(shuffled ? 'off' : 'on')} title={shuffled ? 'Disable shuffle' : 'Enable shuffle'}>
                     <Shuffle />
                   </button>
                 )}
@@ -749,14 +786,14 @@ export default function Library({
                   </button>
                 ); })()}
                 {isArtist && <button className="btn-secondary" disabled title="Not wired up yet">Follow</button>}
-                <button className="iconbtn" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHeroMenu({ x: r.left, y: r.bottom + 4 }); }} title={`More options for ${item.Name}`}>
+                <button className="iconbtn more" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHeroMenu({ x: r.left, y: r.bottom + 4 }); }} title={`More options for ${item.Name}`}>
                   <Dots />
                 </button>
                 {heroMenu && <ContextMenu x={heroMenu.x} y={heroMenu.y} items={heroItems} onClose={() => setHeroMenu(null)} />}
                 {!isArtist && tracks.length > 8 && (
                   <label className="within" title="Search in this list">
                     <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M7 1.75a5.25 5.25 0 1 0 0 10.5 5.25 5.25 0 0 0 0-10.5zM.25 7a6.75 6.75 0 1 1 12.096 4.12l3.184 3.185a.75.75 0 1 1-1.06 1.06L11.284 12.18A6.75 6.75 0 0 1 .25 7z" /></svg>
-                    <input value={within} onChange={(e) => setWithin(e.target.value)} placeholder={isPlaylist ? 'Search in playlist' : 'Search in album'} spellCheck="false" />
+                    <input value={within} onChange={(e) => setWithin(e.target.value)} placeholder={phone ? (isPlaylist ? 'Find in playlist' : 'Find in album') : (isPlaylist ? 'Search in playlist' : 'Search in album')} spellCheck="false" />
                     {within && <button type="button" onClick={() => setWithin('')} aria-label="Clear">×</button>}
                   </label>
                 )}
@@ -788,7 +825,7 @@ export default function Library({
           <div className="pad">
             <section>
               <div className="shelf-head"><h2>Popular</h2></div>
-              <div className="tracklist" style={{ padding: 0 }}>
+              <div className="tracklist popular" style={{ padding: 0 }}>
                 {/* Spotify's Popular rows: 40px cover next to the number
                     (chunk_xpui-routes-artist: flex:0 0 40px, radius 4px),
                     title only, no artist line. */}
@@ -919,7 +956,7 @@ export default function Library({
             {tracks.length > 0 && (() => { const shown = within.trim() && withinRes ? withinRes : tracks; const filtered = shown !== tracks; return (
               <VirtualList
                 items={shown}
-                rowHeight={filtered && shown.some((t) => t._snippet) ? 76 : 56}
+                rowHeight={filtered && shown.some((t) => t._snippet) ? (phone ? 84 : 76) : phone ? 64 : 56}
                 getKey={(t, i) => t.PlaylistItemId || `${t.Id}-${i}`}
                 renderRow={(t, i) => (
                   <div className={overIdx === i && dragIdx != null && !filtered ? 'dropbefore' : ''}>

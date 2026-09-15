@@ -1,7 +1,21 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ContextMenu from './ContextMenu.jsx';
 import { FORMATS } from '../api/download.js';
 import { useLiked } from '../api/likes.js';
+
+// True on the phone layout (the same breakpoint as app.css's phone block), so
+// components can gate phone-only markup without a prop threaded from App.
+const PHONE_MQ = '(max-width: 760px)';
+export function usePhone() {
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(PHONE_MQ).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(PHONE_MQ);
+    const on = (e) => setPhone(e.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
 
 export const PlayGlyph = ({ size = 20 }) => (
   <svg viewBox="0 0 16 16" width={size} height={size} fill="currentColor">
