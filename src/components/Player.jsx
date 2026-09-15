@@ -239,7 +239,7 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
               src={art}
               alt=""
               title="Go to album"
-              onClick={() => nowPlaying?.albumId && onOpenAlbum?.(nowPlaying.albumId)}
+              onClick={phone ? undefined : () => nowPlaying?.albumId && onOpenAlbum?.(nowPlaying.albumId)}
             />
           ) : (
             <div className="player-art placeholder" />
@@ -251,7 +251,11 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
               <div className="player-artist player-elsewhere"><CastGlyph /><span>Playing on {elsewhere}</span></div>
             ) : (
             <div className="player-artist">
-              {nowPlaying?.artists?.length ? (
+              {/* Phone: plain text, so a tap anywhere on the card opens now
+                  playing (Spotify); the artist link lives on that screen. */}
+              {phone ? (
+                nowPlaying?.artist || (nowPlaying?.artists || []).map((a) => a.Name).join(', ') || ''
+              ) : nowPlaying?.artists?.length ? (
                 <ArtistLinks artists={nowPlaying.artists} onOpen={onOpenArtist} className="linkish" />
               ) : nowPlaying?.artistId ? (
                 <button className="linkish" onClick={() => onOpenArtist(nowPlaying.artistId)}>{nowPlaying.artist}</button>
