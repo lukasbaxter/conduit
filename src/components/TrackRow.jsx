@@ -223,7 +223,8 @@ export default function TrackRow({
         >
           <Dots />
         </button>
-        {menu && <ContextMenu x={menu.x} y={menu.y} anchorRight={Boolean(menu.fromButton)} items={menuItems} onClose={() => setMenu(null)} />}
+        {menu && <ContextMenu x={menu.x} y={menu.y} anchorRight={Boolean(menu.fromButton)} items={menuItems} onClose={() => setMenu(null)}
+          header={{ image: jf ? jf.imageUrl(track.AlbumId || track.Id, { maxHeight: 120 }) : null, title: track.Name, sub: artistsOf.map((a) => a.Name).join(', ') || track.AlbumArtist || '' }} />}
       </span>
     </div>
   );

@@ -404,6 +404,8 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .ctxslider-head { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
 .ctxslider-val { color: var(--fg-dim); font-size: 12px; font-variant-numeric: tabular-nums; }
 .ctxslider input[type="range"] { width: 100%; }
+
+.ctxmenu-head { display: none; }
 .ctxmenu-sep { height: 1px; background: #3d3c3c; margin: 4px 0; }
 
 /* Liked Songs: Spotify's purple-to-blue gradient tile with a white heart. */
@@ -1238,6 +1240,15 @@ button:disabled { cursor: default; }
   .ctxmenu-fixed::before { content: ''; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: -1; }
   .ctxmenu-fixed::after { content: ''; display: block; position: absolute; top: 6px; left: 50%; width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.25); transform: translateX(-50%); }
   .ctxmenu-fixed button, .ctxmenu-fixed .ctxitem { padding: 14px 12px; font-size: 16px; }
+  .ctxmenu-fixed:not(.ctxmenu-sub) { animation: sheet-in .22s cubic-bezier(.2,.7,.2,1); }
+  @keyframes sheet-in { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .ctxmenu-head { display: flex; align-items: center; gap: 12px; padding: 14px 12px 12px; border-bottom: 1px solid rgba(255,255,255,.1); margin-bottom: 6px; }
+  .ctxmenu-head img { width: 56px; height: 56px; border-radius: 4px; object-fit: cover; background: #333; flex: none; }
+  .ctxmenu-head img.round { border-radius: 50%; }
+  .ctxmenu-head-ico { width: 56px; height: 56px; display: grid; place-items: center; color: #fff; flex: none; }
+  .ctxmenu-head-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .ctxmenu-head-text b { font-size: 16px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ctxmenu-head-text small { font-size: 13px; color: #a7a7a7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ctxmenu-sub { position: fixed !important; }
   .devicemenu { position: fixed !important; left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: 100% !important; max-width: none; border-radius: 16px 16px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); max-height: 80vh; overflow-y: auto; box-shadow: 0 -8px 40px rgba(0,0,0,.6); }
   .devicemenu::before { content: ''; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: -1; }

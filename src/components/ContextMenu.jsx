@@ -22,7 +22,7 @@ function fit(x, y, w, h, preferLeft = false) {
   return { x: nx, y: ny };
 }
 
-function Panel({ x, y, items, onClose, depth = 0, anchorRight = false, onEnter, onLeave }) {
+function Panel({ x, y, items, onClose, depth = 0, anchorRight = false, onEnter, onLeave, header = null }) {
   const ref = useRef(null);
   const [pos, setPos] = useState({ x, y, ready: false });
   const [open, setOpen] = useState(null); // index of the open submenu
@@ -57,6 +57,13 @@ function Panel({ x, y, items, onClose, depth = 0, anchorRight = false, onEnter, 
         onMouseEnter={() => { clearTimeout(closeTimer.current); onEnter?.(); }}
         onContextMenu={(e) => e.preventDefault()}
       >
+        {/* Phone sheets carry what the menu is about (art, title, subtitle) at the top, like Spotify's. Hidden on desktop. */}
+        {header && depth === 0 && (
+          <div className="ctxmenu-head">
+            {header.image ? <img src={header.image} alt="" className={header.round ? 'round' : ''} /> : header.icon ? <span className="ctxmenu-head-ico">{header.icon}</span> : null}
+            <div className="ctxmenu-head-text"><b>{header.title}</b>{header.sub && <small>{header.sub}</small>}</div>
+          </div>
+        )}
         {items.map((it, i) => {
           if (!it) return null;
           if (it.sep) return <div key={`sep${i}`} className="ctxmenu-sep" />;
@@ -106,7 +113,7 @@ function Panel({ x, y, items, onClose, depth = 0, anchorRight = false, onEnter, 
  * Rendered in a portal at a fixed screen position, kept on screen, with
  * hover-opened submenus. Closes on outside click, Escape, scroll or resize.
  */
-export default function ContextMenu({ x, y, items, onClose, anchorRight = false }) {
+export default function ContextMenu({ x, y, items, onClose, anchorRight = false, header = null }) {
   useEffect(() => {
     const down = (e) => { if (!e.target.closest?.('.ctxmenu')) onClose(); };
     const key = (e) => { if (e.key === 'Escape') onClose(); };
@@ -129,5 +136,5 @@ export default function ContextMenu({ x, y, items, onClose, anchorRight = false 
       document.removeEventListener('touchmove', scrolled, true);
     };
   }, [onClose]);
-  return createPortal(<Panel x={x} y={y} items={items} onClose={onClose} anchorRight={anchorRight} />, document.body);
+  return createPortal(<Panel x={x} y={y} items={items} onClose={onClose} anchorRight={anchorRight} header={header} />, document.body);
 }
