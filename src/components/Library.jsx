@@ -990,6 +990,12 @@ export default function Library({
                 {isLiked ? 'Songs you like will appear here. Save songs by tapping the heart icon.' : 'This playlist is empty.'}
               </p>
             )}
+            {/* Rows still on their way: grey placeholders the page is laid out on, like Spotify's. */}
+            {tracks.length === 0 && detail.loading && (
+              <div className="skeleton-rows" aria-hidden="true">
+                {Array.from({ length: 8 }, (_, i) => <div key={i} className="skeleton-row">{isPlaylist && <i className="sk-art" />}<span><i className="sk-line w1" /><i className="sk-line w2" /></span></div>)}
+              </div>
+            )}
             {within.trim() && withinRes && withinRes.length === 0 && (
               <p className="placeholder-note">No matches for &ldquo;{within}&rdquo; in here.</p>
             )}

@@ -441,6 +441,16 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 
 .banner { padding: 12px 16px; border-radius: var(--r-panel); background: var(--bg-elevated); color: var(--fg-dim); margin: 16px 24px; font-size: 14px; }
 .banner.error { background: #2a1618; color: var(--danger); }
+/* Loading placeholders for a track list (header shows at once, rows shimmer). */
+.skeleton-rows { padding: 4px 16px; }
+.skeleton-row { display: flex; align-items: center; gap: 12px; min-height: 56px; }
+.skeleton-row > span { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.sk-art { width: 40px; height: 40px; border-radius: 4px; background: #2a2a2a; flex: none; }
+.sk-line { display: block; height: 12px; border-radius: 6px; background: #2a2a2a; }
+.sk-line.w1 { width: 55%; } .sk-line.w2 { width: 35%; height: 10px; }
+.skeleton-row i { animation: sk-shimmer 1.2s ease-in-out infinite; }
+@keyframes sk-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@media (max-width: 760px) { .skeleton-row { min-height: 64px; } .sk-art { width: 48px; height: 48px; } }
 .placeholder-note { color: var(--fg-dim); font-size: 14px; padding: 16px 0; margin: 8px 0; }
 
 /* ---------- right panel (Now Playing / Queue / Lyrics) ---------- */
