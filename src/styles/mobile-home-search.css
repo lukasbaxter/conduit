@@ -21,7 +21,11 @@
   /* Back chevron: it sits in the fixed .mobile-topbar, which already pads
      for the safe area. mobile-library.css re-adds top/left on the (relative)
      button, which on a real phone pushes it 70pt down the page. */
-  .mobile-topbar .mobile-back { top: 0; left: 0; }
+  .mobile-topbar .mobile-back { top: 0; left: 0; justify-self: start; margin-left: 16px; }
+  /* Genre / chart pages: no 220pt hero box around three lines of text. */
+  .browse-hero { min-height: 0; padding-bottom: 8px; }
+
+  .ctxmenu-head-ico .ctxmenu-head-liked { width: 56px; height: 56px; border-radius: 4px; }
 
   /* ---- Home ----
      Spotify's home has no greeting: the top row is the avatar plus the
@@ -30,7 +34,9 @@
      home tab the header collapses to nothing and the avatar floats over the
      sticky chip row, which reads as one row. */
   .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .pad.home) { grid-template-rows: 0 minmax(0, 1fr) auto auto; }
-  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .pad.home) .navbar { height: 0; min-height: 0; padding: 0; overflow: visible; position: relative; z-index: 30; }
+  /* z-index above the floating mini player (47) and tab bar (46): the account
+     drawer lives inside this navbar and must cover them. */
+  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .pad.home) .navbar { height: 0; min-height: 0; padding: 0; overflow: visible; position: relative; z-index: 60; }
   .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .pad.home) .navbar-right { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 16px; margin: 0; }
   .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .pad.home) .mobile-title { display: none; }
   .content:has(> .pad.home) { background: linear-gradient(180deg, #2a2a2a 0, #121212 250px) no-repeat, var(--bg-base); background-attachment: local; }
@@ -65,7 +71,7 @@
   .card.round .card-art img, .card.round .card-art .ph { border-radius: 50%; }
   /* Scoped to the home / see-all pages so they beat the unscoped .card-title
      rule in mobile-library.css, which loads later. */
-  .content:has(> .pad.home) .card-title, .content:has(> .contentbar > .pills) .card-title { font-size: 14px; font-weight: 700; line-height: 1.3; margin-top: 8px; -webkit-line-clamp: 2; text-align: left; }
+  .content:has(> .pad.home) .card-title, .content:has(> .contentbar > .pills) .card-title { font-size: 14px; font-weight: 700; line-height: 1.3; margin-top: 8px; -webkit-line-clamp: 1; text-align: left; }
   .content:has(> .pad.home) .card-sub, .content:has(> .contentbar > .pills) .card-sub { font-size: 13px; color: #a7a7a7; line-height: 1.3; margin-top: 2px; text-align: left; }
   /* Covers fade in once loaded instead of popping. */
   /* Only images that opt in (FadeImg adds .fade) start hidden; plain <img>
@@ -74,6 +80,12 @@
   img.fade.loaded { opacity: 1; }
   .card .card-play { display: none; }
   .mixband { font-size: 14px; padding: 6px 10px; border-radius: 0 0 2px 2px; }
+
+  /* Search in focus mode: the "Search" title row folds away so the field sits
+     at the top (Spotify), leaving the screen to the field, chips and results. */
+  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .contentbar > .search-cancel) { grid-template-rows: 0 minmax(0, 1fr); }
+  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .contentbar > .search-cancel) .navbar { height: 0; min-height: 0; padding: 0; overflow: hidden; }
+  .content:has(> .contentbar > .search-cancel) .contentbar { padding-top: calc(8px + env(safe-area-inset-top)); }
 
   /* ---- Search: empty state ----
      "Search" title beside the avatar; white 44pt bar (radius 4, black
@@ -97,8 +109,8 @@
   /* Browse tiles: two across, ~100pt, 15/700 title top-left, cover rotated 25° peeking bottom-right. */
   .tilegrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 12px; }
   .tile { aspect-ratio: auto; height: 100px; border-radius: 4px; padding: 12px; }
-  .tile span { font-size: 15px; font-weight: 700; max-width: 75%; line-height: 1.2; }
-  .tile img, .tile .tile-liked { width: 62%; right: -16%; bottom: -16%; border-radius: 4px; }
+  .tile span { font-size: 15px; font-weight: 700; max-width: 58%; line-height: 1.2; }
+  .tile img, .tile .tile-liked { width: 56%; right: -18%; bottom: -18%; border-radius: 4px; }
 
   /* Recent searches: rows (48pt art, round for artists) with an x at the right,
      then Spotify's outlined "Clear recent searches" pill. */

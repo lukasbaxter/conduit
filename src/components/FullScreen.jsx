@@ -220,7 +220,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
         <div className="fs-seek">
           <span>{fmt(position || 0)}</span>
           <input type="range" min="0" max={Math.max(1, duration || 0)} value={Math.min(position || 0, duration || 0)} onChange={(e) => player.seek(Number(e.target.value))} style={{ '--pct': `${duration ? (position / duration) * 100 : 0}%` }} {...seekHover} />
-          <span>{fmt(duration || 0)}</span>
+          <span>{phone ? `-${fmt(Math.max(0, (duration || 0) - (position || 0)))}` : fmt(duration || 0)}</span>
         </div>
         <div className="fs-meta">
           {art && <img className="fs-thumb" src={art} alt="" />}
@@ -267,6 +267,10 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
           <div className="fs-phone-row">
             <div className="fs-phone-device">
               {sessionDevice && <DevicePicker devices={devices} active={sessionDevice} onSelect={player.setDevice} showName />}
+              {/* Spotify labels the stream quality next to the device icon. */}
+              {!sessionDevice?.kind || sessionDevice?.kind === 'local' || sessionDevice?.local ? (
+                <span className="fs-quality">{prefs?.quality === 'original' || !prefs?.quality ? 'Lossless' : prefs.quality === 'high' ? 'Very high' : prefs.quality === 'normal' ? 'Normal' : 'Low'}</span>
+              ) : null}
             </div>
             <button className={tab === 'lyrics' ? 'on' : ''} onClick={() => setTab(tab === 'lyrics' ? 'album' : 'lyrics')} title="Lyrics" aria-label="Lyrics">{G.lyrics}</button>
             {/* Visualizer: a second tap on the active icon opens its settings sheet. */}

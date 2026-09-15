@@ -210,11 +210,15 @@ export default function App() {
   const [artists, setArtists] = useState([]);
   const [detail, setDetailRaw] = useState(null);
   const [seeAll, setSeeAllRaw] = useState(null); // 'albums' | 'artists' | null
-  useEffect(() => { setMobileLib(false); }, [view, detail?.item?.Id, seeAll]); // any navigation leaves the phone's Library tab
+  // Any navigation leaves the phone's Library tab, except a history walk that
+  // lands back on it (applyEntry restores it and raises the flag).
+  const restoringRef = useRef(false);
+  useEffect(() => { if (restoringRef.current) { restoringRef.current = false; return; } setMobileLib(false); }, [view, detail?.item?.Id, seeAll]);
   // Which tab's stack the phone is in: a detail opened from Your Library keeps
   // the Library tab lit (Spotify's per-tab navigation stacks); Home/Search
   // follow the view.
   const [mobileTab, setMobileTab] = useState('home');
+  const mobileTabRef = useRef('home'); mobileTabRef.current = mobileTab;
   // Detail pages set view='home' for the desktop model; only a ROOT page moves the lit tab.
   useEffect(() => { if (!detail && !seeAll && (view === 'home' || view === 'search')) setMobileTab(view); }, [view, detail, seeAll]);
   useEffect(() => { if (mobileLib) setMobileTab('library'); }, [mobileLib]);
@@ -225,10 +229,14 @@ export default function App() {
   // streaming its tracks in) updates the current entry instead of pushing.
   const histRef = useRef({ stack: [{ view: 'home', detail: null, seeAll: null }], idx: 0 });
   const [histTick, setHistTick] = useState(0);
-  const applyEntry = (e) => { setView(e.view); setDetailRaw(e.detail); setSeeAllRaw(e.seeAll); };
+  const applyEntry = (e) => {
+    setView(e.view); setDetailRaw(e.detail); setSeeAllRaw(e.seeAll);
+    // The tab this page was opened from stays lit (per-tab stacks).
+    if (e.tab) { setMobileTab(e.tab); const lib = e.tab === 'library' && !e.detail && !e.seeAll; if (lib) restoringRef.current = true; setMobileLib(lib); }
+  };
   const pushEntry = (e) => {
     const h = histRef.current;
-    h.stack = h.stack.slice(0, h.idx + 1); h.stack.push(e); h.idx = h.stack.length - 1;
+    h.stack = h.stack.slice(0, h.idx + 1); h.stack.push({ tab: mobileTabRef.current, ...e }); h.idx = h.stack.length - 1;
     setHistTick((t) => t + 1);
     // Mirror into the browser's history so the phone's back gesture / Android
     // back / browser Back walk the in-app stack instead of leaving the app.

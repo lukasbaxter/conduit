@@ -22,7 +22,8 @@
   .fs-more { grid-column: 3; grid-row: 1; display: grid; place-items: center; width: 44px; height: 44px; margin: 0; color: #fff; border-radius: 50%; }
   .fs-more:disabled { opacity: .35; }
 
-  .fs-stage { flex: 1 1 auto; min-height: 0; display: grid; place-items: center; padding: 8px 24px 0; overflow: hidden; }
+  /* Art sits 24pt under the header (Spotify); the slack goes below it. */
+  .fs-stage { flex: 1 1 auto; min-height: 0; display: grid; place-items: start center; padding: 24px 24px 0; overflow: hidden; }
   /* The cover sits on the same 24pt gutter as the text below it, flat (no shadow). */
   .fs-art { width: 100%; max-width: 100%; height: auto; max-height: 100%; aspect-ratio: 1; border-radius: 8px; box-shadow: none; object-fit: cover; }
   .fs-art.ph { width: 100%; background: rgba(255,255,255,.08); }
@@ -88,6 +89,7 @@
   .fs-phone-device .devicebtn { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 10px; color: #fff; font-size: 12px; font-weight: 600; max-width: 100%; }
   .fs-phone-device .devicebtn svg { width: 24px; height: 24px; flex: none; }
   .fs-phone-device .devicebtn-name { display: none; }
+  .fs-quality { font-size: 12px; font-weight: 600; color: #fff; margin-left: -2px; white-space: nowrap; }
   .fs-phone-device .devicebtn.casting, .fs-phone-device .devicebtn.casting .devicebtn-name { color: var(--accent); }
   .fs-phone-device .devicebtn.casting .devicebtn-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 

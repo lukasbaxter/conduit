@@ -23,7 +23,7 @@ export function usePlayingFrom(player, jf) {
     const set = (v) => { if (alive) setFrom(v || fallback); };
     const id = String(ctx || '');
     if (!ctx) { set(null); return undefined; }
-    if (ctx === 'liked') { set({ kind: 'PLAYING FROM PLAYLIST', name: 'Liked Songs' }); return undefined; }
+    if (ctx === 'liked' || ctx === '__liked__') { set({ kind: 'PLAYING FROM PLAYLIST', name: 'Liked Songs' }); return undefined; }
     if (ctx === 'radar') { set({ kind: 'PLAYING FROM PLAYLIST', name: 'Release Radar' }); return undefined; }
     if (id.startsWith('browse:')) {
       // Genre tiles are cached by the search page; the id is the tile's.

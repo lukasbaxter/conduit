@@ -547,7 +547,7 @@ export default function Library({
 
     if (kind === 'Browse') {
       const byAlbum = new Map();
-      for (const t of tracks) if (t.AlbumId && !byAlbum.has(t.AlbumId)) byAlbum.set(t.AlbumId, { Id: t.AlbumId, Name: t.Album, AlbumArtist: t.AlbumArtist || (t.Artists || [])[0] });
+      for (const t of tracks) if (t.AlbumId && !byAlbum.has(t.AlbumId)) byAlbum.set(t.AlbumId, { Id: t.AlbumId, Name: t.Album || 'Unknown album', AlbumArtist: t.AlbumArtist || (t.Artists || [])[0] });
       return (
         <div className="content" style={{ '--hero': phone ? phoneHero(item._color || '#3d3c3c') : item._color || '#3d3c3c' }}>
 
@@ -559,8 +559,8 @@ export default function Library({
             </div>
           </header>
           <div className="actions">
+            <button className="iconbtn shuffle" onClick={() => tracks.length && player.setShuffle('on') & player.playQueue(tracks, Math.floor(Math.random() * tracks.length), item.Id)} title="Shuffle"><Shuffle /></button>
             <button className="bigplay" onClick={() => tracks.length && player.playQueue(tracks, 0, item.Id)} title="Play"><PlayGlyph size={24} /></button>
-            <button className="iconbtn" onClick={() => tracks.length && player.setShuffle('on') & player.playQueue(tracks, Math.floor(Math.random() * tracks.length), item.Id)} title="Shuffle"><Shuffle /></button>
           </div>
           <div className="pad">
             {byAlbum.size > 0 && (
@@ -992,7 +992,7 @@ export default function Library({
               isPlaylist && !isLiked && !item._mix ? { label: 'Edit details', icon: MI.edit, onClick: () => setEditPl({ name: item.Name, file: null, preview: null }) } : null,
               isPlaylist && !isLiked && !item._mix ? { label: 'Delete', icon: MI.trash, danger: true, onClick: () => { if (window.confirm(`Delete "${item.Name}"?`)) onDeletePlaylist(item); } } : null,
             ];
-            const heroHeader = { image: isLiked ? null : (item._art || jf.imageUrl(item.Id, { maxHeight: 120 })), round: isArtist, title: item.Name, sub: isArtist ? 'Artist' : isLiked || isPlaylist ? 'Playlist' : kind === 'Album' ? (lead?.Name || 'Album') : kind };
+            const heroHeader = { image: isLiked ? null : (item._art || jf.imageUrl(item.Id, { maxHeight: 120 })), icon: isLiked ? <LikedCover className="ctxmenu-head-liked" heart={45} /> : undefined, round: isArtist, title: item.Name, sub: isArtist ? 'Artist' : isLiked || isPlaylist ? 'Playlist' : kind === 'Album' ? (lead?.Name || 'Album') : kind };
             return (
               <>
                 <button
@@ -1303,7 +1303,7 @@ export default function Library({
     const top = r?.top || null;
     const show = (t) => searchType === 'All' || searchType === t;
     const subOf = (kind, item) => kind === 'Artist' ? 'Artist'
-      : kind === 'Album' ? ['Album', item.AlbumArtist || ''].filter(Boolean).join(' • ')
+      : kind === 'Album' ? ['Album', item.ProductionYear || '', item.AlbumArtist || ''].filter(Boolean).join(' • ')
       : kind === 'Playlist' ? 'Playlist'
       : ['Song', item.Artists?.join(', ') || item.AlbumArtist || ''].filter(Boolean).join(' • ');
     const hit = (kind, item) => ({ kind, item, sub: subOf(kind, item) });
@@ -1369,7 +1369,7 @@ export default function Library({
     const typeChips = r && (
       <div className="searchtypes">
         {SEARCH_TYPES.map((t) => (
-          <button key={t} className={`pill ${searchType === t ? 'on' : ''}`} onClick={() => setSearchType(t)}>{t}</button>
+          <button key={t} className={`pill ${searchType === t ? 'on' : ''}`} onClick={(e) => { setSearchType(t); e.currentTarget.scrollIntoView?.({ inline: 'nearest', block: 'nearest', behavior: 'smooth' }); }}>{t}</button>
         ))}
       </div>
     );

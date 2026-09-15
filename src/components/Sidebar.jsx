@@ -251,7 +251,7 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
           })}
           {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.entry)} onClose={() => setMenu(null)} />}
           {createSheet && (
-            <ContextMenu x={createSheet.x} y={createSheet.y} onClose={() => setCreateSheet(null)} header={{ icon: MI.plus, title: 'Create', sub: 'Your Library' }}
+            <ContextMenu x={createSheet.x} y={createSheet.y} onClose={() => setCreateSheet(null)}
               items={[{ label: 'Playlist', icon: MI.playlist, onClick: () => { setName(''); setNaming(true); } }]} />
           )}
           {naming && createPortal(
