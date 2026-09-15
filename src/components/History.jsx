@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { history as relayHistory } from '../api/search.js';
+import { usePhone } from './TrackRow.jsx';
 
 // The profile menu's History page, built to stats.fm's user page: its
 // Tailwind tokens (background #111111, foreground #181818, primary #1ed760,
@@ -243,6 +244,7 @@ function LineChart({ title, points, cumulative = false }) {
 export default function History({ jf, player, me, onOpenArtist, onOpenAlbum, onOpenSettings }) {
   const name = me?.Name || 'You';
   const [range, setRange] = useState(() => localStorage.getItem('conduit.histRange2') || '4w');
+  const phone = usePhone();
   const [data, setData] = useState({});
   const [recent, setRecent] = useState(null);
   const [showAll, setShowAll] = useState(false);
@@ -367,7 +369,14 @@ export default function History({ jf, player, me, onOpenArtist, onOpenAlbum, onO
       <div className="sf-container sf-body">
         {/* Range listbox (right on desktop) + the six text-only stat cards. */}
         <section className="sf-stats-row">
-          <div className="sf-listbox-wrap"><RangeListbox value={range} onChange={setRange} /></div>
+          {phone ? (
+            /* Phone: the range as Spotify-style chips instead of a listbox. */
+            <div className="sf-range-chips">
+              {RANGES.map(([k, label]) => <button key={k} className={`pill ${k === range ? 'on' : ''}`} onClick={() => setRange(k)}>{label}</button>)}
+            </div>
+          ) : (
+            <div className="sf-listbox-wrap"><RangeListbox value={range} onChange={setRange} /></div>
+          )}
           {st?.connected ? (
             <ul className="sf-stats">
               {[['streams', st.streams, st.prev?.streams], ['minutes streamed', st.minutes, st.prev?.minutes], ['hours streamed', Math.round(st.minutes / 60), st.prev ? Math.round(st.prev.minutes / 60) : null], ['days streamed', st.daysStreamed, st.prev?.daysStreamed], ['different tracks', st.uniqueTracks, st.prev?.uniqueTracks], ['different artists', st.uniqueArtists, st.prev?.uniqueArtists], ['different albums', st.uniqueAlbums, st.prev?.uniqueAlbums]].map(([label, value, before]) => (

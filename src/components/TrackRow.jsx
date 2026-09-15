@@ -17,6 +17,16 @@ export function usePhone() {
   return phone;
 }
 
+// "Share" on the phone: the system share sheet when there is one, else the
+// page link goes to the clipboard.
+export async function shareLink(title) {
+  const url = window.location.href;
+  try {
+    if (navigator.share) { await navigator.share({ title, url }); return 'shared'; }
+    await navigator.clipboard.writeText(url); return 'copied';
+  } catch { return null; }
+}
+
 export const PlayGlyph = ({ size = 20 }) => (
   <svg viewBox="0 0 16 16" width={size} height={size} fill="currentColor">
     <path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z" />
@@ -96,7 +106,9 @@ const Dots = () => (
 );
 
 // Menu glyphs, 16px, Spotify's outline weight.
-const I = {
+// Shared with the entity-header sheets (artist / album / playlist ⋯), so every
+// phone sheet row carries the same 16px glyphs.
+export const I = {
   plus: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M15.25 8a.75.75 0 0 1-.75.75H8.75v5.75a.75.75 0 0 1-1.5 0V8.75H1.5a.75.75 0 0 1 0-1.5h5.75V1.5a.75.75 0 0 1 1.5 0v5.75h5.75a.75.75 0 0 1 .75.75z" /></svg>,
   queue: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M15 15H1v-1.5h14V15zm0-4.5H1V9h14v1.5zm-14-7A2.5 2.5 0 0 1 3.5 1h9a2.5 2.5 0 0 1 0 5h-9A2.5 2.5 0 0 1 1 3.5zm2.5-1a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2h-9z" /></svg>,
   ban: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8z" /><path d="M4.97 4.97a.75.75 0 0 1 1.06 0L8 6.94l1.97-1.97a.75.75 0 1 1 1.06 1.06L9.06 8l1.97 1.97a.75.75 0 1 1-1.06 1.06L8 9.06l-1.97 1.97a.75.75 0 0 1-1.06-1.06L6.94 8 4.97 6.03a.75.75 0 0 1 0-1.06z" /></svg>,
@@ -107,6 +119,15 @@ const I = {
   trash: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M5.25 3v-.917C5.25.958 6.271 0 7.5 0h1c1.229 0 2.25.958 2.25 2.083V3h4.25v1.5h-1.028l-.86 10.28A1.5 1.5 0 0 1 11.617 16H4.383a1.5 1.5 0 0 1-1.495-1.22L2.028 4.5H1V3h4.25zm1.5-.917V3h2.5v-.917c0-.283-.278-.583-.75-.583h-1c-.472 0-.75.3-.75.583zM3.533 4.5l.848 10h7.238l.848-10H3.533z" /></svg>,
   heart: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M1.69 2A4.582 4.582 0 0 1 8 2.023 4.583 4.583 0 0 1 11.88.817h.002a4.618 4.618 0 0 1 3.782 3.65v.003a4.543 4.543 0 0 1-1.011 3.84L9.35 14.629a1.765 1.765 0 0 1-2.093.464 1.762 1.762 0 0 1-.605-.463L1.348 8.309A4.582 4.582 0 0 1 1.689 2zm3.158.252A3.082 3.082 0 0 0 2.49 7.337l.005.005L7.8 13.664a.264.264 0 0 0 .311.069.262.262 0 0 0 .09-.069l5.312-6.33a3.043 3.043 0 0 0 .68-2.573 3.118 3.118 0 0 0-2.551-2.463 3.079 3.079 0 0 0-2.612.816l-.007.007a1.501 1.501 0 0 1-2.045 0l-.009-.008a3.082 3.082 0 0 0-2.121-.861z" /></svg>,
   heartOn: <svg viewBox="0 0 16 16" width="16" height="16" fill="var(--seek-accent, #1db954)"><path d="M15.724 4.22A4.313 4.313 0 0 0 12.192.814a4.269 4.269 0 0 0-3.622 1.13.837.837 0 0 1-1.14 0 4.272 4.272 0 0 0-6.21 5.855l5.916 7.05a1.128 1.128 0 0 0 1.727 0l5.916-7.05a4.228 4.228 0 0 0 .945-3.577z" /></svg>,
+  share: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M1 5.75A.75.75 0 0 1 1.75 5H4v1.5H2.5v8h11v-8H12V5h2.25a.75.75 0 0 1 .75.75v9.5a.75.75 0 0 1-.75.75H1.75a.75.75 0 0 1-.75-.75v-9.5z" /><path d="M8 9.013a.75.75 0 0 1-.75-.75V2.812L5.23 4.83a.75.75 0 1 1-1.06-1.06L8 .94l3.83 2.83a.75.75 0 1 1-1.06 1.06L8.75 2.812v5.451a.75.75 0 0 1-.75.75z" /></svg>,
+  follow: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M6.233.371a4.388 4.388 0 0 1 5.002 1.052c.421.459.713.992.904 1.554.143.421.263 1.173.22 1.894-.078 1.322-.638 2.408-1.399 3.316l-.127.152a.75.75 0 0 0 .201 1.13l2.209 1.275a4.75 4.75 0 0 1 2.375 4.114V16H0v-1.142a4.75 4.75 0 0 1 2.375-4.114l2.209-1.275a.75.75 0 0 0 .201-1.13l-.126-.152c-.761-.908-1.322-1.994-1.4-3.316-.043-.721.077-1.473.22-1.894a4.346 4.346 0 0 1 .904-1.554c.411-.448.91-.807 1.85-1.052z" /></svg>,
+  edit: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M11.838.714a2.438 2.438 0 0 1 3.448 3.448l-9.841 9.841c-.358.358-.79.633-1.267.804L.5 15.5l.693-3.678c.17-.477.446-.909.804-1.267L11.838.714zm2.387 1.06a.938.938 0 0 0-1.327 0l-9.84 9.84a1.6 1.6 0 0 0-.377.594l-.263 1.393 1.393-.263a1.6 1.6 0 0 0 .594-.377l9.84-9.84a.938.938 0 0 0 0-1.327z" /></svg>,
+  gear: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4 8a4 4 0 1 1 8 0 4 4 0 0 1-8 0z" /><path d="M6.5 0h3l.4 2.1a6.1 6.1 0 0 1 1.3.75l2-.7 1.5 2.6-1.6 1.4a6.2 6.2 0 0 1 0 1.5l1.6 1.4-1.5 2.6-2-.7a6.1 6.1 0 0 1-1.3.75L9.5 16h-3l-.4-2.1a6.1 6.1 0 0 1-1.3-.75l-2 .7L1.3 11.25l1.6-1.4a6.2 6.2 0 0 1 0-1.5L1.3 6.95 2.8 4.35l2 .7a6.1 6.1 0 0 1 1.3-.75L6.5 0zm1.2 1.5-.3 1.7-.7.25a4.6 4.6 0 0 0-1.6.95l-.6.5-1.6-.6-.5.9 1.3 1.1-.1.75a4.7 4.7 0 0 0 0 1.4l.1.75-1.3 1.1.5.9 1.6-.6.6.5a4.6 4.6 0 0 0 1.6.95l.7.25.3 1.7h1l.3-1.7.7-.25a4.6 4.6 0 0 0 1.6-.95l.6-.5 1.6.6.5-.9-1.3-1.1.1-.75a4.7 4.7 0 0 0 0-1.4l-.1-.75 1.3-1.1-.5-.9-1.6.6-.6-.5a4.6 4.6 0 0 0-1.6-.95l-.7-.25-.3-1.7h-1z" /></svg>,
+  playlist: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M15 15H1v-1.5h14V15zm0-4.5H1V9h14v1.5zm-14-7A2.5 2.5 0 0 1 3.5 1h9a2.5 2.5 0 0 1 0 5h-9A2.5 2.5 0 0 1 1 3.5zm2.5-1a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2h-9z" /></svg>,
+  photo: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h11A1.5 1.5 0 0 1 15 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5v-9zm1.5 0v6.3l2.6-2.6 3 3 2.1-2.1 3.3 3.3V3.5h-11zM5.5 5a1 1 0 1 0 0 2 1 1 0 0 0 0-2z" /></svg>,
+  play: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z" /></svg>,
+  check: <svg viewBox="0 0 16 16" width="16" height="16" fill="#1ed760"><path d="M15.53 2.47a.75.75 0 0 1 0 1.06L6 13.06 .47 7.53a.75.75 0 0 1 1.06-1.06L6 10.94l8.47-8.47a.75.75 0 0 1 1.06 0z" /></svg>,
+  pin: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8.822.797a2.72 2.72 0 0 1 3.847 0l2.534 2.533a2.72 2.72 0 0 1 0 3.848l-3.678 3.678-1.337 4.988-4.486-4.486L1.28 15.78a.75.75 0 0 1-1.06-1.06l4.422-4.422L.156 5.812l4.987-1.337L8.822.797z" /></svg>,
 };
 
 function fmtDur(ticks) {
@@ -124,7 +145,7 @@ function fmtDur(ticks) {
 export default function TrackRow({
   track, n, active, isPlaying = false, onPlay, onToggle, onLike, playlists = [], onAddTo, onNewPlaylist,
   onRemove, draggable = false, onDragStart, onDragOver, onDrop, showArt = false, jf,
-  onOpenArtist, onOpenAlbum, hideArtists = false,
+  onOpenArtist, onOpenAlbum, hideArtists = false, subtitle = null,
   onAddToQueue, onExclude, onRadio, onDownload, hideAlbum = false, snippet = null, snippetAt = null, onPlayAt, highlight = false,
 }) {
   // {x, y} while the context menu is open (from the dots button or a right-click).
@@ -191,7 +212,7 @@ export default function TrackRow({
         <span>{track.Name}</span>
         {/* On an artist's own page the artist line is redundant; Spotify's
             Popular rows show the title alone. */}
-        {!hideArtists && <small>
+        {subtitle ? <small>{subtitle}</small> : !hideArtists && <small>
           <ArtistLinks artists={artistsOf} fallback={track.AlbumArtist || ''} onOpen={onOpenArtist} />
         </small>}
         {/* A lyric match: the line that matched, with the words lit. */}

@@ -1,6 +1,7 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import ContextMenu from './ContextMenu.jsx';
-import { Heart, LikedCover, usePhone } from './TrackRow.jsx';
+import { Heart, LikedCover, usePhone, I as MI } from './TrackRow.jsx';
 
 const ICONS = {
   home: 'M12 3 3 10v11h6v-6h6v6h6V10z',
@@ -113,6 +114,18 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
   const [searching, setSearching] = useState(false);
   const [libQuery, setLibQuery] = useState('');
   const [gridView, setGridView] = useState(false);
+  // Phone "+": a sheet with "Playlist", then a full-screen "Give your playlist a name".
+  const [createSheet, setCreateSheet] = useState(null); // { x, y }
+  const [naming, setNaming] = useState(false);
+  // The empty state waits for the library to have actually arrived (the
+  // playlists request has no flag of its own, so also let the first paint settle).
+  const [settled, setSettled] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setSettled(true), 1500); return () => clearTimeout(t); }, []);
+  const openCreate = (e) => {
+    if (!phone) { setCreating((v) => !v); return; }
+    const r = e?.currentTarget?.getBoundingClientRect?.();
+    setCreateSheet({ x: r ? r.left : 0, y: r ? r.bottom : 0 });
+  };
   const q = libQuery.trim().toLowerCase();
   const matches = (n) => !q || (n || '').toLowerCase().includes(q);
   const showLiked = (!libFilter || libFilter === 'playlist') && matches('Liked Songs');
@@ -150,7 +163,7 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
                 <Icon name="search" size={24} />
               </button>
             )}
-            <button className="icon-btn" onClick={() => setCreating((v) => !v)} title="Create playlist" aria-label="Create playlist">
+            <button className="icon-btn" onClick={openCreate} title="Create playlist" aria-label="Create playlist">
               <Icon name="plus" size={phone ? 24 : 18} />
             </button>
           </span>
@@ -237,12 +250,28 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
             );
           })}
           {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.entry)} onClose={() => setMenu(null)} />}
+          {createSheet && (
+            <ContextMenu x={createSheet.x} y={createSheet.y} onClose={() => setCreateSheet(null)} header={{ icon: MI.plus, title: 'Create', sub: 'Your Library' }}
+              items={[{ label: 'Playlist', icon: MI.playlist, onClick: () => { setName(''); setNaming(true); } }]} />
+          )}
+          {naming && createPortal(
+            <form className="newpl" onSubmit={(e) => { submit(e); setNaming(false); }}>
+              <h2>Give your playlist a name</h2>
+              <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="My playlist #1" spellCheck="false"
+                onKeyDown={(e) => e.key === 'Escape' && setNaming(false)} />
+              <div className="newpl-actions">
+                <button type="button" className="newpl-cancel" onClick={() => setNaming(false)}>Cancel</button>
+                <button type="submit" className="newpl-create" disabled={!name.trim()}>Create</button>
+              </div>
+            </form>,
+            document.body,
+          )}
 
-          {!shownEntries.length && !loading && !q && (!libFilter || libFilter === 'playlist') && (phone ? (
+          {!shownEntries.length && !loading && settled && likedCount != null && !q && (!libFilter || libFilter === 'playlist') && (phone ? (
             <div className="libempty">
               <b>Create your first playlist</b>
               <p>It's easy, we'll help you.</p>
-              <button onClick={() => setCreating(true)}>Create playlist</button>
+              <button onClick={openCreate}>Create playlist</button>
             </div>
           ) : (
             <p className="devicemenu-empty">
