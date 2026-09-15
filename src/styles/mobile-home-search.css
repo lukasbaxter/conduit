@@ -39,6 +39,12 @@
   .skeleton-row i { animation-duration: 1.4s; }
   .sk-title { display: block; width: 60%; height: 22px; border-radius: 6px; background: #3a3a3a; margin: 12px 0 8px; animation: sk-shimmer 1.4s ease-in-out infinite; }
 
+  /* Library tab: the chip row scrolls sideways (overflow: auto), which makes
+     it a flex item allowed to shrink to nothing; with a real-sized list the
+     column squeezed it to a 20pt sliver under "Your Library". Never shrink
+     the header rows, only the list scrolls. */
+  .libpanel > .libchips, .libpanel > .libsort, .libpanel > .libsearch { flex: none; }
+
   /* ---- Home ----
      Spotify's home has no greeting: the top row is the avatar plus the
      All / Music / Artists chips, over a soft tint that fades into the page
