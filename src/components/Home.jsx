@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PlayGlyph, Heart, LikedCover } from './TrackRow.jsx';
 
 function greeting() {
@@ -154,9 +154,22 @@ export default function Home({ jf, player, albums, artists, playlists, onOpen, o
     ];
   }, [playlists]);
 
+  // Phone: the chip row sticks to the top; once the page has scrolled it gets
+  // a solid background (the home gradient scrolls away underneath). A class
+  // toggle from a passive scroll listener, no state, no re-render.
+  const barRef = useRef(null);
+  useEffect(() => {
+    const bar = barRef.current, scroller = bar?.closest('.content');
+    if (!bar || !scroller) return undefined;
+    const on = () => bar.classList.toggle('stuck', scroller.scrollTop > 8);
+    scroller.addEventListener('scroll', on, { passive: true });
+    on();
+    return () => scroller.removeEventListener('scroll', on);
+  }, []);
+
   return (
     <div className="content">
-      <div className="contentbar">{bar}</div>
+      <div className="contentbar" ref={barRef}>{bar}</div>
 
       <div className="pad home">
         <h1 className="greeting">{greeting()}</h1>

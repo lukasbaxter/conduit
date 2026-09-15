@@ -50,6 +50,52 @@ function Shelf({ title, items, jf, round, onOpen, onPlay, onSeeAll, subtitle }) 
 
 const SEARCH_TYPES = ['All', 'Songs', 'Artists', 'Albums', 'Playlists'];
 
+// Phone layout flag (same breakpoint as the phone CSS). The search page
+// renders a flat Spotify-style result list there instead of the desktop grid.
+const PHONE_MQ = '(max-width: 760px)';
+function usePhone() {
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(PHONE_MQ).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(PHONE_MQ);
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
+
+// A recent search is either a bare query (older entries) or the thing that
+// was tapped: { q, kind, id, name, sub }. Spotify lists the tapped items.
+const recentText = (x) => (typeof x === 'string' ? x : x?.name || x?.q || '');
+const recentKey = (x) => (typeof x === 'string' ? `q:${x.toLowerCase()}` : x?.id ? `${x.kind}:${x.id}` : `q:${(x?.q || '').toLowerCase()}`);
+
+const MagnifierGlyph = () => (
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M10.533 1.279c-5.18 0-9.407 4.14-9.407 9.279s4.226 9.279 9.407 9.279c2.234 0 4.29-.77 5.907-2.058l4.353 4.353a1 1 0 1 0 1.414-1.414l-4.344-4.344a9.157 9.157 0 0 0 2.077-5.816c0-5.14-4.226-9.28-9.407-9.28zm-7.407 9.279c0-4.006 3.302-7.28 7.407-7.28s7.407 3.274 7.407 7.28-3.302 7.279-7.407 7.279-7.407-3.273-7.407-7.28z" /></svg>
+);
+const CloseGlyph = () => (
+  <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M2.47 2.47a.75.75 0 0 1 1.06 0L8 6.94l4.47-4.47a.75.75 0 1 1 1.06 1.06L9.06 8l4.47 4.47a.75.75 0 1 1-1.06 1.06L8 9.06l-4.47 4.47a.75.75 0 0 1-1.06-1.06L6.94 8 2.47 3.53a.75.75 0 0 1 0-1.06z" /></svg>
+);
+
+// One row of the phone search list: 48pt art (round for artists), name 16,
+// "Kind · detail" 13 grey. Songs are TrackRows (they carry the ⋯ menu).
+function SearchRow({ image, round, name, sub, onClick, onRemove, icon, className = '' }) {
+  return (
+    <div className={`srow ${round ? 'round' : ''} ${className}`} onClick={onClick} role="button" tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && onClick?.()}>
+      {icon ? <div className="srow-art srow-icon">{icon}</div> : image ? <img className="srow-art" src={image} alt="" loading="lazy" /> : <div className="srow-art ph" />}
+      <div className="srow-text">
+        <span className="srow-name">{name}</span>
+        {sub && <small className="srow-sub">{sub}</small>}
+      </div>
+      {onRemove && (
+        <button className="srow-x" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove" aria-label="Remove">
+          <CloseGlyph />
+        </button>
+      )}
+    </div>
+  );
+}
+
 // Spotify's rule of thumb for a release with no declared type: up to three
 // tracks (under 30 min) is a single, up to six an EP, otherwise an album.
 // Average colour straight out of Jellyfin's blurhash (its DC term is the
@@ -159,10 +205,16 @@ export default function Library({
     } catch { setDetail((d) => (d && d.item?.Id === `browse:${tile.id}` ? { ...d, loading: false } : d)); }
   };
   const TILE_COLORS = ['#e13300', '#1e3264', '#8d67ab', '#e8115b', '#148a08', '#0d73ec', '#7d4b32', '#ba5d07', '#477d95', '#503750', '#27856a', '#d84000', '#e1118c', '#a56752', '#4b7d9b', '#e61e32'];
-  const remember = (q) => {
-    const t = (q || '').trim(); if (!t || !onUpdatePrefs) return;
-    onUpdatePrefs({ recentSearches: [t, ...recents.filter((x) => x.toLowerCase() !== t.toLowerCase())].slice(0, 10) });
+  // Records a search. With a hit (what was tapped) the entry carries the item
+  // so the phone's Recent searches can list it with art, like Spotify's.
+  const remember = (q, hit = null) => {
+    const t = (q || '').trim(); if ((!t && !hit) || !onUpdatePrefs) return;
+    const entry = hit ? { q: t, kind: hit.kind, id: hit.item.Id, art: hit.item.AlbumId || hit.item.Id, name: hit.item.Name, sub: hit.sub || '' } : t;
+    const key = recentKey(entry);
+    onUpdatePrefs({ recentSearches: [entry, ...recents.filter((x) => recentKey(x) !== key)].slice(0, 10) });
   };
+  const forgetRecent = (entry) => onUpdatePrefs?.({ recentSearches: recents.filter((x) => recentKey(x) !== recentKey(entry)) });
+  const phone = usePhone();
   const searchRef = useRef(null);
   useEffect(() => {
     const onKey = (e) => {
@@ -1020,56 +1072,119 @@ export default function Library({
       } else if (e.key === 'Escape') { setQuery(''); }
     };
 
+    // Phone: Spotify's flat result list. The engine's per-type lists are each
+    // in score order, so the top result leads and the types take turns, then
+    // the tail of each. No headings, no Top result card.
+    const subOf = (kind, item) => kind === 'Artist' ? 'Artist'
+      : kind === 'Album' ? `Album · ${item.AlbumArtist || ''}`.replace(/ · $/, '')
+      : kind === 'Playlist' ? 'Playlist'
+      : `Song · ${item.Artists?.join(', ') || item.AlbumArtist || ''}`.replace(/ · $/, '');
+    const phoneRows = (() => {
+      if (!phone || !r || r.scoped) return null;
+      const rows = [], seen = new Set();
+      const push = (kind, item, i = -1) => { const k = `${kind}:${item.Id}`; if (seen.has(k)) return; seen.add(k); rows.push({ kind, item, i }); };
+      const songs = show('Songs') ? r.tracks : [], ars = show('Artists') ? r.artists : [], als = show('Albums') ? r.albums : [], pls = show('Playlists') ? r.playlists : [];
+      if (top && show(`${top.kind}s`)) push(top.kind, top.item, top.kind === 'Song' ? r.tracks.findIndex((t) => t.Id === top.item.Id) : -1);
+      const take = (kind, list, n) => list.slice(0, n).forEach((x, i) => push(kind, x, kind === 'Song' ? i : -1));
+      take('Song', songs, 4); take('Artist', ars, 2); take('Album', als, 2); take('Playlist', pls, 1);
+      songs.forEach((x, i) => push('Song', x, i)); ars.forEach((x) => push('Artist', x)); als.forEach((x) => push('Album', x)); pls.forEach((x) => push('Playlist', x));
+      return rows;
+    })();
+    const actOnPhone = (kind, item, i) => {
+      remember(query, { kind, item, sub: subOf(kind, item) });
+      if (kind === 'Song') { if (i >= 0) player.playQueue(r.tracks, i, null); else player.playQueue([item], 0, null); }
+      else if (kind === 'Playlist') onOpenPlaylist(item);
+      else open(item);
+    };
+    // A tapped recent search: reopen the artist / album / playlist, replay the song.
+    const openRecent = async (x) => {
+      if (typeof x === 'string') { setQuery(x); return; }
+      if (x.kind === 'Song') {
+        try { const t = await jf.itemById(x.id); if (t) player.playQueue([t], 0, null); } catch (e) { setErr(e.message); }
+      } else if (x.kind === 'Artist') openArtist({ Id: x.id, Name: x.name, Type: 'MusicArtist' });
+      else if (x.kind === 'Playlist') onOpenPlaylist({ Id: x.id, Name: x.name, Type: 'Playlist' });
+      else openAlbum({ Id: x.id, Name: x.name, Type: 'MusicAlbum' });
+      remember(x.q, { kind: x.kind, item: { Id: x.id, Name: x.name, AlbumId: x.art }, sub: x.sub });
+    };
+    const typeChips = r && (
+      <div className="searchtypes">
+        {SEARCH_TYPES.map((t) => (
+          <button key={t} className={`pill ${searchType === t ? 'on' : ''}`} onClick={() => setSearchType(t)}>{t}</button>
+        ))}
+      </div>
+    );
+    const browseTiles = (tiles || []).map((t, i) => (
+      <button key={t.id} className="tile" style={{ '--tile': t.color || TILE_COLORS[i % TILE_COLORS.length] }} onClick={() => openBrowse(t)}>
+        <span>{t.name}</span>{t.coverId && <img src={jf.imageUrl(t.coverId, { maxHeight: 200 })} alt="" />}
+      </button>
+    ));
+    const startTiles = (
+      <>
+        <button className="tile" style={{ '--tile': '#1e3264' }} onClick={() => onView('home')}>
+          <span>Made For You</span>{artists[0] && <img src={jf.imageUrl(artists[0].Id, { maxHeight: 200 })} alt="" />}
+        </button>
+        <button className="tile" style={{ '--tile': '#e13300' }} onClick={() => setSeeAll('albums')}>
+          <span>New Releases</span>{albums[0] && <img src={jf.imageUrl(albums[0].Id, { maxHeight: 200 })} alt="" />}
+        </button>
+        <button className="tile" style={{ '--tile': '#8d67ab' }} onClick={() => openBrowse({ id: 'charts', name: 'Charts', color: '#8d67ab', filter: 'plays > 0' })}>
+          <span>Charts</span>{albums[1] && <img src={jf.imageUrl(albums[1].Id, { maxHeight: 200 })} alt="" />}
+        </button>
+        <button className="tile" style={{ '--tile': '#5038a0' }} onClick={onOpenLiked}>
+          <span>Liked Songs</span><LikedCover className="tile-liked" heart={50} />
+        </button>
+      </>
+    );
+
     return (
       <div className="content">
         <div className="contentbar">
-          <input ref={searchRef} className="search" autoFocus placeholder="What do you want to play?"
+          <input ref={searchRef} className="search" autoFocus placeholder={phone ? 'What do you want to listen to?' : 'What do you want to play?'}
             value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onSearchKey} spellCheck="false" />
           {/* Invisible marker for the tests: which engine answered and how fast. */}
           {r?.tookMs != null && <span className="search-took" hidden>{r.engine === 'meili' ? `${r.tookMs} ms` : 'basic search'}</span>}
+          {/* On the phone the filter chips stick with the bar. */}
+          {phone && typeChips}
         </div>
-        {r && (
-          <div className="searchtypes">
-            {SEARCH_TYPES.map((t) => (
-              <button key={t} className={`pill ${searchType === t ? 'on' : ''}`} onClick={() => setSearchType(t)}>{t}</button>
-            ))}
-          </div>
-        )}
+        {!phone && typeChips}
         <div className="pad">
           {err && <div className="banner error">{err}</div>}
-          {!query.trim() && recents.length > 0 && (
+          {!query.trim() && recents.length > 0 && (phone ? (
+            <section className="recentlist">
+              <div className="shelf-head"><h2>Recent searches</h2></div>
+              {recents.map((x) => (
+                <SearchRow key={recentKey(x)} name={recentText(x)}
+                  sub={typeof x === 'string' ? '' : x.sub || x.kind}
+                  round={typeof x !== 'string' && x.kind === 'Artist'}
+                  icon={typeof x === 'string' ? <MagnifierGlyph /> : null}
+                  image={typeof x === 'string' ? null : jf.imageUrl(x.art || x.id, { maxHeight: 96 })}
+                  onClick={() => openRecent(x)} onRemove={() => forgetRecent(x)} />
+              ))}
+              <button className="pill clear-recents" onClick={() => onUpdatePrefs?.({ recentSearches: [] })}>Clear recent searches</button>
+            </section>
+          ) : (
             <section>
               <div className="shelf-head"><h2>Recent searches</h2><button onClick={() => onUpdatePrefs?.({ recentSearches: [] })}>Clear</button></div>
               <div className="pills recents">
-                {recents.map((q2) => <button key={q2} className="pill" onClick={() => setQuery(q2)}>{q2}</button>)}
+                {recents.map((x) => <button key={recentKey(x)} className="pill" onClick={() => setQuery(recentText(x))}>{recentText(x)}</button>)}
               </div>
+            </section>
+          ))}
+          {!query.trim() && phone && (
+            <section className="startbrowse">
+              <div className="shelf-head"><h2>Start browsing</h2></div>
+              <div className="tilegrid">{startTiles}</div>
             </section>
           )}
           {!query.trim() && (
-            <section>
+            <section className="browseall">
               <div className="shelf-head"><h2>Browse all</h2></div>
               <div className="tilegrid">
-                <button className="tile" style={{ '--tile': '#1e3264' }} onClick={() => onView('home')}>
-                  <span>Made For You</span>{artists[0] && <img src={jf.imageUrl(artists[0].Id, { maxHeight: 200 })} alt="" />}
-                </button>
-                <button className="tile" style={{ '--tile': '#e13300' }} onClick={() => setSeeAll('albums')}>
-                  <span>New Releases</span>{albums[0] && <img src={jf.imageUrl(albums[0].Id, { maxHeight: 200 })} alt="" />}
-                </button>
-                <button className="tile" style={{ '--tile': '#8d67ab' }} onClick={() => openBrowse({ id: 'charts', name: 'Charts', color: '#8d67ab', filter: 'plays > 0' })}>
-                  <span>Charts</span>{albums[1] && <img src={jf.imageUrl(albums[1].Id, { maxHeight: 200 })} alt="" />}
-                </button>
-                <button className="tile" style={{ '--tile': '#5038a0' }} onClick={onOpenLiked}>
-                  <span>Liked Songs</span><LikedCover className="tile-liked" heart={50} />
-                </button>
-                {(tiles || []).map((t, i) => (
-                  <button key={t.id} className="tile" style={{ '--tile': t.color || TILE_COLORS[i % TILE_COLORS.length] }} onClick={() => openBrowse(t)}>
-                    <span>{t.name}</span>{t.coverId && <img src={jf.imageUrl(t.coverId, { maxHeight: 200 })} alt="" />}
-                  </button>
-                ))}
+                {!phone && startTiles}
+                {browseTiles}
               </div>
             </section>
           )}
-          {!query.trim() && (
+          {!query.trim() && !phone && (
             <section>
               <div className="shelf-head"><h2>Tips</h2></div>
               <p className="placeholder-note">Type a lyric you remember. Narrow with <code>artist:</code>, <code>album:</code>, <code>year:2013</code>, <code>year:2010-2015</code>, <code>genre:house</code> or <code>liked:</code>. Typos are fine. Press <code>/</code> anywhere to get here, arrows and Enter to play.</p>
@@ -1089,7 +1204,22 @@ export default function Library({
               </div>
             </section>
           )}
-          {r && !r.scoped && searchType === 'All' && top && (
+
+          {phoneRows && phoneRows.length > 0 && (
+            <div className="searchlist">
+              {phoneRows.map(({ kind, item, i }, n) => kind === 'Song' ? (
+                <div key={`s${item.Id}`} className={`srow-song ${n === 0 ? 'topresult' : ''}`} onClick={() => actOnPhone('Song', item, i)}>
+                  <TrackRow {...(i >= 0 ? searchRow(i) : rowProps([item], 0, { showArt: true, onPlay: () => actOnPhone('Song', item, -1) }))} />
+                </div>
+              ) : (
+                <SearchRow key={`${kind}${item.Id}`} className={n === 0 ? 'topresult' : ''} round={kind === 'Artist'}
+                  image={jf.imageUrl(item.Id, { maxHeight: 96 })} name={item.Name} sub={subOf(kind, item)}
+                  onClick={() => actOnPhone(kind, item, i)} />
+              ))}
+            </div>
+          )}
+
+          {!phone && r && !r.scoped && searchType === 'All' && top && (
             <div className="searchgrid">
               <section>
                 <div className="shelf-head"><h2>Top result</h2></div>
@@ -1121,7 +1251,7 @@ export default function Library({
             </div>
           )}
 
-          {r && !r.scoped && show('Songs') && searchType !== 'All' && r.tracks.length > 0 && (
+          {!phone && r && !r.scoped && show('Songs') && searchType !== 'All' && r.tracks.length > 0 && (
             <section>
               <div className="shelf-head"><h2>Songs</h2></div>
               <div className="tracklist" style={{ padding: 0 }}>
@@ -1129,7 +1259,7 @@ export default function Library({
               </div>
             </section>
           )}
-          {r && show('Artists') && r.artists.length > 0 && (
+          {!phone && r && show('Artists') && r.artists.length > 0 && (
             <section>
               <div className="shelf-head"><h2>Artists</h2></div>
               <div className="grid">
@@ -1140,7 +1270,7 @@ export default function Library({
               </div>
             </section>
           )}
-          {r && show('Albums') && r.albums.length > 0 && (
+          {!phone && r && show('Albums') && r.albums.length > 0 && (
             <section>
               <div className="shelf-head"><h2>Albums</h2></div>
               <div className="grid">
@@ -1151,7 +1281,7 @@ export default function Library({
               </div>
             </section>
           )}
-          {r && show('Playlists') && r.playlists.length > 0 && (
+          {!phone && r && show('Playlists') && r.playlists.length > 0 && (
             <section>
               <div className="shelf-head"><h2>Playlists</h2></div>
               <div className="grid">
