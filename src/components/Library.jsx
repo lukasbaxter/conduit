@@ -848,7 +848,9 @@ export default function Library({
       );
     }
 
-    if (detail.loading && !item.Name) {
+    // Phone: no black "dots" pane between pages; the page slides in with a
+    // skeleton title and the cover, and fills as the data lands.
+    if (detail.loading && !item.Name && !phone) {
       return (
         <div className="content loading-screen">
           <div className="dots"><i /><i /><i /></div>
@@ -914,8 +916,10 @@ export default function Library({
                   <button className="hero-title-edit" onClick={() => setEditPl({ name: item.Name, file: null, preview: null })} title="Edit details">
                     <FittedTitle text={item.Name} maxLines={2} />
                   </button>
-                ) : (
+                ) : item.Name ? (
                   <FittedTitle text={item.Name} maxLines={2} />
+                ) : (
+                  <i className="sk-line sk-title" aria-hidden="true" />
                 )}
                 {phone && !isArtist ? (
                   /* Spotify iOS: owner line (avatar + name, bold), then

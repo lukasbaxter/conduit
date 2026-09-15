@@ -30,6 +30,15 @@
 
   .ctxmenu-head-ico .ctxmenu-head-liked { width: 56px; height: 56px; border-radius: 4px; }
 
+  /* Page transitions: transform only (compositor), 200ms, ease-out. The old
+     opacity dip made pushed pages flash; the black dots pane is gone on the
+     phone (see Library.jsx). Sheets slide up in the same time. */
+  .app.mobile-detail .content { animation: page-in .2s cubic-bezier(.2,.7,.2,1); will-change: transform; }
+  @keyframes page-in { from { transform: translateX(100%); } to { transform: none; } }
+  .ctxmenu-fixed:not(.ctxmenu-sub), .devicemenu { animation-duration: .2s; will-change: transform; }
+  .skeleton-row i { animation-duration: 1.4s; }
+  .sk-title { display: block; width: 60%; height: 22px; border-radius: 6px; background: #3a3a3a; margin: 12px 0 8px; animation: sk-shimmer 1.4s ease-in-out infinite; }
+
   /* ---- Home ----
      Spotify's home has no greeting: the top row is the avatar plus the
      All / Music / Artists chips, over a soft tint that fades into the page
