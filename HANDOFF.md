@@ -332,6 +332,6 @@ mapping the code when we stopped.
   `ssh server` → `/home/admin/services/conduit-relay`; redeploy
   `sudo docker compose up -d --build`. In-memory state (wiped on redeploy — that's
   why re-claim/adopt exist).
-- Jellyfin: .85:2101, user `lukasbaxter` / `Conduit-Temp-4417`.
+- Jellyfin: .85:2101, user `lukasbaxter` / `<reset 2026-09-15 by the agent; Lukas has it in his password manager, not recorded here>`.
 - Both `conduit-relay` and `conduit-lan` were Up and healthy at end of session.
 - The desktop app was left running via `npm run dev`.
