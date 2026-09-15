@@ -1482,7 +1482,7 @@ export default function Library({
           {phoneRows && phoneRows.length > 0 && (
             <div className="searchlist">
               {phoneRows.map(({ kind, item, i }, n) => kind === 'Song' ? (
-                <div key={`s${item.Id}`} className={`srow-song ${n === 0 ? 'topresult' : ''}`} onClick={() => actOnPhone('Song', item, i)}>
+                <div key={`s${item.Id}`} className={`srow-song ${n === 0 ? 'topresult' : ''}`}>
                   <TrackRow {...(i >= 0 ? searchRow(i) : rowProps([item], 0, { showArt: true, onPlay: () => actOnPhone('Song', item, -1) }))} />
                 </div>
               ) : (

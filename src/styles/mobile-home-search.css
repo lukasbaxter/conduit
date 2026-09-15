@@ -18,6 +18,11 @@
   /* No "find in playlist / album" field on the phone (owner's call). */
   .within { display: none; }
 
+  /* Back chevron: it sits in the fixed .mobile-topbar, which already pads
+     for the safe area. mobile-library.css re-adds top/left on the (relative)
+     button, which on a real phone pushes it 70pt down the page. */
+  .mobile-topbar .mobile-back { top: 0; left: 0; }
+
   /* ---- Home ----
      Spotify's home has no greeting: the top row is the avatar plus the
      All / Music / Artists chips, over a soft tint that fades into the page

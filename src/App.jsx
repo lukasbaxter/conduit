@@ -844,6 +844,36 @@ export default function App() {
     window.addEventListener('touchend', up, { passive: true });
     return () => { window.removeEventListener('touchstart', down); window.removeEventListener('touchmove', move); window.removeEventListener('touchend', up); };
   }, [isMobile, fullScreen]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Bottom sheets (device picker, ⋯ menu) follow a downward drag and close
+  // when it is released far or fast enough, like Spotify's.
+  useEffect(() => {
+    if (!isMobile) return undefined;
+    let start = null, sheet = null;
+    const down = (e) => {
+      const t = e.touches?.[0];
+      sheet = t && e.touches.length === 1 ? e.target.closest?.('.devicemenu, .ctxmenu-fixed:not(.ctxmenu-sub)') : null;
+      start = sheet && sheet.scrollTop <= 0 ? { y: t.clientY, at: Date.now() } : null;
+    };
+    const move = (e) => {
+      if (!start || !sheet) return;
+      const dy = e.touches[0].clientY - start.y;
+      if (dy > 0) { sheet.style.transform = `translateY(${dy}px)`; sheet.style.transition = 'none'; }
+    };
+    const up = (e) => {
+      if (!start || !sheet) return;
+      const t = e.changedTouches?.[0]; const dy = t ? t.clientY - start.y : 0; const fast = Date.now() - start.at < 300;
+      sheet.style.transition = 'transform .2s ease-out';
+      // Both sheets close on a mousedown outside themselves (Escape would
+      // also close the full-screen player underneath).
+      if (dy > 100 || (fast && dy > 40)) document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      else sheet.style.transform = '';
+      start = null; sheet = null;
+    };
+    window.addEventListener('touchstart', down, { passive: true });
+    window.addEventListener('touchmove', move, { passive: true });
+    window.addEventListener('touchend', up, { passive: true });
+    return () => { window.removeEventListener('touchstart', down); window.removeEventListener('touchmove', move); window.removeEventListener('touchend', up); };
+  }, [isMobile]);
   // iOS-style edge swipe: a drag that starts on the left edge goes back.
   useEffect(() => {
     if (!isMobile) return undefined;

@@ -153,6 +153,7 @@ export default function TrackRow({
 }) {
   // {x, y} while the context menu is open (from the dots button or a right-click).
   const [menu, setMenu] = useState(null);
+  const phone = usePhone();
   // From the like store, never from the row's UserData (which can be stale).
   const liked = useLiked(track.Id);
   const excluded = track.UserData?.Likes === false;
@@ -191,6 +192,10 @@ export default function TrackRow({
       onDrop={onDrop}
       onDoubleClick={onPlay}
       onContextMenu={openMenuAt}
+      // Phone: the number / play button is hidden, so a tap on the row itself
+      // plays (Spotify). Buttons, links, the art and lyric snippets keep their
+      // own taps. Desktop stays double-click.
+      onClick={phone ? (e) => { if (e.target.closest?.('button, .rowlink, .trackrow-art, .lyric-snippet, .ctxmenu')) return; (active && onToggle ? onToggle : onPlay)?.(); } : undefined}
     >
       <button
         className="trackrow-n"
