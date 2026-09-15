@@ -24,6 +24,7 @@
   .mobile-topbar .mobile-back { top: 0; left: 0; justify-self: start; margin-left: 16px; }
   /* Genre / chart pages: no 220pt hero box around three lines of text. */
   .browse-hero { min-height: 0; padding-bottom: 8px; }
+  .content:has(> .browse-hero) .pad > section:first-child > .shelf-head { margin-top: 4px; }
 
   .ctxmenu-head-ico .ctxmenu-head-liked { width: 56px; height: 56px; border-radius: 4px; }
 
