@@ -1103,7 +1103,7 @@ pos=${Math.round(player.position)} playing=${player.playing} vol=${player.volume
             // Tapping the lit tab pops its stack to the root, or scrolls a root page to the top.
             const tap = () => {
               if (on && !mobileDetail) { document.querySelector('.shell .content')?.scrollTo({ top: 0, behavior: 'smooth' }); return; }
-              setMobileTab(k);
+              setMobileTab(k); mobileTabRef.current = k; // the entry goView pushes must carry the NEW tab
               if (k === 'library') setMobileLib(true); else { setMobileLib(false); goView(k); }
             };
             return (

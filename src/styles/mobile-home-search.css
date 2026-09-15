@@ -22,6 +22,8 @@
      for the safe area. mobile-library.css re-adds top/left on the (relative)
      button, which on a real phone pushes it 70pt down the page. */
   .mobile-topbar .mobile-back { top: 0; left: 0; justify-self: start; margin-left: 16px; }
+  /* Spotify draws the dark disc only over artist photos; colour pages get a bare chevron. */
+  .app.mobile:not(:has(.hero.artist)) .mobile-topbar .mobile-back { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
   /* Genre / chart pages: no 220pt hero box around three lines of text. */
   .browse-hero { min-height: 0; padding-bottom: 8px; }
   .content:has(> .browse-hero) .pad > section:first-child > .shelf-head { margin-top: 4px; }
@@ -101,6 +103,7 @@
   .search::placeholder { color: #121212; opacity: .85; font-weight: 500; }
   .contentbar .searchtypes { flex: 1 1 100%; display: flex; flex-wrap: nowrap; gap: 8px; padding: 0; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
   .contentbar .searchtypes::-webkit-scrollbar { display: none; }
+  .contentbar .searchtypes { scroll-padding-inline: 16px; }
   .contentbar .searchtypes .pill { flex: none; }
   .content:has(> .contentbar > .search) .pad { padding: 4px 16px 24px; }
   .content:has(> .contentbar > .search) section > .shelf-head { margin: 20px 0 12px; }

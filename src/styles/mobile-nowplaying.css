@@ -118,8 +118,7 @@
   .fs.fs-tab-viz .fs-stage { padding: 8px 0 0; display: block; position: relative; }
   .fs-viz-hint { position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; color: #b3b3b3; pointer-events: none; }
   .fs-art-behind { display: none; }
-  .fs.fs-tab-viz.sheet .fs-art-behind, .fs.fs-tab-viz:has(.devicemenu) .fs-art-behind { display: block; position: absolute; left: 24px; right: 24px; top: 50%; width: auto; transform: translateY(-50%); }
-  .fs-art-behind .fs-art { width: 100%; max-width: none; }
+  .fs.fs-tab-viz.sheet .fs-art-behind, .fs.fs-tab-viz:has(.devicemenu) .fs-art-behind { display: block; position: absolute; left: 24px; top: 50%; width: calc(100% - 48px); max-width: none; height: auto; transform: translateY(-50%); }
   .fs.fs-tab-viz.sheet .viz, .fs.fs-tab-viz:has(.devicemenu) .viz { visibility: hidden; }
 
   /* ---- Exit motion: pages and sheets slide down for 250ms before they unmount. ---- */
