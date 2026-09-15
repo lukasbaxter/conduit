@@ -215,7 +215,8 @@ export default function App() {
   // the Library tab lit (Spotify's per-tab navigation stacks); Home/Search
   // follow the view.
   const [mobileTab, setMobileTab] = useState('home');
-  useEffect(() => { if (view === 'home' || view === 'search') setMobileTab(view); }, [view]);
+  // Detail pages set view='home' for the desktop model; only a ROOT page moves the lit tab.
+  useEffect(() => { if (!detail && !seeAll && (view === 'home' || view === 'search')) setMobileTab(view); }, [view, detail, seeAll]);
   useEffect(() => { if (mobileLib) setMobileTab('library'); }, [mobileLib]);
   const [query, setQuery] = useState('');
 
