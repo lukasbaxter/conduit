@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArtistLinks, PlayGlyph } from './TrackRow.jsx';
+import { ArtistLinks, PlayGlyph, PauseGlyph, ShuffleGlyph } from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
-import { ctxItemId } from '../api/context.js';
 import { isLiked } from '../api/likes.js';
-import { usePhone } from './Player.jsx';
+import { usePhone, usePlayingFrom, slideOut } from './Player.jsx';
 
 const Close = () => (
   <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
@@ -27,17 +26,27 @@ function secs(ticks) {
   return ticks ? ticks / 10_000_000 : 0;
 }
 
-function QueueRow({ track, jf, active, onPlay, onOpenArtist, onOpenAlbum, menuItems, draggable, onDragStart, onDragOver, onDrop, onDragEnd, over, dragging, pos, onHandleDown }) {
+function QueueRow({ track, jf, active, onPlay, onOpenArtist, onOpenAlbum, menuItems, draggable, onDragStart, onDragOver, onDrop, onDragEnd, over, dragging, pos, onHandleDown, phone = false, lift = null }) {
   const [menu, setMenu] = useState(null);
   const art = jf.imageUrl(track.AlbumId || track.Id, { maxHeight: 80 });
   const artists = track.ArtistItems?.length ? track.ArtistItems : (track.Artists || []).map((n) => ({ Name: n }));
+  // A long-press opens the sheet while the finger is still down; the release
+  // then synthesizes a mousedown that would count as an outside tap and close
+  // it at once, so closes in the first half second are ignored.
+  const openedAt = useRef(0);
+  const closeMenu = () => { if (Date.now() - openedAt.current < 500) return; slideOut('.ctxmenu-fixed', () => setMenu(null)); };
+  const openMenu = (at) => { openedAt.current = Date.now(); setMenu(at); };
+  const header = { image: art, title: track.Name, sub: artists.map((a) => a.Name).join(', ') || track.AlbumArtist || '' };
+  // Phone drag: the lifted row follows the finger, the rows it passes shift out of its way.
+  const liftStyle = lift ? (lift.dragging ? { transform: `translateY(${lift.dy}px)` } : lift.shift ? { transform: `translateY(${lift.shift}px)` } : undefined) : undefined;
   return (
     <div
-      className={`qrow ${active ? 'active' : ''} ${over ? 'dropbefore' : ''} ${dragging ? 'dragging' : ''}`}
+      className={`qrow ${active ? 'active' : ''} ${over && !phone ? 'dropbefore' : ''} ${dragging && !phone ? 'dragging' : ''} ${lift?.dragging ? 'lifted' : ''} ${lift && !lift.dragging ? 'shifting' : ''}`}
       data-pos={pos}
+      style={liftStyle}
       draggable={draggable}
       onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
-      onContextMenu={menuItems ? (e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); } : undefined}
+      onContextMenu={menuItems ? (e) => { e.preventDefault(); openMenu({ x: e.clientX, y: e.clientY }); } : undefined}
       onDoubleClick={onPlay}
     >
       <button className="qrow-art" onClick={onPlay} title="Play">
@@ -48,12 +57,13 @@ function QueueRow({ track, jf, active, onPlay, onOpenArtist, onOpenAlbum, menuIt
         <span className="qrow-title" role="button" onClick={() => track.AlbumId && onOpenAlbum?.(track.AlbumId)}>{track.Name}</span>
         <span className="qrow-sub"><ArtistLinks artists={artists} fallback={track.AlbumArtist || ''} onOpen={onOpenArtist} className="rowlink" /></span>
       </span>
-      {menuItems && (
-        <button className="qrow-more" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setMenu({ x: r.right, y: r.bottom + 4, fromButton: true }); }} title="More options">
+      {/* Phone rows open their sheet on a long-press (Spotify); the ⋯ is desktop only. */}
+      {menuItems && !phone && (
+        <button className="qrow-more" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); openMenu({ x: r.right, y: r.bottom + 4, fromButton: true }); }} title="More options">
           <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M3 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm6.5 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM16 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" /></svg>
         </button>
       )}
-      {menu && <ContextMenu x={menu.x} y={menu.y} anchorRight={Boolean(menu.fromButton)} items={menuItems} onClose={() => setMenu(null)} />}
+      {menu && <ContextMenu x={menu.x} y={menu.y} anchorRight={Boolean(menu.fromButton)} items={menuItems} onClose={closeMenu} header={phone ? header : null} />}
       {/* Phone: Spotify's drag handle at the right; HTML5 drag does not fire on touch. */}
       {onHandleDown && (
         <span className="qrow-handle" onPointerDown={onHandleDown} title="Drag to reorder" aria-label="Drag to reorder"><Handle /></span>
@@ -137,36 +147,51 @@ function Queue({ player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlis
   let split = 0;
   while (split < upcoming.length && upcoming[split]?._queued) split += 1;
   const queued = upcoming.slice(0, split), fromCtx = upcoming.slice(split);
-  const [ctxName, setCtxName] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    if (!contextId || contextId === 'liked') { setCtxName(contextId === 'liked' ? 'Liked Songs' : null); return undefined; }
-    if (String(contextId).startsWith('browse:')) { setCtxName(null); return undefined; }
-    jf.itemById(ctxItemId(contextId)).then((it) => { if (alive) setCtxName(it?.Name || null); }).catch(() => { if (alive) setCtxName(null); });
-    return () => { alive = false; };
-  }, [contextId, jf]);
+  const from = usePlayingFrom(player, jf);
+  const ctxName = contextId ? from.name : null;
   const [drag, setDrag] = useState(null); // absolute queue index being dragged
   const [over, setOver] = useState(null);
+  const [dy, setDy] = useState(0); // phone: how far the lifted row has moved
   const phone = usePhone();
-  // Phone reorder: the handle captures the pointer, the row under the finger
-  // becomes the drop target, release moves the track.
+  // Phone reorder: the handle captures the pointer; the lifted row follows the
+  // finger, the rows it passes shift aside, release moves the track.
   const handleDown = (pos) => (e) => {
     e.preventDefault();
-    const el = e.currentTarget; let target = pos;
+    const el = e.currentTarget; let target = pos; const y0 = e.clientY; let raf = 0, lastY = y0;
     try { el.setPointerCapture(e.pointerId); } catch {}
-    setDrag(pos); setOver(pos);
+    const rowH = el.closest('.qrow')?.getBoundingClientRect().height || 64;
+    setDrag(pos); setOver(pos); setDy(0);
     const move = (ev) => {
-      const row = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.qrow[data-pos]');
-      if (!row) return;
-      const p = Number(row.dataset.pos); if (Number.isNaN(p) || p === target) return;
-      target = p; setOver(p);
+      lastY = ev.clientY;
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const d = lastY - y0;
+        setDy(d);
+        // Target = the slot the row's centre is over, one row per rowH of travel.
+        const p = pos + Math.round(d / rowH);
+        const min = index >= 0 ? index + 1 : 0, max = queue.length - 1;
+        const clamped = Math.max(min, Math.min(max, p));
+        if (clamped !== target) { target = clamped; setOver(clamped); }
+      });
     };
     const up = () => {
       el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+      if (raf) cancelAnimationFrame(raf);
       if (target !== pos) player.moveInQueue(pos, target);
-      setDrag(null); setOver(null);
+      setDrag(null); setOver(null); setDy(0);
     };
     el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  };
+  // Per-row lift state for the phone drag: the dragged row carries dy, rows
+  // between it and the target slot shift one row the other way.
+  const liftFor = (pos) => {
+    if (!phone || drag == null) return null;
+    if (pos === drag) return { dragging: true, dy };
+    const rowH = 64;
+    if (over != null && over > drag && pos > drag && pos <= over) return { shift: -rowH };
+    if (over != null && over < drag && pos < drag && pos >= over) return { shift: rowH };
+    return { shift: 0 };
   };
 
   if (!queue.length) {
@@ -187,7 +212,7 @@ function Queue({ player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlis
   ];
   const row = (t, pos, key) => (
     <QueueRow key={key} track={t} jf={jf} onPlay={() => player.skipTo(pos)} onOpenArtist={onOpenArtist} onOpenAlbum={onOpenAlbum}
-      menuItems={items(t, pos)} draggable={!phone} pos={pos} onHandleDown={phone ? handleDown(pos) : undefined}
+      menuItems={items(t, pos)} draggable={!phone} pos={pos} onHandleDown={phone ? handleDown(pos) : undefined} phone={phone} lift={liftFor(pos)}
       onDragStart={() => setDrag(pos)} onDragOver={(e) => { e.preventDefault(); setOver(pos); }}
       onDrop={(e) => { e.preventDefault(); if (drag != null && drag !== pos) player.moveInQueue(drag, pos); setDrag(null); setOver(null); }}
       onDragEnd={() => { setDrag(null); setOver(null); }} over={over === pos && drag != null && drag !== pos} dragging={drag === pos} />
@@ -198,7 +223,7 @@ function Queue({ player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlis
         <section>
           <div className="section-head" style={{ marginBottom: 8 }}><h2>Now playing</h2></div>
           <QueueRow track={current} jf={jf} active onPlay={() => player.skipTo(index)} onOpenArtist={onOpenArtist} onOpenAlbum={onOpenAlbum}
-            menuItems={items(current, index).filter((x) => x && x.label !== 'Remove from queue')} />
+            menuItems={items(current, index).filter((x) => x && x.label !== 'Remove from queue')} phone={phone} />
         </section>
       )}
       {queued.length > 0 && (
@@ -214,7 +239,7 @@ function Queue({ player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlis
         <section>
           <div className="section-head" style={{ marginBottom: 8 }}>
             <h2>{ctxName ? `Next from: ${ctxName}` : 'Next up'}</h2>
-            <span className="qrow-sub">{fromCtx.length}</span>
+            {!phone && <span className="qrow-sub">{fromCtx.length}</span>}
           </div>
           {fromCtx.slice(0, 80).map((t, i) => row(t, base + split + i, `c-${t.Id}-${i}`))}
         </section>
@@ -222,6 +247,29 @@ function Queue({ player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlis
       {!queued.length && !fromCtx.length && <p className="qrow-sub" style={{ padding: '12px 0' }}>End of the queue.</p>}
     </>
   );
+}
+
+// Phone lyrics never show empty lines (Spotify): blanks are dropped, and a
+// synced gap becomes a "♪" line so an instrumental break still has something
+// to follow. A gap counts when it is over 5s AND well over the song's usual
+// line spacing (2.5x the median), so slow songs do not fill up with notes.
+const GAP = 5;
+function phoneLines(lines) {
+  if (!Array.isArray(lines)) return lines;
+  const kept = lines.filter((l) => l && String(l.text || '').trim());
+  const synced = kept.some((l) => l.start != null);
+  if (!synced) return kept;
+  const spacings = kept.slice(1).map((l, i) => l.start - kept[i].start).filter((d) => Number.isFinite(d) && d > 0).sort((a, b) => a - b);
+  const median = spacings.length ? spacings[Math.floor(spacings.length / 2)] : GAP;
+  const threshold = Math.max(GAP, 2.5 * median);
+  const out = [];
+  if (kept.length && kept[0].start > threshold) out.push({ text: '♪', start: 0, gap: true });
+  kept.forEach((l, i) => {
+    out.push(l);
+    const next = kept[i + 1];
+    if (next && l.start != null && next.start != null && next.start - l.start > threshold) out.push({ text: '♪', start: l.start + Math.min(5, (next.start - l.start) / 2), gap: true });
+  });
+  return out;
 }
 
 /**
@@ -238,6 +286,7 @@ export function Lyrics({ player, jf }) {
   const [lines, setLines] = useState(null);
   const [state, setState] = useState('idle');
   const activeRef = useRef(null);
+  const phone = usePhone();
 
   useEffect(() => {
     if (!trackId) { setLines(null); setState('idle'); return; }
@@ -246,7 +295,7 @@ export function Lyrics({ player, jf }) {
     jf.lyrics(trackId)
       .then((l) => {
         if (cancelled) return;
-        setLines(l);
+        setLines(phone ? phoneLines(l) : l);
         setState(l && l.length ? 'ok' : 'none');
       })
       .catch(() => { if (!cancelled) setState('none'); });
@@ -308,7 +357,7 @@ export function Lyrics({ player, jf }) {
   const synced = lines.some((l) => l.start != null);
 
   return (
-    <div className="lyrics" ref={listRef}>
+    <div className={`lyrics ${synced ? 'synced' : 'unsynced'}`} ref={listRef}>
       {!synced && (
         <p className="qrow-sub" style={{ margin: '0 0 12px' }}>
           These lyrics aren&rsquo;t synced to the song yet.
@@ -318,7 +367,7 @@ export function Lyrics({ player, jf }) {
         <button
           key={i}
           ref={i === activeIndex ? activeRef : null}
-          className={`lyric-line ${synced && i < activeIndex ? 'sung' : ''} ${i === activeIndex ? 'now' : ''}`}
+          className={`lyric-line ${synced && i < activeIndex ? 'sung' : ''} ${i === activeIndex ? 'now' : ''} ${l.gap ? 'gap' : ''}`}
           onClick={() => { if (l.start == null) return; player.seek(l.start); setManual(false); }}
           style={{ cursor: l.start != null ? 'pointer' : 'default' }}
         >
@@ -335,15 +384,21 @@ export function Lyrics({ player, jf }) {
 export default function RightPanel({ mode, onClose, onMode, player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlists }) {
   const titles = { npv: 'Now playing', queue: 'Queue', lyrics: 'Lyrics' };
   const phone = usePhone();
+  const from = usePlayingFrom(player, jf);
+  const rootRef = useRef(null);
+  const close = () => slideOut(rootRef.current, onClose);
+  const { playing, position, duration, shuffle, repeat } = player;
   // Lyrics sit on the blurred cover, like the now-playing view does.
   const np = player.nowPlaying;
   const bg = mode === 'lyrics' ? (np?.artId ? jf.imageUrl(np.artId, { maxHeight: 640 }) : np?.artUrl || null) : null;
   return (
-    <aside className={`rightpanel ${bg ? 'with-bg' : ''}`}>
+    <aside ref={rootRef} className={`rightpanel ${bg ? 'with-bg' : ''}`}>
       {bg && <div className="panel-bg" style={{ backgroundImage: `url("${bg}")` }} />}
       <div className="panel-header">
-        <button className="icon-btn" onClick={onClose} title="Close panel">{phone ? <ChevronDown /> : <Close />}</button>
-        <span className="title">{titles[mode]}</span>
+        <button className="icon-btn" onClick={close} title="Close panel">{phone ? <ChevronDown /> : <Close />}</button>
+        {phone && mode === 'queue'
+          ? <span className="title"><small>{from.kind}</small>{from.name}</span>
+          : <span className="title">{titles[mode]}</span>}
       </div>
       {mode !== 'npv' && (
         <div className="tabs" style={{ gridRow: 'auto' }}>
@@ -362,6 +417,19 @@ export default function RightPanel({ mode, onClose, onMode, player, jf, onOpenAr
         {mode === 'queue' && <Queue player={player} jf={jf} onOpenArtist={onOpenArtist} onOpenAlbum={onOpenAlbum} onLike={onLike} onAddTo={onAddTo} playlists={playlists} />}
         {mode === 'lyrics' && <Lyrics player={player} jf={jf} />}
       </div>
+      {/* Phone queue page: Spotify pins the transport under the list. */}
+      {phone && mode === 'queue' && player.nowPlaying && (
+        <div className="panel-transport">
+          <div className="panel-transport-row">
+            <button className={`ctl-mode ${shuffle && shuffle !== 'off' ? 'on' : ''}`} onClick={player.cycleShuffle} title="Shuffle"><ShuffleGlyph size={24} /></button>
+            <button onClick={player.previous} title="Previous"><svg viewBox="0 0 16 16" width="32" height="32" fill="currentColor"><path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z" /></svg></button>
+            <button className="panel-play" onClick={player.toggle} title={playing ? 'Pause' : 'Play'}>{playing ? <PauseGlyph size={22} /> : <PlayGlyph size={22} />}</button>
+            <button onClick={player.next} title="Next"><svg viewBox="0 0 16 16" width="32" height="32" fill="currentColor"><path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z" /></svg></button>
+            <button className={`ctl-mode ${repeat && repeat !== 'off' ? 'on' : ''}`} onClick={player.cycleRepeat} title="Repeat"><svg viewBox="0 0 16 16" width="24" height="24" fill="currentColor"><path d="M0 4.75A3.75 3.75 0 0 1 3.75 1h8.5A3.75 3.75 0 0 1 16 4.75v5a3.75 3.75 0 0 1-3.75 3.75H9.81l1.018 1.018a.75.75 0 1 1-1.06 1.06L6.939 12.75l2.829-2.828a.75.75 0 1 1 1.06 1.06L9.811 12h2.439a2.25 2.25 0 0 0 2.25-2.25v-5a2.25 2.25 0 0 0-2.25-2.25h-8.5A2.25 2.25 0 0 0 1.5 4.75v5A2.25 2.25 0 0 0 3.75 12H5v1.5H3.75A3.75 3.75 0 0 1 0 9.75v-5z" /></svg></button>
+          </div>
+          <div className="panel-progress"><span style={{ width: `${duration ? Math.min(100, (position / duration) * 100) : 0}%` }} /></div>
+        </div>
+      )}
     </aside>
   );
 }

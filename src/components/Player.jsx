@@ -1,12 +1,92 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import DevicePicker from './DevicePicker.jsx';
 import { usePhone, Heart, ShuffleGlyph, ArtistLinks } from './TrackRow.jsx';
 import { vibrantColor } from '../api/colors.js';
 import { seekHover } from '../api/seekHover.js';
 import { useLiked } from '../api/likes.js';
+import { ctxItemId } from '../api/context.js';
 
 // usePhone() lives in TrackRow.jsx; re-exported so the player screens keep their import.
 export { usePhone };
+
+/**
+ * Spotify's "PLAYING FROM <KIND>" / "<name>" pair for the session's context,
+ * shared by the now-playing header and the queue page. Always both lines:
+ * a context we cannot name falls back to "PLAYING FROM" / "Your Library".
+ */
+export function usePlayingFrom(player, jf) {
+  const ctx = player.contextId;
+  const [from, setFrom] = useState({ kind: 'PLAYING FROM', name: 'Your Library' });
+  useEffect(() => {
+    let alive = true;
+    const fallback = { kind: 'PLAYING FROM', name: 'Your Library' };
+    const set = (v) => { if (alive) setFrom(v || fallback); };
+    const id = String(ctx || '');
+    if (!ctx) { set(null); return undefined; }
+    if (ctx === 'liked') { set({ kind: 'PLAYING FROM PLAYLIST', name: 'Liked Songs' }); return undefined; }
+    if (ctx === 'radar') { set({ kind: 'PLAYING FROM PLAYLIST', name: 'Release Radar' }); return undefined; }
+    if (id.startsWith('browse:')) {
+      // Genre tiles are cached by the search page; the id is the tile's.
+      let tiles = null; try { tiles = JSON.parse(localStorage.getItem('conduit.browse') || 'null'); } catch {}
+      const tile = Array.isArray(tiles) ? tiles.find((t) => t.id === id.slice(7)) : null;
+      set({ kind: 'PLAYING FROM GENRE', name: tile?.name || 'Genre' });
+      return undefined;
+    }
+    if (id.startsWith('mix:')) {
+      // Daily Mix N is numbered by its seed's place in the home page's top
+      // artists (persisted per user); otherwise "<Artist> Mix".
+      const seedId = id.slice(4);
+      const top = jf?.persisted?.('home.topArtists');
+      const n = Array.isArray(top) ? top.findIndex((a) => a?.Id === seedId) : -1;
+      if (n >= 0) { set({ kind: 'PLAYING FROM PLAYLIST', name: `Daily Mix ${n + 1}` }); return undefined; }
+      jf.itemById(seedId).then((it) => set({ kind: 'PLAYING FROM PLAYLIST', name: it?.Name ? `${it.Name} Mix` : 'Daily Mix' })).catch(() => set({ kind: 'PLAYING FROM PLAYLIST', name: 'Daily Mix' }));
+      return () => { alive = false; };
+    }
+    jf.itemById(ctxItemId(ctx)).then((it) => {
+      if (!it) { set(null); return; }
+      const kind = it.Type === 'MusicArtist' ? 'ARTIST' : it.Type === 'MusicAlbum' ? 'ALBUM' : 'PLAYLIST';
+      set({ kind: `PLAYING FROM ${kind}`, name: it.Name });
+    }).catch(() => set(null));
+    return () => { alive = false; };
+  }, [ctx, jf]);
+  return from;
+}
+
+/**
+ * Slide a sheet / page out before it unmounts: adds `closing` to the element(s)
+ * (the phone CSS animates translateY(100%) over 250ms), then runs `done`.
+ * Off the phone it just runs `done`.
+ */
+export function slideOut(target, done) {
+  const phone = typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches;
+  const els = typeof target === 'string' ? [...document.querySelectorAll(target)] : target ? [target] : [];
+  if (!phone || !els.length) { done(); return; }
+  for (const el of els) el.classList.add('closing');
+  setTimeout(done, 250);
+}
+
+/**
+ * Keep a cover colour visibly tinted: dark art extracts near-black, so the
+ * lightness is clamped into an 18-30% band before the card mixes it.
+ */
+export function clampLightness(rgb, lo = 0.18, hi = 0.30) {
+  const [r, g, b] = rgb.map((v) => v / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, l = (max + min) / 2;
+  const d = max - min;
+  const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h = (h * 60 + 360) % 360;
+  }
+  const nl = Math.min(hi, Math.max(lo, l));
+  if (nl === l) return rgb;
+  const c = (1 - Math.abs(2 * nl - 1)) * sat, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = nl - c / 2;
+  const [r2, g2, b2] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return [r2, g2, b2].map((v) => Math.round((v + m) * 255));
+}
 
 function fmt(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -96,9 +176,35 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
   useEffect(() => {
     let alive = true;
     if (!art) { setMini(null); return undefined; }
-    vibrantColor(art).then((rgb) => { if (alive) setMini(rgb ? `rgb(${rgb.join(',')})` : null); });
+    vibrantColor(art).then((rgb) => { if (alive) setMini(rgb ? `rgb(${clampLightness(rgb).join(',')})` : null); });
     return () => { alive = false; };
   }, [art]);
+  // Phone swipe-to-skip: the gesture itself lives in App (touch listeners on
+  // .player-row); this only moves the art + text with the finger, clamped to
+  // ±80px, then snaps back or flies out. No React state: direct style writes.
+  const nowRef = useRef(null);
+  const swipe = useRef(null);
+  const onTouchStart = (e) => { const t = e.touches?.[0]; swipe.current = t && e.touches.length === 1 ? { x: t.clientX, y: t.clientY, at: Date.now(), moving: false } : null; };
+  const onTouchMove = (e) => {
+    const s = swipe.current, el = nowRef.current; if (!s || !el) return;
+    const t = e.touches[0]; const dx = t.clientX - s.x, dy = t.clientY - s.y;
+    if (!s.moving && Math.abs(dy) > Math.abs(dx)) { swipe.current = null; return; } // vertical: not ours
+    if (Math.abs(dx) > 6) s.moving = true;
+    if (!s.moving) return;
+    el.style.transition = 'none';
+    el.style.transform = `translateX(${Math.max(-80, Math.min(80, dx))}px)`;
+    el.style.opacity = String(1 - Math.min(80, Math.abs(dx)) / 200);
+  };
+  const onTouchEnd = (e) => {
+    const s = swipe.current, el = nowRef.current; swipe.current = null; if (!s || !el || !s.moving) return;
+    const t = e.changedTouches?.[0]; const dx = t ? t.clientX - s.x : 0;
+    const skip = Math.abs(dx) > 60 && Math.abs(t.clientY - s.y) < 40 && Date.now() - s.at < 600; // App's threshold
+    el.style.transition = 'transform .18s ease-out, opacity .18s ease-out';
+    if (skip) {
+      el.style.transform = `translateX(${dx < 0 ? -120 : 120}%)`; el.style.opacity = '0';
+      setTimeout(() => { el.style.transition = 'none'; el.style.transform = `translateX(${dx < 0 ? 40 : -40}px)`; requestAnimationFrame(() => { el.style.transition = 'transform .2s ease-out, opacity .2s ease-out'; el.style.transform = ''; el.style.opacity = ''; }); }, 180);
+    } else { el.style.transform = ''; el.style.opacity = ''; }
+  };
   const shown = scrub != null ? scrub : position;
   const pct = duration > 0 ? (shown / duration) * 100 : 0;
 
@@ -122,8 +228,9 @@ export default function Player({ player, jf, devices, onOpenAlbum, onOpenArtist,
         // Phone: the bar is one big button into the now-playing view; its own
         // controls (play, heart, links) still win.
         onClick={(e) => { if (e.target.closest('button, input, a, [role=button]')) return; if (window.matchMedia('(max-width: 760px)').matches) onFullScreen?.(); }}
+        onTouchStart={phone ? onTouchStart : undefined} onTouchMove={phone ? onTouchMove : undefined} onTouchEnd={phone ? onTouchEnd : undefined} onTouchCancel={phone ? onTouchEnd : undefined}
       >
-        <div className="player-now">
+        <div className="player-now" ref={nowRef}>
           {art ? (
             <img
               // Keyed by the image so a track change never shows the previous cover next to the new title.

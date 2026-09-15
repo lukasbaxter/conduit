@@ -1078,7 +1078,7 @@ pos=${Math.round(player.position)} playing=${player.playing} vol=${player.volume
         onFullScreen={openFullScreen}
       />
       <PlayingElsewhereBar player={player} />
-      {fullScreen && <FullScreen player={player} jf={jf} onClose={closeFullScreen} onOpenArtist={openArtistById} onOpenAlbum={openAlbumById} onLike={onLike} onAddTo={onAddTo} playlists={playlists} prefs={prefs} onUpdatePrefs={updatePrefs} onPanel={setPanel} devices={[...devices, ...player.relayDevices, ...player.lanDevices]} sessionDevice={sessionDeviceOf(player, [...devices, ...player.relayDevices, ...player.lanDevices])} />}
+      {fullScreen && <FullScreen player={player} jf={jf} onClose={closeFullScreen} onOpenArtist={openArtistById} onOpenAlbum={openAlbumById} onLike={onLike} onAddTo={onAddTo} onNewPlaylist={onNewPlaylistWithTrack} playlists={playlists} prefs={prefs} onUpdatePrefs={updatePrefs} onPanel={setPanel} devices={[...devices, ...player.relayDevices, ...player.lanDevices]} sessionDevice={sessionDeviceOf(player, [...devices, ...player.relayDevices, ...player.lanDevices])} />}
     </div>
   );
 }

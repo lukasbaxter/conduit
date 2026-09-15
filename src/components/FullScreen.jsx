@@ -7,9 +7,8 @@ import { seekHover } from '../api/seekHover.js';
 import { useLiked } from '../api/likes.js';
 import { useOffset } from '../api/offsets.js';
 import { ArtistLinks, PlayGlyph, PauseGlyph, ShuffleGlyph } from './TrackRow.jsx';
-import { usePhone } from './Player.jsx';
+import { usePhone, usePlayingFrom, slideOut } from './Player.jsx';
 import { vibrantColor } from '../api/colors.js';
-import { ctxItemId } from '../api/context.js';
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
@@ -24,6 +23,39 @@ const G = {
   artist: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M6.233.371a4.388 4.388 0 0 1 5.002 1.052c.421.459.713.992.904 1.554.143.421.263 1.173.22 1.894-.078 1.322-.638 2.408-1.399 3.316l-.127.152a.75.75 0 0 0 .201 1.13l2.209 1.275a4.75 4.75 0 0 1 2.375 4.114V16H0v-1.142a4.75 4.75 0 0 1 2.375-4.114l2.209-1.275a.75.75 0 0 0 .201-1.13l-.126-.152c-.761-.908-1.322-1.994-1.4-3.316-.043-.721.077-1.473.22-1.894a4.346 4.346 0 0 1 .904-1.554c.411-.448.91-.807 1.85-1.052zM8 1.5a2.9 2.9 0 0 0-2.8 2.087 5.53 5.53 0 0 0-.131 1.293c.055.934.44 1.717 1.062 2.459l.126.152a2.25 2.25 0 0 1-.603 3.39L3.445 12.156A3.25 3.25 0 0 0 1.5 14.5h13a3.25 3.25 0 0 0-1.945-2.344L10.346 10.88a2.25 2.25 0 0 1-.603-3.39l.127-.152c.62-.742 1.006-1.525 1.061-2.46a5.53 5.53 0 0 0-.13-1.292A2.9 2.9 0 0 0 8 1.5z" /></svg>,
   album: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM8 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z" /></svg>,
 };
+// Spotify's save control on the phone: a circled plus, a green disc with a
+// black check once saved.
+const PlusCircle = ({ on }) => (on
+  ? <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="var(--accent, #1ed760)" /><path d="M6.5 12.3l3.4 3.4 7.6-7.6" fill="none" stroke="#000" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+  : <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10.1" /><path d="M12 7.5v9M7.5 12h9" /></svg>);
+const G16 = {
+  queue: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M15 15H1v-1.5h14V15zm0-4.5H1V9h14v1.5zm-14-7A2.5 2.5 0 0 1 3.5 1h9a2.5 2.5 0 0 1 0 5h-9A2.5 2.5 0 0 1 1 3.5zm2.5-1a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2h-9z" /></svg>,
+  radio: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z" /><path d="M3.05 3.05a7 7 0 0 0 0 9.9l1.06-1.06a5.5 5.5 0 0 1 0-7.78L3.05 3.05zm9.9 0-1.06 1.06a5.5 5.5 0 0 1 0 7.78l1.06 1.06a7 7 0 0 0 0-9.9z" /></svg>,
+  share: <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 1.5 5 4.5l1.06 1.06L7.25 4.37V10h1.5V4.37l1.19 1.19L11 4.5 8 1.5z" /><path d="M3 7h3v1.5H4.5v5h7v-5H10V7h3v8H3V7z" /></svg>,
+};
+/**
+ * A single line that marquee-scrolls when its text overflows (Spotify's
+ * long-title treatment): measured once per text/width change, then a pure
+ * CSS animation with a 2s pause at each end and a fade at the right edge.
+ */
+function Marquee({ text, className }) {
+  const box = useRef(null), inner = useRef(null);
+  const [dist, setDist] = useState(0);
+  useEffect(() => {
+    const b = box.current, i = inner.current; if (!b || !i) return undefined;
+    const measure = () => setDist(Math.max(0, i.scrollWidth - b.clientWidth));
+    measure();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    ro?.observe(b);
+    return () => ro?.disconnect();
+  }, [text]);
+  const dur = 4 + dist / 30; // 30px/s plus the two pauses
+  return (
+    <div ref={box} className={`${className} marquee ${dist > 0 ? 'overflow' : ''}`} style={dist > 0 ? { '--marquee-dist': `-${dist + 24}px`, '--marquee-dur': `${dur}s` } : undefined}>
+      <span ref={inner} className="marquee-inner">{text}</span>
+    </div>
+  );
+}
 const HeartPath = ({ on }) => (on
   ? <path d="M15.724 4.22A4.313 4.313 0 0 0 12.192.814a4.269 4.269 0 0 0-3.622 1.13.837.837 0 0 1-1.14 0 4.272 4.272 0 0 0-6.21 5.855l5.916 7.05a1.128 1.128 0 0 0 1.727 0l5.916-7.05a4.228 4.228 0 0 0 .945-3.577z" />
   : <path d="M1.69 2A4.582 4.582 0 0 1 8 2.023 4.583 4.583 0 0 1 11.88.817h.002a4.618 4.618 0 0 1 3.782 3.65v.003a4.543 4.543 0 0 1-1.011 3.84L9.35 14.629a1.765 1.765 0 0 1-2.093.464 1.762 1.762 0 0 1-.605-.463L1.348 8.309A4.582 4.582 0 0 1 1.689 2zm3.158.252A3.082 3.082 0 0 0 2.49 7.337l.005.005L7.8 13.664a.264.264 0 0 0 .311.069.262.262 0 0 0 .09-.069l5.312-6.33a3.043 3.043 0 0 0 .68-2.573 3.118 3.118 0 0 0-2.551-2.463 3.079 3.079 0 0 0-2.612.816l-.007.007a1.501 1.501 0 0 1-2.045 0l-.009-.008a3.082 3.082 0 0 0-2.121-.861z" />);
@@ -32,12 +64,17 @@ const HeartPath = ({ on }) => (on
  * Spotify's full-screen player: blurred cover behind, tabs up top (Album /
  * Visualizer / Lyrics), the track and transport along the bottom.
  */
-export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlists = [], prefs, onUpdatePrefs, onPanel, devices = [], sessionDevice = null }) {
+export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAlbum, onLike, onAddTo, onNewPlaylist, playlists = [], prefs, onUpdatePrefs, onPanel, devices = [], sessionDevice = null }) {
   const [tab, setTab] = useState(() => localStorage.getItem('conduit.fsTab') || 'album');
   const phone = usePhone();
-  // Phone: the ⋯ up top opens the track's menu as a bottom sheet (same items
-  // as a track row's menu, minus what needs the row's own context).
+  // Phone: the ⋯ up top opens the track's menu as a bottom sheet (the track
+  // row's menu: header, playlist, queue, like, artist, album, radio, share).
   const [more, setMore] = useState(false);
+  const rootRef = useRef(null);
+  // Phone: slide the page down before App unmounts it (the desktop closes at once).
+  const close = () => slideOut(rootRef.current, onClose);
+  const closeMore = () => slideOut('.ctxmenu-fixed', () => setMore(false));
+  const closeVizMenu = () => slideOut('.ctxmenu-fixed', () => setVizMenu(null));
   // Visualizer settings (style, colours) behind the tab's ⋯ menu. They live
   // in the account's prefs, so a change here shows up on every signed-in
   // client and survives a fresh machine; localStorage only carries a copy for
@@ -54,8 +91,9 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
   const [calibrating, setCalibrating] = useState(null);
   const saveOffset = (v) => { if (speaker) player.relay?.sendOffset(speaker.id, v); };
   const vizItems = [
-    { label: 'Style', sub: EQ_STYLES.map((s2) => ({ key: s2.id, label: `${s2.name}${viz.style === s2.id ? '  ✓' : ''}`, onClick: () => setV({ style: s2.id }) })) },
-    { label: 'Colours', sub: GRADIENTS.map((g) => ({ key: g, label: `${g === 'album' ? 'Match album art' : g[0].toUpperCase() + g.slice(1)}${viz.gradient === g ? '  ✓' : ''}`, onClick: () => setV({ gradient: g }) })) },
+    // Phone sheets get a right-aligned check glyph; the desktop menu keeps its text tick.
+    { label: 'Style', sub: EQ_STYLES.map((s2) => ({ key: s2.id, label: `${s2.name}${!phone && viz.style === s2.id ? '  ✓' : ''}`, checked: phone && viz.style === s2.id, onClick: () => setV({ style: s2.id }) })) },
+    { label: 'Colours', sub: GRADIENTS.map((g) => ({ key: g, label: `${g === 'album' ? 'Match album art' : g[0].toUpperCase() + g.slice(1)}${!phone && viz.gradient === g ? '  ✓' : ''}`, checked: phone && viz.gradient === g, onClick: () => setV({ gradient: g }) })) },
     { sep: true },
     // 0 = raw every frame (real time); 0.95 = very calm.
     { slider: true, key: 'smoothing', label: 'Smoothing', min: 0, max: 0.95, step: 0.05, value: viz.smoothing ?? 0.6, format: (v) => (v === 0 ? 'Real time' : `${Math.round(v * 100)}%`), onChange: (v) => setV({ smoothing: v }) },
@@ -74,15 +112,9 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
   const asTrack = nowPlaying?.itemId ? { Id: nowPlaying.itemId, Name: nowPlaying.title, Artists: [nowPlaying.artist], AlbumId: nowPlaying.albumId, _partial: true } : null;
   const toggleLike = () => asTrack && onLike(asTrack, !liked);
   const artistsOf = (nowPlaying?.artists || []).filter((a) => a && a.Id);
-  const moreItems = asTrack ? [
-    playlists.length && onAddTo ? { label: 'Add to playlist', icon: G.plus, sub: playlists.map((p) => ({ key: p.Id, label: p.Name, onClick: () => onAddTo(p, asTrack) })) } : null,
-    { label: liked ? 'Remove from your Liked Songs' : 'Save to your Liked Songs', icon: <svg viewBox="0 0 16 16" width="16" height="16" fill={liked ? 'var(--seek-accent, #1db954)' : 'currentColor'}><HeartPath on={liked} /></svg>, onClick: toggleLike },
-    { sep: true },
-    artistsOf.length > 1
-      ? { label: 'Go to artist', icon: G.artist, sub: artistsOf.map((a) => ({ key: a.Id, label: a.Name, onClick: () => { onClose(); onOpenArtist(a.Id); } })) }
-      : (artistsOf[0] || nowPlaying?.artistId) ? { label: 'Go to artist', icon: G.artist, onClick: () => { onClose(); onOpenArtist(artistsOf[0]?.Id || nowPlaying.artistId); } } : null,
-    nowPlaying?.albumId && onOpenAlbum ? { label: 'Go to album', icon: G.album, onClick: () => { onClose(); onOpenAlbum(nowPlaying.albumId); } } : null,
-  ] : [];
+  // The full row object when the track is in our own queue (richer than the
+  // session summary: ArtistItems, Album, ticks), else the summary shape.
+  const fullTrack = player.current?.Id === nowPlaying?.itemId ? player.current : asTrack;
   const share = async () => {
     if (!nowPlaying) return;
     const text = `${nowPlaying.title}${nowPlaying.artist ? ` — ${nowPlaying.artist}` : ''}`;
@@ -91,22 +123,32 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
       else await navigator.clipboard?.writeText(text);
     } catch { /* the user dismissed the share sheet */ }
   };
+  const goArtist = (id) => { close(); onOpenArtist(id); };
+  const moreItems = asTrack ? [
+    onAddTo ? { label: 'Add to playlist', icon: G.plus, sub: [
+      onNewPlaylist ? { label: 'New playlist', icon: G.plus, onClick: () => { close(); onNewPlaylist(fullTrack); } } : null,
+      onNewPlaylist && playlists.length ? { sep: true } : null,
+      ...playlists.map((p) => ({ key: p.Id, label: p.Name, onClick: () => onAddTo(p, fullTrack) })),
+    ] } : null,
+    player.addToQueue ? { label: 'Add to queue', icon: G16.queue, onClick: () => player.addToQueue([fullTrack]) } : null,
+    { label: liked ? 'Remove from your Liked Songs' : 'Save to your Liked Songs', icon: <svg viewBox="0 0 16 16" width="16" height="16" fill={liked ? 'var(--seek-accent, #1db954)' : 'currentColor'}><HeartPath on={liked} /></svg>, onClick: toggleLike },
+    { sep: true },
+    { label: 'Go to song radio', icon: G16.radio, onClick: () => { jf.instantMix(nowPlaying.itemId).then((items) => { if (items?.length) player.playQueue(items, 0); }).catch(() => {}); } },
+    artistsOf.length > 1
+      ? { label: 'Go to artist', icon: G.artist, sub: artistsOf.map((a) => ({ key: a.Id, label: a.Name, onClick: () => goArtist(a.Id) })) }
+      : (artistsOf[0] || nowPlaying?.artistId) ? { label: 'Go to artist', icon: G.artist, onClick: () => goArtist(artistsOf[0]?.Id || nowPlaying.artistId) } : null,
+    nowPlaying?.albumId && onOpenAlbum ? { label: 'Go to album', icon: G.album, onClick: () => { close(); onOpenAlbum(nowPlaying.albumId); } } : null,
+    { sep: true },
+    { label: 'Share', icon: G16.share, onClick: share },
+  ] : [];
+  const moreHeader = nowPlaying ? { image: nowPlaying.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: 120 }) : nowPlaying.artUrl || null, title: nowPlaying.title, sub: nowPlaying.artist || '' } : null;
   useEffect(() => { try { localStorage.setItem('conduit.fsTab', tab); } catch {} }, [tab]);
   // Phone: Spotify's now-playing is a gradient of the cover's colour (no
   // blur) with "PLAYING FROM PLAYLIST / name" up top. Both read here; the
   // desktop CSS ignores them.
   const [np, setNp] = useState(null);
   useEffect(() => { let alive = true; if (!art) { setNp(null); return undefined; } vibrantColor(art).then((rgb) => { if (alive) setNp(rgb ? `rgb(${rgb.join(',')})` : null); }); return () => { alive = false; }; }, [art]);
-  const [from, setFrom] = useState(null); // { kind, name }
-  useEffect(() => {
-    const ctx = player.contextId; let alive = true;
-    if (!ctx) { setFrom(null); return undefined; }
-    if (ctx === 'liked') { setFrom({ kind: 'PLAYING FROM LIKED SONGS', name: 'Liked Songs' }); return undefined; }
-    if (String(ctx).startsWith('mix:')) { setFrom({ kind: 'PLAYING FROM DAILY MIX', name: '' }); return undefined; }
-    if (String(ctx).startsWith('browse:')) { setFrom({ kind: 'PLAYING FROM GENRE', name: '' }); return undefined; }
-    jf.itemById(ctxItemId(ctx)).then((it) => { if (!alive || !it) return; const kind = it.Type === 'MusicArtist' ? 'ARTIST' : it.Type === 'MusicAlbum' ? 'ALBUM' : 'PLAYLIST'; setFrom({ kind: `PLAYING FROM ${kind}`, name: it.Name }); }).catch(() => {});
-    return () => { alive = false; };
-  }, [player.contextId, jf]);
+  const from = usePlayingFrom(player, jf); // { kind, name }, always both lines
   const vizEl = (
     <Visualizer player={player} jf={jf} active={tab === 'viz'} settings={viz} offset={offset || 0}
       calibrate={calibrating} onCalibrated={saveOffset} onCalibrateClose={() => setCalibrating(null)} />
@@ -118,17 +160,17 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
   }, [onClose]);
 
   return (
-    <div className={`fs fs-tab-${tab}`} style={np ? { '--np': np } : undefined}>
+    <div ref={rootRef} className={`fs fs-tab-${tab} ${more || vizMenu ? 'sheet' : ''}`} style={np ? { '--np': np } : undefined}>
       {art && <div className={`fs-bg ${tab === 'viz' ? 'dim' : ''}`} style={{ backgroundImage: `url("${art}")` }} />}
       <div className="fs-top">
         {/* Phone: on the lyrics page the chevron goes back to the cover, like Spotify's. */}
-        <button className="fs-chevron" onClick={phone && tab === 'lyrics' ? () => setTab('album') : onClose} title="Close" aria-label="Close">
+        <button className="fs-chevron" onClick={phone && tab === 'lyrics' ? () => setTab('album') : close} title="Close" aria-label="Close">
           <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M2.793 8.043a1 1 0 0 1 1.414 0L12 15.836l7.793-7.793a1 1 0 1 1 1.414 1.414L12 18.664 2.793 9.457a1 1 0 0 1 0-1.414z" /></svg>
         </button>
         <div className="fs-from">
           {phone && tab === 'lyrics'
             ? <span className="fs-from-phone"><b>{nowPlaying?.title || ''}</b><small className="fs-from-artist">{nowPlaying?.artist || ''}</small></span>
-            : from && <span className="fs-from-phone"><small>{from.kind}</small><b>{from.name}</b></span>}
+            : <span className="fs-from-phone"><small>{from.kind}</small><b>{from.name}</b></span>}
         </div>
         <div className="fs-tabs">
           {/* Flat icon tabs: vinyl = album, note = lyrics, wave = visualizer. */}
@@ -146,7 +188,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
               >{icon}</button>
             </span>
           ))}
-          {vizMenu && <ContextMenu x={vizMenu.x} y={vizMenu.y} items={vizItems} onClose={() => setVizMenu(null)} />}
+          {vizMenu && <ContextMenu x={vizMenu.x} y={vizMenu.y} items={vizItems} onClose={closeVizMenu} header={phone ? { icon: G.viz, title: 'Visualizer', sub: 'Style, colours and smoothing' } : null} />}
           <span className="fs-divider" aria-hidden="true" />
         </div>
         {phone ? (
@@ -159,12 +201,15 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
             </svg>
           </button>
         )}
-        {more && <ContextMenu x={0} y={window.innerHeight} items={moreItems} onClose={() => setMore(false)} />}
+        {more && <ContextMenu x={0} y={window.innerHeight} items={moreItems} onClose={closeMore} header={moreHeader} />}
       </div>
 
       <div className="fs-stage">
         {tab === 'album' && (art ? <img className="fs-art" src={art} alt="" /> : <div className="fs-art ph" />)}
         {tab === 'viz' && vizEl}
+        {/* Phone, visualizer: a cue while paused, and the cover behind any sheet (the CSS shows it). */}
+        {phone && tab === 'viz' && !playing && <div className="fs-viz-hint">Play to start the visualizer</div>}
+        {phone && tab === 'viz' && art && <img className="fs-art fs-art-behind" src={art} alt="" />}
         {tab === 'lyrics' && <div className="fs-lyrics"><Lyrics player={player} jf={jf} /></div>}
       </div>
 
@@ -178,12 +223,16 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
         <div className="fs-meta">
           {art && <img className="fs-thumb" src={art} alt="" />}
           <div style={{ minWidth: 0 }}>
-            <div className="fs-title">{nowPlaying?.title || 'Nothing playing'}</div>
-            <div className="fs-artist"><ArtistLinks artists={nowPlaying?.artists} fallback={nowPlaying?.artist || ''} onOpen={(id) => { onClose(); onOpenArtist(id); }} className="linkish" /></div>
+            {phone
+              ? <Marquee className="fs-title" text={nowPlaying?.title || 'Nothing playing'} />
+              : <div className="fs-title">{nowPlaying?.title || 'Nothing playing'}</div>}
+            <div className="fs-artist"><ArtistLinks artists={nowPlaying?.artists} fallback={nowPlaying?.artist || ''} onOpen={goArtist} className="linkish" /></div>
           </div>
           {nowPlaying?.itemId && (
             <button className={`fs-like ${liked ? 'on' : ''}`} onClick={toggleLike} title={liked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}>
-              <svg viewBox="0 0 16 16" width="20" height="20" fill={liked ? 'var(--seek-accent)' : 'currentColor'}><HeartPath on={liked} /></svg>
+              {phone
+                ? <PlusCircle on={liked} />
+                : <svg viewBox="0 0 16 16" width="20" height="20" fill={liked ? 'var(--seek-accent)' : 'currentColor'}><HeartPath on={liked} /></svg>}
             </button>
           )}
         </div>
@@ -221,7 +270,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
             {/* Visualizer: a second tap on the active icon opens its settings sheet. */}
             <button className={tab === 'viz' ? 'on' : ''} onClick={() => { if (tab === 'viz') setVizMenu({ x: 0, y: window.innerHeight }); else setTab('viz'); }} title={tab === 'viz' ? 'Visualizer settings' : 'Visualizer'} aria-label="Visualizer">{G.viz}</button>
             <button onClick={share} title="Share" aria-label="Share">{G.share}</button>
-            <button onClick={() => { onClose(); onPanel?.('queue'); }} title="Queue" aria-label="Queue">{G.queue}</button>
+            <button onClick={() => { close(); onPanel?.('queue'); }} title="Queue" aria-label="Queue">{G.queue}</button>
           </div>
         )}
       </div>
