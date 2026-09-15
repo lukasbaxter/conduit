@@ -778,6 +778,35 @@ export default function App() {
     window.addEventListener('touchcancel', cancel, { passive: true });
     return () => { window.removeEventListener('touchstart', down); window.removeEventListener('touchmove', move); window.removeEventListener('touchend', cancel); window.removeEventListener('touchcancel', cancel); };
   }, [isMobile]);
+  // Swipe down on the now-playing screen closes it (Spotify). The sheet follows
+  // the finger, then either snaps back or drops away.
+  useEffect(() => {
+    if (!isMobile || !fullScreen) return undefined;
+    let start = null, el = null;
+    const scrolledInside = (t) => { const sc = t.closest?.('.fs-lyrics, .viz, .ctxmenu, input'); return sc && (sc.scrollTop > 0 || sc.tagName === 'INPUT' || sc.classList.contains('viz')); };
+    const down = (e) => {
+      const t = e.touches?.[0]; el = document.querySelector('.fs');
+      if (!t || !el || e.touches.length !== 1 || scrolledInside(e.target)) { start = null; return; }
+      start = { x: t.clientX, y: t.clientY, at: Date.now() };
+    };
+    const move = (e) => {
+      if (!start || !el) return;
+      const t = e.touches[0]; const dy = t.clientY - start.y;
+      if (dy > 0 && Math.abs(t.clientX - start.x) < dy) { el.style.transform = `translateY(${dy}px)`; el.style.transition = 'none'; }
+    };
+    const up = (e) => {
+      if (!start || !el) return;
+      const t = e.changedTouches?.[0]; const dy = t ? t.clientY - start.y : 0; const fast = Date.now() - start.at < 300;
+      el.style.transition = 'transform .25s cubic-bezier(.2,.7,.2,1)';
+      if (dy > 140 || (fast && dy > 60)) { el.style.transform = 'translateY(100%)'; setTimeout(closeFullScreen, 200); }
+      else el.style.transform = '';
+      start = null;
+    };
+    window.addEventListener('touchstart', down, { passive: true });
+    window.addEventListener('touchmove', move, { passive: true });
+    window.addEventListener('touchend', up, { passive: true });
+    return () => { window.removeEventListener('touchstart', down); window.removeEventListener('touchmove', move); window.removeEventListener('touchend', up); };
+  }, [isMobile, fullScreen]); // eslint-disable-line react-hooks/exhaustive-deps
   // iOS-style edge swipe: a drag that starts on the left edge goes back.
   useEffect(() => {
     if (!isMobile) return undefined;
