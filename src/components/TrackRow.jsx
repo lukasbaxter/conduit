@@ -221,7 +221,9 @@ export default function TrackRow({
         {/* On an artist's own page the artist line is redundant; Spotify's
             Popular rows show the title alone. */}
         {subtitle ? <small>{subtitle}</small> : !hideArtists && <small>
-          <ArtistLinks artists={artistsOf} fallback={track.AlbumArtist || ''} onOpen={onOpenArtist} />
+          {/* Phone: plain text, so a tap on the artist line plays the row like
+              Spotify; "Go to artist" lives in the ⋯ sheet. */}
+          <ArtistLinks artists={artistsOf} fallback={track.AlbumArtist || ''} onOpen={phone ? undefined : onOpenArtist} />
         </small>}
         {/* A lyric match: the line that matched, with the words lit. */}
         {snippet && (
