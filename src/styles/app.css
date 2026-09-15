@@ -1212,6 +1212,19 @@ button:disabled { cursor: default; }
   .login input:focus { border-color: #fff; }
   .login .primary { background: var(--accent); color: #000; border-radius: 500px; min-height: 48px; font-size: 16px; font-weight: 700; margin-top: 8px; }
 
+  /* ---- Touch: app feel. No tap flash, no callouts, no text selection on UI,
+     no rubber-banding of the shell, and a press tint instead of hover. ---- */
+  * { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+  .app, .app button, .app .trackrow, .app .card, .app .libitem { -webkit-user-select: none; user-select: none; }
+  .app input, .app textarea, .lyric-line { -webkit-user-select: text; user-select: text; }
+  html, body, .app { overscroll-behavior: none; }
+  .content { -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; }
+  .trackrow:active, .libitem:active, .shortcut:active, .qrow:active, .hrow:active, .ctxitem:active { background: rgba(255,255,255,.08); }
+  .card:active .card-art img, .tile:active, .shortcut:active .shortcut-art { filter: brightness(.8); }
+  .tabbar button:active, .icon-btn:active, .iconbtn:active, .fs-controls button:active { opacity: .6; }
+  *:focus-visible { outline: none; }
+  ::-webkit-scrollbar { display: none; }
+  * { scrollbar-width: none; }
   /* ---- Touch: no sticky hover tints, affordances always visible. ---- */
   .trackrow:hover, .card:hover, .libitem:hover, .shortcut:hover, .qrow:hover, .hrow:hover { background: transparent; }
   .trackrow.active { background: transparent; }

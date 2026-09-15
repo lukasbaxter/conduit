@@ -741,6 +741,30 @@ export default function App() {
     return () => shell.removeEventListener('scroll', onScroll, true);
   }, [isMobile, booting, jf]); // the shell only exists once signed in
   useEffect(() => { setTopbar(0); const el = shellRef.current?.querySelector('.content'); if (el) setTopbarBg(getComputedStyle(el).getPropertyValue('--hero').trim() || '#121212'); }, [detail?.item?.Id, seeAll]);
+  // Long-press = right-click on the phone: iOS never fires `contextmenu` for a
+  // touch, so a still 450 ms press dispatches one at the same spot and every
+  // row/card that opens a menu on right-click gets Spotify's long-press sheet.
+  useEffect(() => {
+    if (!isMobile) return undefined;
+    let timer = null, start = null;
+    const cancel = () => { clearTimeout(timer); timer = null; start = null; };
+    const down = (e) => {
+      const t = e.touches?.[0]; if (!t || e.touches.length !== 1) return;
+      start = { x: t.clientX, y: t.clientY, target: e.target };
+      timer = setTimeout(() => {
+        const s = start; if (!s) return;
+        s.target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: s.x, clientY: s.y }));
+        try { navigator.vibrate?.(10); } catch { /* not supported */ }
+        cancel();
+      }, 450);
+    };
+    const move = (e) => { const t = e.touches?.[0]; if (start && t && (Math.abs(t.clientX - start.x) > 10 || Math.abs(t.clientY - start.y) > 10)) cancel(); };
+    window.addEventListener('touchstart', down, { passive: true });
+    window.addEventListener('touchmove', move, { passive: true });
+    window.addEventListener('touchend', cancel, { passive: true });
+    window.addEventListener('touchcancel', cancel, { passive: true });
+    return () => { window.removeEventListener('touchstart', down); window.removeEventListener('touchmove', move); window.removeEventListener('touchend', cancel); window.removeEventListener('touchcancel', cancel); };
+  }, [isMobile]);
   // iOS-style edge swipe: a drag that starts on the left edge goes back.
   useEffect(() => {
     if (!isMobile) return undefined;
