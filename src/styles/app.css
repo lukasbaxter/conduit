@@ -627,7 +627,11 @@ input[type="range"]:disabled { opacity: .4; }
   background: var(--bg-elevated-hi); border-radius: var(--r-art); padding: 4px;
   box-shadow: 0 16px 24px rgba(0,0,0,.3), 0 6px 8px rgba(0,0,0,.2);
 }
-.avatarmenu .who { padding: 10px 12px 6px; font-size: 14px; font-weight: 700; }
+.avatarmenu .who { padding: 10px 12px 6px; font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.avatarmenu .who-avatar { display: none; }
+.avatarmenu .who-text { display: flex; flex-direction: column; }
+.avatarmenu .who-text small { display: none; }
+.avatarmenu .menu-ico { display: none; }
 .avatarmenu .sub { padding: 0 12px 8px; font-size: 12px; color: var(--fg-dim); }
 .avatarmenu button { display: block; width: 100%; text-align: left; padding: 10px 12px; border-radius: 2px; font-size: 14px; color: var(--fg); }
 .avatarmenu button:hover { background: var(--tint-hi); }
@@ -1044,7 +1048,21 @@ button:disabled { cursor: default; }
   .navbar-right { margin-left: 0; order: -1; }
   .avatar { width: 32px; height: 32px; font-size: 13px; }
   .mobile-title { display: block; font-size: 24px; font-weight: 700; letter-spacing: -.3px; }
-  .avatarmenu { left: 0; right: auto; }
+  /* Account menu = Spotify's left drawer: profile header, then icon rows. */
+  .avatarmenu:not(.appmenu) { position: fixed; top: 0; bottom: 0; left: 0; right: auto; width: min(82vw, 340px); border-radius: 0; padding: calc(24px + env(safe-area-inset-top)) 0 calc(24px + env(safe-area-inset-bottom)); background: #121212; box-shadow: 0 0 60px rgba(0,0,0,.7); animation: drawer-in .25s cubic-bezier(.2,.7,.2,1); z-index: 200; overflow-y: auto; }
+  .avatarmenu:not(.appmenu)::before { content: ''; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: -1; animation: fade-in .25s; }
+  @keyframes drawer-in { from { transform: translateX(-100%); } to { transform: none; } }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  .avatarmenu .who { padding: 8px 20px 20px; gap: 12px; border-bottom: 1px solid rgba(255,255,255,.1); margin-bottom: 8px; }
+  .avatarmenu .who-avatar { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: #535353; color: #fff; font-size: 22px; font-weight: 700; overflow: hidden; flex: none; }
+  .avatarmenu .who-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .avatarmenu .who-text b { font-size: 20px; font-weight: 700; }
+  .avatarmenu .who-text small { display: block; font-size: 13px; color: #a7a7a7; font-weight: 400; margin-top: 2px; }
+  .avatarmenu .sub { display: none; }
+  .avatarmenu button { display: flex; align-items: center; gap: 16px; padding: 14px 20px; font-size: 16px; border-radius: 0; }
+  .avatarmenu .menu-ico { display: block; color: #fff; flex: none; }
+  .avatarmenu.appmenu { display: none; }
+  .appmenuwrap { display: none; }
   /* Detail header: floating back chevron that turns into a solid title bar
      (tinted with the page's hero colour) as the hero scrolls out. */
   .mobile-topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 40; display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; height: calc(56px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); pointer-events: none; }

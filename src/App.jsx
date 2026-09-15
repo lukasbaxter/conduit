@@ -92,6 +92,11 @@ const TabLib = ({ on }) => on
   ? <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M3 22a1 1 0 0 1-1-1V3a1 1 0 0 1 2 0v18a1 1 0 0 1-1 1zM15.5 2.134A1 1 0 0 0 14 3v18a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V6.464a1 1 0 0 0-.5-.866l-6-3.464zM9 2a1 1 0 0 0-1 1v18a1 1 0 1 0 2 0V3a1 1 0 0 0-1-1z" /></svg>
   : <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M14.5 2.134a1 1 0 0 1 1 0l6 3.464a1 1 0 0 1 .5.866V21a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1V3a1 1 0 0 1 .5-.866zM16 4.732V20h4V7.041l-4-2.309zM3 22a1 1 0 0 1-1-1V3a1 1 0 0 1 2 0v18a1 1 0 0 1-1 1zm6 0a1 1 0 0 1-1-1V3a1 1 0 0 1 2 0v18a1 1 0 0 1-1 1z" /></svg>;
 
+// Line icon for the account drawer rows (24pt, current colour). Hidden on desktop.
+function MenuIco({ d }) {
+  return <svg className="menu-ico" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>;
+}
+
 export default function App() {
   const [jf, setJf] = useState(null);
   const [devices, setDevices] = useState([]);
@@ -849,13 +854,18 @@ export default function App() {
               )}
             </button>
             {userMenu && (
+              // Desktop: a dropdown. Phone: Spotify's left drawer (avatar + name
+              // up top, then rows with icons); the CSS does the reshaping.
               <div className="avatarmenu">
-                <button className="who" onClick={() => { setUserMenu(false); openProfile(); }}>{me?.Name || 'Signed in'}</button>
+                <button className="who" onClick={() => { setUserMenu(false); openProfile(); }}>
+                  <span className="who-avatar">{avatarOk ? <img src={jf.userImageUrl()} alt="" /> : (me?.Name || '?').slice(0, 1).toUpperCase()}</span>
+                  <span className="who-text"><b>{me?.Name || 'Signed in'}</b><small>View profile</small></span>
+                </button>
                 <div className="sub">{jf.baseUrl.replace(/^https?:\/\//, '')}</div>
-                <button onClick={() => { setUserMenu(false); openProfile(); }}>Profile</button>
-                <button onClick={() => { setUserMenu(false); openHistory(); }}>History</button>
-                <button onClick={() => { setUserMenu(false); openSettings(); }}>Settings</button>
-                <button onClick={signOut}>Log out</button>
+                <button onClick={() => { setUserMenu(false); openProfile(); }}><MenuIco d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 8a7 7 0 0 1 14 0" />Profile</button>
+                <button onClick={() => { setUserMenu(false); openHistory(); }}><MenuIco d="M12 8v4l3 2M21 12a9 9 0 1 1-3-6.7M21 3v5h-5" />History</button>
+                <button onClick={() => { setUserMenu(false); openSettings(); }}><MenuIco d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />Settings</button>
+                <button onClick={signOut}><MenuIco d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />Log out</button>
               </div>
             )}
           </div>
