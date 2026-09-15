@@ -1,0 +1,5 @@
+/* Phone-only styles for the nowplaying screens. Loaded after app.css, so rules here win
+   over the @media (max-width: 760px) block there. Keep everything inside the
+   same media query. */
+@media (max-width: 760px) {
+}

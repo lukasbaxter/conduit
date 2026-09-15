@@ -1138,8 +1138,11 @@ button:disabled { cursor: default; }
   .actions .bigplay svg { width: 18px; height: 18px; }
   .actions .iconbtn { width: 32px; height: 32px; }
   .actions .btn-secondary { min-block-size: 32px; padding: 0 12px; font-size: 13px; }
-  .trackrow { grid-template-columns: auto minmax(0, 1fr) 32px; gap: 0 12px; padding: 8px 16px; min-height: 64px; }
-  .trackrow:not(:has(.trackrow-art)) { grid-template-columns: minmax(0, 1fr) 32px; }
+  /* Flex, not the desktop grid: its column template kept winning here and
+     squeezed titles into a third of the row. */
+  .trackrow, .trackrow:not(:has(.trackrow-art)) { display: flex; gap: 12px; padding: 8px 16px; min-height: 64px; }
+  .trackrow-name { flex: 1 1 auto; min-width: 0; }
+  .trackrow-menu, .trackrow-more { flex: none; }
   .trackrow-art { width: 48px; height: 48px; border-radius: 4px; }
   .trackrow-name span { font-size: 16px; }
   .trackrow-name small { font-size: 13px; color: #a7a7a7; }
