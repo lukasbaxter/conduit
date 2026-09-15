@@ -267,10 +267,6 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
           <div className="fs-phone-row">
             <div className="fs-phone-device">
               {sessionDevice && <DevicePicker devices={devices} active={sessionDevice} onSelect={player.setDevice} showName />}
-              {/* Spotify labels the stream quality next to the device icon. */}
-              {!sessionDevice?.kind || sessionDevice?.kind === 'local' || sessionDevice?.local ? (
-                <span className="fs-quality">{prefs?.quality === 'original' || !prefs?.quality ? 'Lossless' : prefs.quality === 'high' ? 'Very high' : prefs.quality === 'normal' ? 'Normal' : 'Low'}</span>
-              ) : null}
             </div>
             <button className={tab === 'lyrics' ? 'on' : ''} onClick={() => setTab(tab === 'lyrics' ? 'album' : 'lyrics')} title="Lyrics" aria-label="Lyrics">{G.lyrics}</button>
             {/* Visualizer: a second tap on the active icon opens its settings sheet. */}

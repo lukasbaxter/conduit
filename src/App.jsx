@@ -875,7 +875,9 @@ export default function App() {
     const move = (e) => {
       if (!start || !sheet) return;
       const dy = e.touches[0].clientY - start.y;
-      if (dy > 0) { sheet.style.transform = `translateY(${dy}px)`; sheet.style.transition = 'none'; }
+      // Non-passive: while the sheet follows the finger the browser must not
+      // also scroll / rubber-band its contents (they would race ahead of it).
+      if (dy > 0) { if (e.cancelable) e.preventDefault(); sheet.style.transform = `translateY(${dy}px)`; sheet.style.transition = 'none'; }
     };
     const up = (e) => {
       if (!start || !sheet) return;
@@ -888,7 +890,7 @@ export default function App() {
       start = null; sheet = null;
     };
     window.addEventListener('touchstart', down, { passive: true });
-    window.addEventListener('touchmove', move, { passive: true });
+    window.addEventListener('touchmove', move, { passive: false });
     window.addEventListener('touchend', up, { passive: true });
     return () => { window.removeEventListener('touchstart', down); window.removeEventListener('touchmove', move); window.removeEventListener('touchend', up); };
   }, [isMobile]);
@@ -918,7 +920,7 @@ export default function App() {
   const mobileTitle = mobileLib ? 'Your Library' : view === 'search' ? 'Search' : '';
   const detailTitle = detail?.item?.Name || (seeAll === 'albums' ? 'Albums' : seeAll === 'artists' ? 'Artists' : '');
   return (
-    <div className={`app ${isMobile ? 'mobile' : ''} ${mobileDetail ? 'mobile-detail' : ''}`}>
+    <div className={`app ${isMobile ? 'mobile' : ''} ${mobileDetail ? 'mobile-detail' : ''} ${isMobile ? (mobileLib ? 'tab-library' : mobileDetail ? 'tab-detail' : `tab-${view}`) : ''}`}>
       {mobileDetail && (
         // Spotify's detail header: a round back chevron floating over the hero
         // that becomes a solid bar carrying the title once the hero scrolls away.

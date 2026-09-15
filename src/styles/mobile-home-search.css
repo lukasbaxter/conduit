@@ -45,18 +45,18 @@
      across the first ~250pt. The avatar lives in the app header, so on the
      home tab the header collapses to nothing and the avatar floats over the
      sticky chip row, which reads as one row. */
-  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .pad.home) { grid-template-rows: 0 minmax(0, 1fr) auto auto; }
+  .app.mobile.tab-home { grid-template-rows: 0 minmax(0, 1fr) auto auto; }
   /* z-index above the floating mini player (47) and tab bar (46): the account
      drawer lives inside this navbar and must cover them. */
-  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .pad.home) .navbar { height: 0; min-height: 0; padding: 0; overflow: visible; position: relative; z-index: 60; }
-  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .pad.home) .navbar-right { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 16px; margin: 0; }
-  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .pad.home) .mobile-title { display: none; }
-  .content:has(> .pad.home) { background: linear-gradient(180deg, #2a2a2a 0, #121212 250px) no-repeat, var(--bg-base); background-attachment: local; }
-  .content:has(> .pad.home) .contentbar { position: sticky; top: 0; z-index: 9; padding: calc(8px + env(safe-area-inset-top)) 16px 8px 56px; background: transparent; transition: background .2s; }
-  .content:has(> .pad.home) .contentbar.stuck { background: var(--bg-base); }
-  .content:has(> .pad.home) .contentbar .pills { flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-  .content:has(> .pad.home) .contentbar .pills::-webkit-scrollbar { display: none; }
-  .content:has(> .pad.home) .contentbar .pill { flex: none; }
+  .app.mobile.tab-home .navbar { height: 0; min-height: 0; padding: 0; overflow: visible; position: relative; z-index: 60; }
+  .app.mobile.tab-home .navbar-right { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 16px; margin: 0; }
+  .app.mobile.tab-home .mobile-title { display: none; }
+  .app.tab-home .content { background: linear-gradient(180deg, #2a2a2a 0, #121212 250px) no-repeat, var(--bg-base); background-attachment: local; }
+  .app.tab-home .content .contentbar { position: sticky; top: 0; z-index: 9; padding: calc(8px + env(safe-area-inset-top)) 16px 8px 56px; background: transparent; transition: background .2s; }
+  .app.tab-home .content .contentbar.stuck { background: var(--bg-base); }
+  .app.tab-home .content .contentbar .pills { flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .app.tab-home .content .contentbar .pills::-webkit-scrollbar { display: none; }
+  .app.tab-home .content .contentbar .pill { flex: none; }
   .pill { min-block-size: 32px; padding: 0 16px; font-size: 14px; font-weight: 500; background: #2a2a2a; color: #fff; display: inline-flex; align-items: center; }
   .pill.on { background: var(--accent); color: #000; }
   .pad.home { padding: 16px 16px 24px; }
@@ -83,8 +83,8 @@
   .card.round .card-art img, .card.round .card-art .ph { border-radius: 50%; }
   /* Scoped to the home / see-all pages so they beat the unscoped .card-title
      rule in mobile-library.css, which loads later. */
-  .content:has(> .pad.home) .card-title, .content:has(> .contentbar > .pills) .card-title { font-size: 14px; font-weight: 700; line-height: 1.3; margin-top: 8px; -webkit-line-clamp: 1; text-align: left; }
-  .content:has(> .pad.home) .card-sub, .content:has(> .contentbar > .pills) .card-sub { font-size: 13px; color: #a7a7a7; line-height: 1.3; margin-top: 2px; text-align: left; }
+  .app.tab-home .content .card-title, .app.tab-detail .content:has(> .contentbar > .pills) .card-title { font-size: 14px; font-weight: 700; line-height: 1.3; margin-top: 8px; -webkit-line-clamp: 1; text-align: left; }
+  .app.tab-home .content .card-sub, .app.tab-detail .content:has(> .contentbar > .pills) .card-sub { font-size: 13px; color: #a7a7a7; line-height: 1.3; margin-top: 2px; text-align: left; }
   /* Covers fade in once loaded instead of popping. */
   /* Only images that opt in (FadeImg adds .fade) start hidden; plain <img>
      cards elsewhere (artist grids, profile, browse) must stay visible. */
@@ -95,19 +95,19 @@
 
   /* Search in focus mode: the "Search" title row folds away so the field sits
      at the top (Spotify), leaving the screen to the field, chips and results. */
-  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .contentbar > .search-cancel) { grid-template-rows: 0 minmax(0, 1fr); }
-  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .contentbar > .search-cancel) .navbar { height: 0; min-height: 0; padding: 0; overflow: hidden; }
-  .app.mobile:not(.mobile-detail):not(:has(.shell.show-lib)):has(.content > .contentbar > .search-cancel) .navbar > * { display: none; }
+  .app.mobile.tab-search:has(.search-cancel) { grid-template-rows: 0 minmax(0, 1fr); }
+  .app.mobile.tab-search:has(.search-cancel) .navbar { height: 0; min-height: 0; padding: 0; overflow: hidden; }
+  .app.mobile.tab-search:has(.search-cancel) .navbar > * { display: none; }
 
   /* ---- Search: empty state ----
      "Search" title beside the avatar; white 44pt bar (radius 4, black
      magnifier) that stays put while results scroll; the type chips share the
      sticky block. */
   .content:has(> .contentbar > .search) .contentbar { position: sticky; top: 0; z-index: 9; flex-wrap: wrap; gap: 8px 12px; padding: 4px 16px 8px; background: var(--bg-base); }
-  .content:has(> .contentbar > .search-cancel) .contentbar { padding-top: calc(8px + env(safe-area-inset-top)); }
+  .app.tab-search .content:has(> .contentbar > .search-cancel) .contentbar { padding-top: calc(8px + env(safe-area-inset-top)); }
   .search-cancel { flex: none; font-size: 16px; font-weight: 400; color: #fff; padding: 0 0 0 4px; height: 44px; animation: cancel-in .2s ease-out; }
   @keyframes cancel-in { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: none; } }
-  .content:has(> .contentbar > .search-cancel) .search { flex: 1 1 0; }
+  .app.tab-search .content:has(> .contentbar > .search-cancel) .search { flex: 1 1 0; }
   .search { font-family: inherit; flex: 1 1 100%; max-width: none; height: 44px; border-radius: 4px; background-color: #fff; color: #000; font-size: 16px; font-weight: 500; padding: 0 16px 0 48px; }
   .search::placeholder { color: #121212; opacity: .85; font-weight: 500; }
   .contentbar .searchtypes { flex: 1 1 100%; display: flex; flex-wrap: nowrap; gap: 8px; padding: 0; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }

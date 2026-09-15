@@ -89,7 +89,6 @@
   .fs-phone-device .devicebtn { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 10px; color: #fff; font-size: 12px; font-weight: 600; max-width: 100%; }
   .fs-phone-device .devicebtn svg { width: 24px; height: 24px; flex: none; }
   .fs-phone-device .devicebtn-name { display: none; }
-  .fs-quality { font-size: 12px; font-weight: 600; color: #fff; margin-left: -2px; white-space: nowrap; }
   .fs-phone-device .devicebtn.casting, .fs-phone-device .devicebtn.casting .devicebtn-name { color: var(--accent); }
   .fs-phone-device .devicebtn.casting .devicebtn-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -125,7 +124,7 @@
   .fs.closing, .rightpanel.closing { transform: translateY(100%) !important; transition: transform .25s ease-in !important; animation: none; }
   .ctxmenu.ctxmenu-fixed.closing { transform: translateY(100%); box-shadow: 0 0 0 100vmax rgba(0,0,0,0), 0 -8px 40px rgba(0,0,0,0); transition: transform .25s ease-in, box-shadow .25s ease-in; animation: none; }
   .devicemenu.closing { transform: translateY(100%); box-shadow: 0 0 0 100vmax rgba(0,0,0,0), 0 -8px 40px rgba(0,0,0,0); transition: transform .25s ease-in, box-shadow .25s ease-in; }
-  .devicemenu { animation: sheet-in .22s cubic-bezier(.2,.7,.2,1); }
+  .devicemenu { animation: sheet-in .22s cubic-bezier(.2,.7,.2,1); overscroll-behavior: contain; }
 
   /* ---- Sheets over the player (visualizer settings): no empty icon column,
      a green check at the right, the smoothing slider drawn like the seek bar. ---- */
