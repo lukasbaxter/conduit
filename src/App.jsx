@@ -790,6 +790,8 @@ export default function App() {
     const cancel = () => { clearTimeout(timer); timer = null; start = null; };
     const down = (e) => {
       const t = e.touches?.[0]; if (!t || e.touches.length !== 1) return;
+      // Holding the seek thumb (or any slider / field) is not a long-press.
+      if (e.target.closest?.('input, textarea, [contenteditable]')) return;
       start = { x: t.clientX, y: t.clientY, target: e.target };
       timer = setTimeout(() => {
         const s = start; if (!s) return;
