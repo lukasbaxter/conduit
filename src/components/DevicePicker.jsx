@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { LOCAL_DEVICE } from '../player/usePlayer.js';
+import { usePhone } from './Player.jsx';
 
 // Filled paths (Material-style) rather than strokes: the Cast glyph in
 // particular is unreadable as an outline at 18px.
@@ -14,10 +15,20 @@ const ICONS = {
   relay: 'M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm6 15a1 1 0 1 0 0 2 1 1 0 0 0 0-2z',
 };
 
-function DeviceIcon({ kind }) {
+// Phone sheet: Spotify's device glyphs by kind (this phone, a TV for Cast, a
+// speaker for Bluesound, a laptop for another Conduit).
+const PHONE_ICONS = {
+  local: 'M16 1H8a3 3 0 0 0-3 3v16a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3V4a3 3 0 0 0-3-3zm1.5 19a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 20V4A1.5 1.5 0 0 1 8 2.5h8A1.5 1.5 0 0 1 17.5 4v16zM12 17.25a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5z',
+  cast: 'M21 3H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5v-1.5H3a.5.5 0 0 1-.5-.5V5a.5.5 0 0 1 .5-.5h18a.5.5 0 0 1 .5.5v12a.5.5 0 0 1-.5.5h-5V19h5a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM8 21.5h8V23H8v-1.5z',
+  bluos: 'M17 1H7a3 3 0 0 0-3 3v16a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V4a3 3 0 0 0-3-3zm1.5 19a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 20V4A1.5 1.5 0 0 1 7 2.5h10A1.5 1.5 0 0 1 18.5 4v16zM12 5a1.75 1.75 0 1 0 0 3.5A1.75 1.75 0 0 0 12 5zm0 5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zm0 7.5a3 3 0 1 1 0-6 3 3 0 0 1 0 6z',
+  relay: 'M4 4.5A2.5 2.5 0 0 1 6.5 2h11A2.5 2.5 0 0 1 20 4.5v10a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 14.5v-10zm2.5-1a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-10a1 1 0 0 0-1-1h-11zM1 19.25h22v1.5H1v-1.5z',
+};
+
+function DeviceIcon({ kind, phone = false, size = 18 }) {
+  const set = phone ? PHONE_ICONS : ICONS;
   return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
-      <path d={ICONS[kind] || ICONS.cast} />
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
+      <path d={set[kind] || set.cast} />
     </svg>
   );
 }
@@ -37,6 +48,7 @@ const ConnectIcon = () => (
 export default function DevicePicker({ devices, active, onSelect, showName = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const phone = usePhone();
 
   useEffect(() => {
     if (!open) return undefined;
@@ -81,6 +93,8 @@ export default function DevicePicker({ devices, active, onSelect, showName = fal
 
   const remoteCount = visible.length;
   const isBrowser = typeof window !== 'undefined' && !window.conduit;
+  const kindLabel = (d) => (d.kind === 'local' ? 'This phone' : d.kind === 'cast' ? 'Google Cast' : d.kind === 'bluos' ? 'Bluesound' : 'Conduit');
+  const others = all.filter((d) => d.id !== active.id);
 
   return (
     <div className="devicepicker" ref={ref}>
@@ -93,7 +107,40 @@ export default function DevicePicker({ devices, active, onSelect, showName = fal
         <span className="devicebtn-name">{labelFor(active)}</span>
       </button>
 
-      {open && (
+      {open && phone && (
+        /* Spotify's "Connect to a device" sheet: the current device up top in
+           green, then the others, then a line on where speakers come from. */
+        <div className="devicemenu" role="menu">
+          <div className="devicemenu-head">
+            <strong>Connect to a device</strong>
+            <span>{remoteCount ? `${remoteCount} on your network` : (isBrowser ? '' : 'Searching your network...')}</span>
+          </div>
+          <div className="dm-current">
+            <DeviceIcon kind={active.kind} phone size={32} />
+            <span className="dm-current-text">
+              <span className="dm-current-label">Current device</span>
+              <span className="dm-current-name">{labelFor(active)}</span>
+              <span className="dm-current-sub">{subtitleFor(active) || kindLabel(active)}</span>
+            </span>
+          </div>
+          {others.length > 0 && <div className="dm-others">Select another device</div>}
+          {others.map((d) => (
+            <button key={d.id} className="deviceitem" onClick={() => { onSelect(d); setOpen(false); }} role="menuitem">
+              <DeviceIcon kind={d.kind} phone size={24} />
+              <span className="deviceitem-text">
+                <span className="deviceitem-name">{labelFor(d)}</span>
+                <span className="deviceitem-model">{subtitleFor(d) || kindLabel(d)}</span>
+              </span>
+            </button>
+          ))}
+          <p className="dm-note">
+            {isBrowser
+              ? 'Speakers and TVs show up in the Conduit app. In the browser, playback stays on this device.'
+              : 'Chromecast and Bluesound players on this network appear here automatically once they are awake.'}
+          </p>
+        </div>
+      )}
+      {open && !phone && (
         <div className="devicemenu" role="menu">
           <div className="devicemenu-head">
             <strong>Play on</strong>
