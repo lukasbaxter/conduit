@@ -62,9 +62,8 @@ export function usePlayingFrom(player, jf) {
 export const LyricsGlyph = ({ size = 24 }) => (
   <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <g transform="rotate(45 12 12)">
-      <path d="M7.5 5.5a4.5 4.5 0 0 1 9 0V12h-9V5.5z" />
-      <path d="M12 12v9" />
-      <path d="M8.5 21h7" />
+      <path d="M7.5 6a4.5 4.5 0 0 1 9 0v6.5h-9V6z" />
+      <path d="M12 12.5V21" />
     </g>
   </svg>
 );
