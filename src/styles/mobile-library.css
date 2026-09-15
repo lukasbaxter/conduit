@@ -1,5 +1,239 @@
 /* Phone-only styles for the library screens. Loaded after app.css, so rules here win
    over the @media (max-width: 760px) block there. Keep everything inside the
-   same media query. */
+   same media query. Measurements are Spotify iOS on a 390pt iPhone. */
 @media (max-width: 760px) {
+  /* ================= Your Library tab ================= */
+  /* Header row: the navbar already draws the 32pt avatar + "Your Library"
+     24/700; the magnifier and "+" (24pt line icons) float at its right edge. */
+  .shell.show-lib .libhead { display: flex; position: fixed; top: calc(8px + env(safe-area-inset-top)); right: 8px; z-index: 30; padding: 0; margin: 0; }
+  .shell.show-lib .libhead > span:first-child { display: none !important; } /* beats the inline flex the desktop title uses */
+  .libhead-actions { display: flex; align-items: center; gap: 4px; }
+  .libhead-actions .icon-btn { width: 40px; height: 40px; color: #fff; }
+  .libhead-actions .icon-btn.on { color: var(--accent); }
+  .libhead-actions .icon-btn svg { stroke-width: 1.7; }
+  .libpanel { border-top: 0; }
+
+  /* Chips: 32pt, radius 500, #2a2a2a; active green / black. */
+  .libchips { padding: 8px 16px 8px; gap: 8px; }
+  .libchips .pill { min-block-size: 32px; padding: 0 16px; font-size: 13px; font-weight: 500; background: #2a2a2a; color: #fff; border-radius: 500px; }
+  .libchips .pill.on { background: var(--accent); color: #000; }
+  .libchips .pill.x { width: 32px; background: #2a2a2a; }
+
+  /* Sort row: arrows + "Recents" 13/600 left, grid / list toggle right. */
+  .libsort { padding: 8px 16px 8px; font-size: 13px; font-weight: 600; min-height: 40px; }
+  .libsort > span { display: inline-flex; align-items: center; gap: 6px; }
+  .libsort .libview { width: 40px; height: 40px; margin-right: -10px; display: grid; place-items: center; color: #fff; border-radius: 50%; }
+
+  /* "Find in Your Library": grey rounded field with a Cancel text button. */
+  .libsearch { display: flex; align-items: center; gap: 8px; padding: 4px 16px 8px; color: #a7a7a7; }
+  .libsearch svg { position: absolute; margin-left: 10px; pointer-events: none; }
+  .libsearch input { flex: 1; min-width: 0; height: 36px; border: 0; border-radius: 4px; background: #2a2a2a; color: #fff; font-size: 16px; padding: 0 12px 0 38px; }
+  .libsearch input::placeholder { color: #a7a7a7; }
+  .libsearch input:focus { outline: none; }
+  .libsearch button { color: #fff; font-size: 14px; font-weight: 600; padding: 0 4px; height: 36px; }
+
+  /* Rows: 64pt art (round for artists, 3pt otherwise), 8pt vertical padding,
+     16pt gutters, no separators, name 16 white / sub 13 #a7a7a7. */
+  .liblist { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
+  .libitem { padding: 8px 0; gap: 16px; border-radius: 0; background: transparent; }
+  .libitem:active { opacity: .7; }
+  .libitem img, .libitem .ph, .libitem .liked-art { width: 64px; height: 64px; border-radius: 3px; }
+  .libitem.round img, .libitem.round .ph { border-radius: 50%; }
+  .libitem-name { font-size: 16px; font-weight: 400; color: #fff; }
+  .libitem-sub { font-size: 13px; color: #a7a7a7; gap: 4px; }
+  .libpin { width: 13px; height: 13px; }
+  .newplaylist-input { width: 100%; height: 44px; border-radius: 4px; background: #2a2a2a; font-size: 16px; padding: 0 12px; border: 0; }
+  .liblist > form { padding: 4px 0 8px !important; }
+
+  /* Grid view: three covers across, names beneath. */
+  .liblist.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 12px; align-content: start; padding-top: 8px; }
+  .liblist.grid > form, .liblist.grid .libempty, .liblist.grid .devicemenu-empty { grid-column: 1 / -1; }
+  .liblist.grid .libitem { flex-direction: column; align-items: stretch; gap: 8px; padding: 0; }
+  .liblist.grid .libitem img, .liblist.grid .libitem .ph, .liblist.grid .libitem .liked-art { width: 100%; height: auto; aspect-ratio: 1; }
+  .liblist.grid .libitem-name { font-size: 14px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; }
+  .liblist.grid .libitem-sub { font-size: 12px; display: block; }
+  .liblist.grid .libitem-sub .libpin { vertical-align: -1px; margin-right: 4px; }
+
+  /* Empty state: bold 16 title, 13 grey line, white pill "Create playlist". */
+  .libempty { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 24px 0 8px; }
+  .libempty b { font-size: 16px; font-weight: 700; color: #fff; }
+  .libempty p { margin: 0 0 12px; font-size: 13px; color: #a7a7a7; }
+  .libempty button { background: #fff; color: #000; border-radius: 500px; min-height: 32px; padding: 0 16px; font-size: 13px; font-weight: 700; }
+
+  /* ================= Album / playlist / Liked Songs detail ================= */
+  /* One continuous band: the cover colour at the top fading to #121212 just
+     under the action row (Spotify's header gradient). */
+  .hero { background: linear-gradient(180deg, rgba(18,18,18,0) 0%, rgba(18,18,18,.55) 100%), var(--hero, #3d3c3c); gap: 0; padding: calc(56px + env(safe-area-inset-top)) 16px 4px; }
+  .hero.artist { background: var(--hero, #3d3c3c); }
+  .actions::before { height: 100%; background: linear-gradient(180deg, color-mix(in srgb, var(--hero, #3d3c3c) 45%, #121212) 0%, var(--bg-base) 100%); }
+  .hero.artist ~ .actions::before { background: linear-gradient(180deg, color-mix(in srgb, var(--hero, #3d3c3c) 55%, #121212) 0%, var(--bg-base) 100%); }
+  .hero .hero-cover img, .hero > img, .hero .liked-art { width: 250px; height: 250px; max-width: calc(100vw - 64px); max-height: calc(100vw - 64px); border-radius: 4px; box-shadow: 0 8px 36px rgba(0,0,0,.55); }
+  .hero .hero-cover, .hero .liked-art { align-self: center; margin-bottom: 16px; }
+  .hero > div { width: 100%; }
+  .hero h1, .hero-title-edit h1 { font-size: 24px !important; font-weight: 700; letter-spacing: -.3px; line-height: 1.2; margin: 0 0 6px; }
+  .hero .kind { display: none; }
+  /* Meta: owner avatar + name 13/700 on one line, then "Playlist · 3h 7min" 13 grey. */
+  .hero p.hero-meta.phone { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; font-size: 13px; color: #a7a7a7; }
+  .hero-owner { display: inline-flex; align-items: center; gap: 6px; color: #fff; font-weight: 700; }
+  .hero-owner .rowlink.strong { font-size: 13px; }
+  .hero-owner b { font-size: 13px; }
+  .hero-avatar { width: 20px; height: 20px; margin-right: 0; }
+  .hero-stats { font-size: 13px; color: #a7a7a7; }
+
+  /* Action row: like / ⋯ (24pt, #a7a7a7) left; shuffle + a 48pt green play right. */
+  .actions { padding: 8px 16px 8px; gap: 4px; flex-wrap: wrap; min-height: 64px; }
+  .actions .iconbtn { width: 40px; height: 40px; color: #a7a7a7; margin: 0; }
+  .actions .iconbtn svg { width: 24px; height: 24px; }
+  .actions .iconbtn.on { color: var(--accent); }
+  .actions .iconbtn.on::after { display: none; }
+  .actions .iconbtn.shuffle { order: 8; margin-left: auto; }
+  .actions:has(.iconbtn.shuffle) .bigplay { margin-left: 4px; }
+  .actions .bigplay { order: 9; margin-left: auto; width: 48px; height: 48px; margin-right: -4px; }
+  .actions .bigplay svg { width: 22px; height: 22px; }
+  .actions .btn-secondary { min-block-size: 32px; padding: 0 16px; font-size: 13px; border-color: #7a7a7a; }
+  .actions .btn-secondary:disabled { opacity: .7; }
+  .actions .btn-secondary + .iconbtn.more { margin-left: 4px; }
+  /* "Find in playlist": a full-width grey field on its own line under the actions. */
+  .actions .within { order: 20; flex: 1 0 100%; margin: 8px 0 4px; height: 36px; border-radius: 4px; background: rgba(255,255,255,.1); color: #a7a7a7; padding: 0 12px; box-sizing: border-box; gap: 10px; }
+  .actions .within:focus-within { background: rgba(255,255,255,.14); color: #fff; }
+  .actions .within input { width: auto; flex: 1; min-width: 0; font-size: 14px; }
+  .actions .within input::placeholder { color: #a7a7a7; }
+  .actions .within:hover input, .actions .within:focus-within input, .actions .within input:not(:placeholder-shown) { width: auto; }
+  .actions .within button { font-size: 20px; padding: 0 4px; }
+
+  /* Track rows: 64pt pitch, 48pt art (playlists), no number, ⋯ at the right. */
+  .tracklist { padding: 0 0 16px; }
+  .pad .tracklist { padding: 0; }
+  .trackrow, .trackrow:not(:has(.trackrow-art)) { padding: 8px 16px; min-height: 64px; gap: 12px; border-radius: 0; }
+  .pad .tracklist .trackrow { padding-left: 0; padding-right: 0; }
+  .trackrow-art { width: 48px; height: 48px; flex: 0 0 48px; border-radius: 3px; }
+  .trackrow-name span { font-size: 16px; color: #fff; }
+  .trackrow-name small { font-size: 13px; color: #a7a7a7; margin-top: 2px; }
+  .trackrow-name small .rowlink { color: #a7a7a7; }
+  .trackrow-more { width: 40px; height: 40px; margin-right: -12px; color: #a7a7a7; }
+  .trackrow.active .trackrow-name > span { color: var(--accent); }
+  .placeholder-note { padding: 16px; font-size: 13px; color: #a7a7a7; }
+
+  /* Recommended: 24/700 heading, plain rows, outlined Add pill. */
+  .reco { margin: 24px 0 0; padding-top: 16px; border-top: 0; }
+  .reco-head { padding: 0 16px 8px; }
+  .reco-head h2 { font-size: 24px; letter-spacing: -.3px; }
+  .reco-head p { font-size: 13px; color: #a7a7a7; }
+  .reco-row .trackrow { padding-right: 0; }
+  .reco-add { margin-right: 16px; min-height: 32px; padding: 0 16px; font-size: 13px; }
+  .reco-refresh { font-size: 13px; color: #fff; }
+
+  /* ================= Artist page ================= */
+  .hero.artist { padding: 0; min-height: 300px; align-items: flex-start; justify-content: flex-end; }
+  /* The photo fades into the band colour so the action row's band continues it without a seam. */
+  .hero.artist.with-banner { background: linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(0,0,0,.35) 70%, color-mix(in srgb, var(--hero, #3d3c3c) 55%, #121212) 100%), var(--banner) center 25% / cover no-repeat; }
+  .hero.artist > div { padding: 0 16px 8px; }
+  .hero.artist .verified { font-size: 12px; margin-bottom: 4px; }
+  .hero.artist .verified svg { width: 18px; height: 18px; }
+  .hero.artist h1 { font-size: 40px !important; font-weight: 800; letter-spacing: -1px; margin: 0 0 6px; line-height: 1.05; }
+  .hero.artist .hero-meta { font-size: 13px; color: #fff; text-shadow: none; }
+  .hero.artist ~ .actions { padding: 8px 16px 8px; }
+  .hero.artist ~ .pad > section:first-child .shelf-head { margin-top: 8px; }
+  /* Popular: numbers 1-5 in 16 #a7a7a7 at the left, 48pt art, title 16. */
+  .tracklist.popular .trackrow-n { display: block; width: 20px; height: 24px; flex: none; font-size: 16px; color: #a7a7a7; }
+  .tracklist.popular .trackrow-n .trackrow-playglyph { display: none; }
+  .tracklist.popular .trackrow.active .trackrow-idx { color: var(--accent); }
+  .seemore { padding: 12px 0; font-size: 13px; color: #fff; }
+  /* Discography filters scroll sideways in one line; the grid is two across
+     with the Request pill kept over missing releases. */
+  .disco-filters { flex-wrap: nowrap; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px 12px; padding: 0 16px; }
+  .disco-filters::-webkit-scrollbar { display: none; }
+  .disco-filters .pills { flex: none; }
+  .disco-filters .pills + .pills { padding-left: 8px; border-left: 0; }
+  .disco-filters .pill { white-space: nowrap; }
+  .pad .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
+  .card-title { font-size: 16px; font-weight: 400; line-height: 1.3; }
+  .card-sub { font-size: 13px; color: #a7a7a7; }
+  .card-request { font-size: 12px; padding: 6px 12px; }
+  .shelf-head { margin: 24px 0 12px; }
+  .shelf-head h2 { font-size: 24px; letter-spacing: -.3px; }
+  .shelf-head .settings-hint { font-size: 13px; }
+  .card.round .card-title { text-align: center; }
+  .card.round .card-sub { text-align: center; }
+
+  /* ================= Settings: grouped list ================= */
+  .settings { padding: calc(56px + env(safe-area-inset-top)) 16px 32px; }
+  .settings .greeting { font-size: 24px; font-weight: 700; letter-spacing: -.3px; margin: 0 0 8px; }
+  .settings-section { margin: 20px 0 28px; }
+  .settings-section h2 { font-size: 13px; font-weight: 700; color: #a7a7a7; text-transform: uppercase; letter-spacing: .06em; margin: 0 0 4px; padding: 8px 0; }
+  .settings-row { gap: 16px; padding: 8px 0; }
+  .settings-avatar { width: 64px; height: 64px; box-shadow: none; }
+  .settings-avatar span { opacity: 0; }
+  .settings-name { font-size: 16px; font-weight: 400; }
+  .settings-hint { font-size: 13px; color: #a7a7a7; margin-top: 4px; line-height: 1.4; }
+  .settings-field { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; min-height: 56px; padding: 8px 0; }
+  .settings-field label { margin: 0; font-weight: 400; font-size: 16px; flex: 1; }
+  .settings-field select { min-width: 0; max-width: 55%; background: transparent; color: #a7a7a7; font-size: 16px; padding: 4px 24px 4px 0; text-align: right; -webkit-appearance: none; appearance: none; border: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23a7a7a7'%3E%3Cpath d='M6 2l5 6-5 6' stroke='%23a7a7a7' stroke-width='1.5' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 4px center; background-size: 16px; }
+  .settings-field .settings-hint { flex-basis: 100%; }
+  .lb-form .settings-field { display: block; }
+  .lb-form .settings-field label { font-size: 13px; color: #a7a7a7; display: block; margin-bottom: 6px; }
+  .settings-input { width: 100%; min-width: 0; box-sizing: border-box; height: 48px; font-size: 16px; background: #2a2a2a; border-radius: 4px; }
+  .settings-actions { flex-wrap: wrap; gap: 12px; }
+  .settings-actions .primary { min-height: 48px; padding: 0 32px; font-size: 16px; }
+  .settings-actions .btn-secondary { min-height: 48px; padding: 0 24px; }
+  .settings-actions .settings-hint { flex-basis: 100%; }
+  .theme-presets { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -16px 12px; padding: 0 16px; }
+  .theme-presets::-webkit-scrollbar { display: none; }
+  .theme-preset { flex: none; font-size: 13px; min-height: 40px; }
+  .theme-colors { grid-template-columns: 1fr; gap: 0; }
+  .theme-color { padding: 12px 0; border-radius: 0; background: transparent; gap: 12px; min-height: 56px; }
+  .theme-color .theme-color-body b { font-size: 16px; font-weight: 400; }
+  .theme-color .theme-color-body small { font-size: 13px; color: #a7a7a7; }
+  .theme-color code { font-size: 13px; color: #a7a7a7; }
+  .settings > .btn-secondary, .settings-section > .btn-secondary { min-height: 40px; }
+
+  /* ================= Profile ================= */
+  .hero.profile { min-height: 0; align-items: center; padding-bottom: 24px; background: linear-gradient(180deg, rgba(18,18,18,0) 0%, var(--bg-base) 100%), var(--hero, #4a4a4a); }
+  .hero.profile ~ .actions.slim::before { display: none; }
+  .hero.profile .profile-avatar { width: 128px; height: 128px; box-shadow: 0 8px 24px rgba(0,0,0,.5); margin-bottom: 12px; }
+  .hero.profile .profile-initial { font-size: 56px; }
+  .hero.profile > div { text-align: center; }
+  .hero.profile h1 { margin: 0 0 4px; }
+  .hero.profile .hero-meta { justify-content: center; font-size: 13px; color: #a7a7a7; }
+  .hero.profile .hero-cover-edit { font-size: 13px; }
+  .actions.slim { padding: 0; min-height: 8px; }
+  .shelf-sub { font-size: 13px; color: #a7a7a7; }
+
+  /* ================= History (stats.fm look, kept) ================= */
+  .sf-hero { padding-top: calc(40px + env(safe-area-inset-top)); }
+  .sf-profile { padding: 24px 0 32px; gap: 16px; }
+  .sf-avatar-ring .sf-avatar { width: 128px !important; height: 128px !important; }
+  .sf-avatar p { font-size: 40px; }
+  .sf h1 { font-size: 24px; }
+  .sf-handle { font-size: 16px; }
+  .sf-container { padding: 0 16px; max-width: none; }
+  .sf-stats { gap: 12px; }
+  .sf-stats h3 { font-size: 18px; }
+  .sf-stat-label { font-size: 14px; }
+  .sf-listbox { width: 100%; }
+  .sf-carousel { overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+  .sf-carousel::-webkit-scrollbar { display: none; }
+  .sf-carousel-row { transform: none !important; }
+  .sf-toolbar { display: none; }
+  .sf-section-head { padding: 28px 0 12px; }
+  .sf-section-desc { max-width: 100%; }
+  .sf-charts { grid-template-columns: 1fr; }
+  .sf-avg-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sf-clocks { flex-direction: column; }
+  .sf-stream-main { width: auto; flex: 1; min-width: 0; }
+  .sf-stream-text { width: auto; flex: 1; min-width: 0; }
+  .sf-stream-time { flex: none; margin-left: 8px; }
+  .sf-day { top: 0; }
+
+  /* ================= Back button ================= */
+  /* 32pt, 16pt from the left, 12pt under the safe area, black at 50% + blur. */
+  .mobile-back { top: calc(12px + env(safe-area-inset-top)); left: 16px; width: 32px; height: 32px; background: rgba(0,0,0,.5); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .mobile-back svg { width: 18px; height: 18px; }
+
+  /* Narrow phones (360pt): the cover shrinks with the width, chips stay one line. */
+  @media (max-width: 380px) {
+    .hero .hero-cover img, .hero > img, .hero .liked-art { width: 220px; height: 220px; }
+    .hero.artist h1 { font-size: 34px !important; }
+  }
 }

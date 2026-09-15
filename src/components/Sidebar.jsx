@@ -1,12 +1,16 @@
 import React, { useMemo, useRef, useState } from 'react';
 import ContextMenu from './ContextMenu.jsx';
-import { Heart, LikedCover } from './TrackRow.jsx';
+import { Heart, LikedCover, usePhone } from './TrackRow.jsx';
 
 const ICONS = {
   home: 'M12 3 3 10v11h6v-6h6v6h6V10z',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4.2-4.2',
   library: 'M4 4v16M9 4v16M14 5l5 15',
   plus: 'M12 5v14M5 12h14',
+  // Phone Library tab: sort arrows, grid / list view toggle.
+  sort: 'M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3',
+  grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+  list: 'M4 6h16M4 12h16M4 18h16',
 };
 
 function Icon({ name, size = 22 }) {
@@ -53,6 +57,13 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
     const list = [...fresh, ...known];
     return [...list.filter((e) => pinned.has(e.id)), ...list.filter((e) => !pinned.has(e.id))];
   }, [playlists, savedAlbums, prefs?.libraryOrder, prefs?.libraryPinned]);
+  // Phone "Artists" chip: the artists behind the saved albums (Conduit has no
+  // separate follow list), one row each, like Spotify's followed artists.
+  const artistEntries = useMemo(() => {
+    const seen = new Map();
+    for (const a of savedAlbums) for (const ar of a.AlbumArtists || []) if (ar?.Id && !seen.has(ar.Id)) seen.set(ar.Id, { id: ar.Id, kind: 'artist', item: { Id: ar.Id, Name: ar.Name } });
+    return [...seen.values()].sort((x, y) => x.item.Name.localeCompare(y.item.Name));
+  }, [savedAlbums]);
   const pinned = new Set(Array.isArray(prefs?.libraryPinned) ? prefs.libraryPinned : []);
   const togglePin = (id) => {
     const next = pinned.has(id) ? [...pinned].filter((x) => x !== id) : [...pinned, id];
@@ -93,9 +104,20 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
   const openMenu = (ev, entry) => { ev.preventDefault(); ev.stopPropagation(); setMenu({ x: ev.clientX, y: ev.clientY, entry }); };
 
   // Phone Library tab: Spotify's filter chips + "Recents" sort row (CSS shows them only there).
-  const [libFilter, setLibFilter] = useState(null); // null | 'playlist' | 'album'
+  const [libFilter, setLibFilter] = useState(null); // null | 'playlist' | 'album' | 'artist'
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
+  const phone = usePhone();
+  // Phone: the magnifier in the header opens "Find in Your Library"; the
+  // grid / list toggle at the right of the sort row.
+  const [searching, setSearching] = useState(false);
+  const [libQuery, setLibQuery] = useState('');
+  const [gridView, setGridView] = useState(false);
+  const q = libQuery.trim().toLowerCase();
+  const matches = (n) => !q || (n || '').toLowerCase().includes(q);
+  const showLiked = (!libFilter || libFilter === 'playlist') && matches('Liked Songs');
+  const shownArtists = libFilter === 'artist' ? artistEntries.filter((e) => matches(e.item.Name)) : [];
+  const shownEntries = entries.filter((e) => (!libFilter || e.kind === libFilter) && matches(e.item.Name));
 
   const submit = (e) => {
     e.preventDefault();
@@ -122,20 +144,40 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
           <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <Icon name="library" /> Your Library
           </span>
-          <button className="icon-btn" onClick={() => setCreating((v) => !v)} title="Create playlist">
-            <Icon name="plus" size={18} />
-          </button>
+          <span className="libhead-actions">
+            {phone && (
+              <button className={`icon-btn ${searching ? 'on' : ''}`} onClick={() => { setSearching((v) => !v); setLibQuery(''); }} title="Find in Your Library" aria-label="Find in Your Library">
+                <Icon name="search" size={24} />
+              </button>
+            )}
+            <button className="icon-btn" onClick={() => setCreating((v) => !v)} title="Create playlist" aria-label="Create playlist">
+              <Icon name="plus" size={phone ? 24 : 18} />
+            </button>
+          </span>
         </div>
 
         <div className="libchips">
           {libFilter && <button className="pill x" onClick={() => setLibFilter(null)} aria-label="Clear filter">×</button>}
-          {[['playlist', 'Playlists'], ['album', 'Albums']].map(([k, label]) => (!libFilter || libFilter === k) && (
+          {[['playlist', 'Playlists'], ['album', 'Albums'], ['artist', 'Artists']].map(([k, label]) => (!libFilter || libFilter === k) && (
             <button key={k} className={`pill ${libFilter === k ? 'on' : ''}`} onClick={() => setLibFilter(libFilter === k ? null : k)}>{label}</button>
           ))}
-          <button className="pill" onClick={() => setCreating((v) => !v)}>+ Playlist</button>
         </div>
-        <div className="libsort"><span>⇅ Recents</span></div>
-        <div className="liblist">
+        {searching && phone ? (
+          <div className="libsearch">
+            <Icon name="search" size={20} />
+            <input autoFocus value={libQuery} onChange={(e) => setLibQuery(e.target.value)} placeholder="Find in Your Library" spellCheck="false"
+              onKeyDown={(e) => e.key === 'Escape' && (setSearching(false), setLibQuery(''))} />
+            <button type="button" onClick={() => { setSearching(false); setLibQuery(''); }}>Cancel</button>
+          </div>
+        ) : (
+          <div className="libsort">
+            <span><Icon name="sort" size={16} /> Recents</span>
+            <button className="libview" onClick={() => setGridView((v) => !v)} title={gridView ? 'List view' : 'Grid view'} aria-label={gridView ? 'List view' : 'Grid view'}>
+              <Icon name={gridView ? 'list' : 'grid'} size={20} />
+            </button>
+          </div>
+        )}
+        <div className={`liblist ${gridView ? 'grid' : ''}`}>
           {creating && (
             <form onSubmit={submit} style={{ padding: '4px 8px 10px' }}>
               <input
@@ -149,7 +191,7 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
             </form>
           )}
 
-          {(!libFilter || libFilter === 'playlist') && <button className="libitem" onClick={onOpenLiked} onContextMenu={(ev) => openMenu(ev, { id: 'liked', kind: 'liked' })} title="Liked Songs">
+          {showLiked && <button className="libitem" onClick={onOpenLiked} onContextMenu={(ev) => openMenu(ev, { id: 'liked', kind: 'liked' })} title="Liked Songs">
             <LikedCover />
             <span className="libitem-text">
               <span className="libitem-name">Liked Songs</span>
@@ -157,7 +199,16 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
             </span>
           </button>}
 
-          {entries.filter((e) => !libFilter || e.kind === libFilter).map((e) => {
+          {shownArtists.map((e) => (
+            <button key={e.id} className="libitem round" onClick={() => onOpenArtist?.(e.id)} title={e.item.Name}>
+              {jf.imageUrl(e.id, { maxHeight: 84 }) ? <img src={jf.imageUrl(e.id, { maxHeight: 84 })} alt="" loading="lazy" draggable={false} /> : <div className="ph" />}
+              <span className="libitem-text">
+                <span className="libitem-name">{e.item.Name}</span>
+                <span className="libitem-sub">Artist</span>
+              </span>
+            </button>
+          ))}
+          {shownEntries.map((e) => {
             const it = e.item;
             const art = jf.imageUrl(it.Id, { maxHeight: 84 });
             const sub = e.kind === 'album'
@@ -187,10 +238,34 @@ export default function Sidebar({ view, onView, playlists, likedCount, onOpen, o
           })}
           {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.entry)} onClose={() => setMenu(null)} />}
 
-          {!entries.length && !loading && (
+          {!shownEntries.length && !loading && !q && (!libFilter || libFilter === 'playlist') && (phone ? (
+            <div className="libempty">
+              <b>Create your first playlist</b>
+              <p>It's easy, we'll help you.</p>
+              <button onClick={() => setCreating(true)}>Create playlist</button>
+            </div>
+          ) : (
             <p className="devicemenu-empty">
               Create your first playlist with the + button.
             </p>
+          ))}
+          {q && !showLiked && !shownArtists.length && !shownEntries.length && (
+            <div className="libempty">
+              <b>Couldn&rsquo;t find &ldquo;{libQuery.trim()}&rdquo;</b>
+              <p>Try a different playlist, album or artist name.</p>
+            </div>
+          )}
+          {!q && phone && libFilter === 'artist' && !shownArtists.length && !loading && (
+            <div className="libempty">
+              <b>No artists yet</b>
+              <p>Save an album and its artist shows up here.</p>
+            </div>
+          )}
+          {!q && phone && libFilter === 'album' && !shownEntries.length && !loading && (
+            <div className="libempty">
+              <b>Save your first album</b>
+              <p>Tap the heart on an album to keep it here.</p>
+            </div>
           )}
         </div>
       </div>
