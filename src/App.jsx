@@ -818,7 +818,9 @@ export default function App() {
   useEffect(() => {
     if (!isMobile || !fullScreen) return undefined;
     let start = null, el = null;
-    const scrolledInside = (t) => { const sc = t.closest?.('.fs-lyrics, .viz, .ctxmenu, input'); return sc && (sc.scrollTop > 0 || sc.tagName === 'INPUT' || sc.classList.contains('viz')); };
+    // Sheets over the player (device picker, ⋯ menu), the visualizer, inputs and
+    // a scrolled lyrics pane own their touches; only the player itself drags.
+    const scrolledInside = (t) => { const sc = t.closest?.('.fs-lyrics, .viz, .ctxmenu, .devicemenu, .rightpanel, input'); return sc && (sc.scrollTop > 0 || !sc.classList.contains('fs-lyrics')); };
     const down = (e) => {
       const t = e.touches?.[0]; el = document.querySelector('.fs');
       if (!t || !el || e.touches.length !== 1 || scrolledInside(e.target)) { start = null; return; }
