@@ -64,25 +64,21 @@ function usePhone() {
   return phone;
 }
 
-// A recent search is either a bare query (older entries) or the thing that
-// was tapped: { q, kind, id, name, sub }. Spotify lists the tapped items.
-const recentText = (x) => (typeof x === 'string' ? x : x?.name || x?.q || '');
-const recentKey = (x) => (typeof x === 'string' ? `q:${x.toLowerCase()}` : x?.id ? `${x.kind}:${x.id}` : `q:${(x?.q || '').toLowerCase()}`);
+// A recent search is the thing that was opened or played from a result list:
+// { q, kind, id, art, name, sub }. Spotify lists those, never the typed text.
+const recentKey = (x) => `${x.kind}:${x.id}`;
 
-const MagnifierGlyph = () => (
-  <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M10.533 1.279c-5.18 0-9.407 4.14-9.407 9.279s4.226 9.279 9.407 9.279c2.234 0 4.29-.77 5.907-2.058l4.353 4.353a1 1 0 1 0 1.414-1.414l-4.344-4.344a9.157 9.157 0 0 0 2.077-5.816c0-5.14-4.226-9.28-9.407-9.28zm-7.407 9.279c0-4.006 3.302-7.28 7.407-7.28s7.407 3.274 7.407 7.28-3.302 7.279-7.407 7.279-7.407-3.273-7.407-7.28z" /></svg>
-);
 const CloseGlyph = () => (
   <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M2.47 2.47a.75.75 0 0 1 1.06 0L8 6.94l4.47-4.47a.75.75 0 1 1 1.06 1.06L9.06 8l4.47 4.47a.75.75 0 1 1-1.06 1.06L8 9.06l-4.47 4.47a.75.75 0 0 1-1.06-1.06L6.94 8 2.47 3.53a.75.75 0 0 1 0-1.06z" /></svg>
 );
 
 // One row of the phone search list: 48pt art (round for artists), name 16,
 // "Kind · detail" 13 grey. Songs are TrackRows (they carry the ⋯ menu).
-function SearchRow({ image, round, name, sub, onClick, onRemove, icon, className = '' }) {
+function SearchRow({ image, round, name, sub, onClick, onRemove, className = '' }) {
   return (
     <div className={`srow ${round ? 'round' : ''} ${className}`} onClick={onClick} role="button" tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && onClick?.()}>
-      {icon ? <div className="srow-art srow-icon">{icon}</div> : image ? <img className="srow-art" src={image} alt="" loading="lazy" /> : <div className="srow-art ph" />}
+      {image ? <img className="srow-art" src={image} alt="" loading="lazy" /> : <div className="srow-art ph" />}
       <div className="srow-text">
         <span className="srow-name">{name}</span>
         {sub && <small className="srow-sub">{sub}</small>}
@@ -173,7 +169,10 @@ export default function Library({
   // Search inside the open playlist / album / Liked Songs (engine-scoped).
   const [within, setWithin] = useState('');
   const [withinRes, setWithinRes] = useState(null);
-  const recents = Array.isArray(prefs?.recentSearches) ? prefs.recentSearches : [];
+  // Recent searches are the things you actually opened or played from a
+  // search (artist / album / song / playlist), never the typed string. Older
+  // string entries are ignored and drop out on the next write.
+  const recents = (Array.isArray(prefs?.recentSearches) ? prefs.recentSearches : []).filter((x) => x && typeof x === 'object' && x.id);
   // Browse tiles (genre buckets) for the empty search page.
   const [tiles, setTiles] = useState(() => { try { return JSON.parse(localStorage.getItem('conduit.browse') || 'null'); } catch { return null; } });
   useEffect(() => {
@@ -205,11 +204,11 @@ export default function Library({
     } catch { setDetail((d) => (d && d.item?.Id === `browse:${tile.id}` ? { ...d, loading: false } : d)); }
   };
   const TILE_COLORS = ['#e13300', '#1e3264', '#8d67ab', '#e8115b', '#148a08', '#0d73ec', '#7d4b32', '#ba5d07', '#477d95', '#503750', '#27856a', '#d84000', '#e1118c', '#a56752', '#4b7d9b', '#e61e32'];
-  // Records a search. With a hit (what was tapped) the entry carries the item
-  // so the phone's Recent searches can list it with art, like Spotify's.
+  // Records what was opened or played from a search: the item (with art and
+  // a "Kind · detail" line), so Recent searches lists it like Spotify's.
   const remember = (q, hit = null) => {
-    const t = (q || '').trim(); if ((!t && !hit) || !onUpdatePrefs) return;
-    const entry = hit ? { q: t, kind: hit.kind, id: hit.item.Id, art: hit.item.AlbumId || hit.item.Id, name: hit.item.Name, sub: hit.sub || '' } : t;
+    if (!hit?.item?.Id || !onUpdatePrefs) return;
+    const entry = { q: (q || '').trim(), kind: hit.kind, id: hit.item.Id, art: hit.item.AlbumId || hit.item.Id, name: hit.item.Name, sub: hit.sub || '' };
     const key = recentKey(entry);
     onUpdatePrefs({ recentSearches: [entry, ...recents.filter((x) => recentKey(x) !== key)].slice(0, 10) });
   };
@@ -1047,8 +1046,13 @@ export default function Library({
     // Top result comes from the engine (exact artist > exact album > best score).
     const top = r?.top || null;
     const show = (t) => searchType === 'All' || searchType === t;
+    const subOf = (kind, item) => kind === 'Artist' ? 'Artist'
+      : kind === 'Album' ? `Album · ${item.AlbumArtist || ''}`.replace(/ · $/, '')
+      : kind === 'Playlist' ? 'Playlist'
+      : `Song · ${item.Artists?.join(', ') || item.AlbumArtist || ''}`.replace(/ · $/, '');
+    const hit = (kind, item) => ({ kind, item, sub: subOf(kind, item) });
     const actOn = (kind, item, i) => {
-      remember(query);
+      remember(query, hit(kind, item));
       if (kind === 'Song') player.playQueue(r.tracks, Math.max(0, i), null);
       else if (kind === 'Playlist') onOpenPlaylist(item);
       else open(item);
@@ -1056,8 +1060,8 @@ export default function Library({
     // Rows on the search page: any way of playing one records the query.
     const searchRow = (i, extra = {}) => rowProps(r.tracks, i, {
       showArt: true,
-      onPlay: () => { remember(query); player.playQueue(r.tracks, i, null); },
-      onPlayAt: (t, at) => { remember(query); player.playQueue(r.tracks, i, null, at); },
+      onPlay: () => { remember(query, hit('Song', r.tracks[i])); player.playQueue(r.tracks, i, null); },
+      onPlayAt: (t, at) => { remember(query, hit('Song', r.tracks[i])); player.playQueue(r.tracks, i, null, at); },
       ...extra,
     });
     const onSearchKey = (e) => {
@@ -1075,10 +1079,6 @@ export default function Library({
     // Phone: Spotify's flat result list. The engine's per-type lists are each
     // in score order, so the top result leads and the types take turns, then
     // the tail of each. No headings, no Top result card.
-    const subOf = (kind, item) => kind === 'Artist' ? 'Artist'
-      : kind === 'Album' ? `Album · ${item.AlbumArtist || ''}`.replace(/ · $/, '')
-      : kind === 'Playlist' ? 'Playlist'
-      : `Song · ${item.Artists?.join(', ') || item.AlbumArtist || ''}`.replace(/ · $/, '');
     const phoneRows = (() => {
       if (!phone || !r || r.scoped) return null;
       const rows = [], seen = new Set();
@@ -1091,14 +1091,18 @@ export default function Library({
       return rows;
     })();
     const actOnPhone = (kind, item, i) => {
-      remember(query, { kind, item, sub: subOf(kind, item) });
+      remember(query, hit(kind, item));
       if (kind === 'Song') { if (i >= 0) player.playQueue(r.tracks, i, null); else player.playQueue([item], 0, null); }
       else if (kind === 'Playlist') onOpenPlaylist(item);
       else open(item);
     };
     // A tapped recent search: reopen the artist / album / playlist, replay the song.
+    const recentItem = (x) => ({ Id: x.id, Name: x.name, AlbumId: x.art, Type: x.kind === 'Artist' ? 'MusicArtist' : x.kind === 'Playlist' ? 'Playlist' : x.kind === 'Album' ? 'MusicAlbum' : 'Audio' });
+    const playRecent = async (x) => {
+      if (x.kind === 'Song') { try { const t = await jf.itemById(x.id); if (t) player.playQueue([t], 0, null); } catch (e) { setErr(e.message); } }
+      else playItem(recentItem(x));
+    };
     const openRecent = async (x) => {
-      if (typeof x === 'string') { setQuery(x); return; }
       if (x.kind === 'Song') {
         try { const t = await jf.itemById(x.id); if (t) player.playQueue([t], 0, null); } catch (e) { setErr(e.message); }
       } else if (x.kind === 'Artist') openArtist({ Id: x.id, Name: x.name, Type: 'MusicArtist' });
@@ -1152,20 +1156,23 @@ export default function Library({
             <section className="recentlist">
               <div className="shelf-head"><h2>Recent searches</h2></div>
               {recents.map((x) => (
-                <SearchRow key={recentKey(x)} name={recentText(x)}
-                  sub={typeof x === 'string' ? '' : x.sub || x.kind}
-                  round={typeof x !== 'string' && x.kind === 'Artist'}
-                  icon={typeof x === 'string' ? <MagnifierGlyph /> : null}
-                  image={typeof x === 'string' ? null : jf.imageUrl(x.art || x.id, { maxHeight: 96 })}
+                <SearchRow key={recentKey(x)} name={x.name} sub={x.sub || x.kind} round={x.kind === 'Artist'}
+                  image={jf.imageUrl(x.art || x.id, { maxHeight: 96 })}
                   onClick={() => openRecent(x)} onRemove={() => forgetRecent(x)} />
               ))}
               <button className="pill clear-recents" onClick={() => onUpdatePrefs?.({ recentSearches: [] })}>Clear recent searches</button>
             </section>
           ) : (
             <section>
-              <div className="shelf-head"><h2>Recent searches</h2><button onClick={() => onUpdatePrefs?.({ recentSearches: [] })}>Clear</button></div>
-              <div className="pills recents">
-                {recents.map((x) => <button key={recentKey(x)} className="pill" onClick={() => setQuery(recentText(x))}>{recentText(x)}</button>)}
+              <div className="shelf-head"><h2>Recent searches</h2><button onClick={() => onUpdatePrefs?.({ recentSearches: [] })}>Clear recent searches</button></div>
+              <div className="grid recents">
+                {recents.map((x) => (
+                  <div key={recentKey(x)} className="recentcard">
+                    <Card title={x.name} subtitle={x.sub || x.kind} round={x.kind === 'Artist'}
+                      image={jf.imageUrl(x.art || x.id, { maxHeight: 320 })} onOpen={() => openRecent(x)} onPlay={() => playRecent(x)} />
+                    <button className="recent-x" onClick={() => forgetRecent(x)} title="Remove" aria-label="Remove"><CloseGlyph /></button>
+                  </div>
+                ))}
               </div>
             </section>
           ))}
@@ -1224,7 +1231,7 @@ export default function Library({
               <section>
                 <div className="shelf-head"><h2>Top result</h2></div>
                 <div className={`topresult ${top.kind === 'Artist' ? 'round' : ''} ${hi === 0 ? 'hi' : ''}`}
-                  onClick={() => top.kind === 'Song' ? openAlbum({ Id: top.item.AlbumId, Name: top.item.Album }) : top.kind === 'Playlist' ? onOpenPlaylist(top.item) : open(top.item)}>
+                  onClick={() => { remember(query, hit(top.kind, top.item)); top.kind === 'Song' ? openAlbum({ Id: top.item.AlbumId, Name: top.item.Album }) : top.kind === 'Playlist' ? onOpenPlaylist(top.item) : open(top.item); }}>
                   <img src={jf.imageUrl(top.kind === 'Song' ? (top.item.AlbumId || top.item.Id) : top.item.Id, { maxHeight: 200 })} alt="" />
                   <div>
                     <h3>{top.item.Name}</h3>
@@ -1237,7 +1244,7 @@ export default function Library({
                       </div>
                     )}
                   </div>
-                  <button className="card-play" onClick={(e) => { e.stopPropagation(); top.kind === 'Song' ? player.playQueue(r.tracks, Math.max(0, r.tracks.findIndex((t) => t.Id === top.item.Id))) : playItem(top.item); }}>
+                  <button className="card-play" onClick={(e) => { e.stopPropagation(); remember(query, hit(top.kind, top.item)); top.kind === 'Song' ? player.playQueue(r.tracks, Math.max(0, r.tracks.findIndex((t) => t.Id === top.item.Id))) : playItem(top.item); }}>
                     <PlayGlyph />
                   </button>
                 </div>
@@ -1265,7 +1272,7 @@ export default function Library({
               <div className="grid">
                 {r.artists.map((a) => (
                   <Card key={a.Id} title={a.Name} subtitle="Artist" round
-                    image={jf.imageUrl(a.Id, { maxHeight: 320 })} onOpen={() => openArtist(a)} onPlay={() => startMix(a)} />
+                    image={jf.imageUrl(a.Id, { maxHeight: 320 })} onOpen={() => { remember(query, hit('Artist', a)); openArtist(a); }} onPlay={() => { remember(query, hit('Artist', a)); startMix(a); }} />
                 ))}
               </div>
             </section>
@@ -1276,7 +1283,7 @@ export default function Library({
               <div className="grid">
                 {r.albums.map((a) => (
                   <Card key={a.Id} title={a.Name} subtitle={`${a.ProductionYear ? a.ProductionYear + ' · ' : ''}${a.AlbumArtist || 'Album'}`}
-                    image={jf.imageUrl(a.Id, { maxHeight: 320 })} onOpen={() => openAlbum(a)} onPlay={() => playItem(a)} />
+                    image={jf.imageUrl(a.Id, { maxHeight: 320 })} onOpen={() => { remember(query, hit('Album', a)); openAlbum(a); }} onPlay={() => { remember(query, hit('Album', a)); playItem(a); }} />
                 ))}
               </div>
             </section>
@@ -1287,7 +1294,7 @@ export default function Library({
               <div className="grid">
                 {r.playlists.map((p) => (
                   <Card key={p.Id} title={p.Name} subtitle="Playlist"
-                    image={jf.imageUrl(p.Id, { maxHeight: 320 })} onOpen={() => onOpenPlaylist(p)} onPlay={() => playItem(p)} />
+                    image={jf.imageUrl(p.Id, { maxHeight: 320 })} onOpen={() => { remember(query, hit('Playlist', p)); onOpenPlaylist(p); }} onPlay={() => { remember(query, hit('Playlist', p)); playItem(p); }} />
                 ))}
               </div>
             </section>

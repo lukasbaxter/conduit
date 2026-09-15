@@ -802,6 +802,12 @@ input[type="range"]:disabled { opacity: .4; }
 .lyric-snippet.playable:hover mark, .lyric-snippet.playable:hover { color: var(--accent); }
 .pills.chips { margin-bottom: 12px; }
 .pills.recents { flex-wrap: wrap; }
+/* Recent searches: the items opened or played from a search, as cards with a
+   remove x in the corner (Spotify's desktop layout). */
+.recentcard { position: relative; }
+.recent-x { position: absolute; top: 4px; right: 4px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--fg-dim); background: rgba(0,0,0,.55); opacity: 0; transition: opacity .15s; z-index: 2; }
+.recentcard:hover .recent-x, .recent-x:focus-visible { opacity: 1; }
+.recent-x:hover { color: var(--fg); background: rgba(0,0,0,.8); }
 .placeholder-note code { background: var(--tint); padding: 1px 5px; border-radius: 3px; color: var(--fg); font-size: 12px; }
 
 /* Browse tiles (Spotify's "Browse all"): colour block, name top-left, cover
