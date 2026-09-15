@@ -1017,6 +1017,7 @@ wss.on('connection', (ws, req) => {
         break;
       }
 
+      case 'diag': { console.log('diag', self.name || self.id, JSON.stringify(msg.data || {})); break; }
       case 'prefs':
         if (msg.prefs && 'listenbrainz' in msg.prefs) lbTokens.set(self.uid, msg.prefs.listenbrainz && msg.prefs.listenbrainz.token ? msg.prefs.listenbrainz : null);
         for (const c of userMap(self.uid).values()) {

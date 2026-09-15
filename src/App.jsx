@@ -753,6 +753,23 @@ export default function App() {
     }
   };
 
+  // Phone viewport diagnostics, logged by the relay (installed web app layout
+  // issues cannot be reproduced in a simulator).
+  useEffect(() => {
+    if (!isMobile || !player.relay?._send) return undefined;
+    const report = () => {
+      try {
+        const tb = document.querySelector('.tabbar')?.getBoundingClientRect();
+        const probe = document.createElement('div'); probe.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom);'; document.body.appendChild(probe);
+        const sab = getComputedStyle(probe).height; probe.remove();
+        player.relay._send({ type: 'diag', data: { standalone: window.navigator.standalone ?? window.matchMedia('(display-mode: standalone)').matches, inner: [window.innerWidth, window.innerHeight], visual: [Math.round(window.visualViewport?.width || 0), Math.round(window.visualViewport?.height || 0), Math.round(window.visualViewport?.offsetTop || 0)], screen: [window.screen.width, window.screen.height], docH: document.documentElement.clientHeight, bodyH: document.body.getBoundingClientRect().height, sab, tabbar: tb ? [Math.round(tb.top), Math.round(tb.bottom), Math.round(tb.height)] : null, ua: navigator.userAgent.slice(0, 80) } });
+      } catch { /* diagnostics only */ }
+    };
+    const t = setTimeout(report, 3000);
+    window.addEventListener('resize', report);
+    return () => { clearTimeout(t); window.removeEventListener('resize', report); };
+  }, [isMobile, player.relay]);
+
   // Test hook: drive playback/transfer from the headless test. Gated on ?debug.
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.search.includes('debug')) {

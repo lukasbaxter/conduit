@@ -1384,9 +1384,10 @@ export function usePlayer(jf) {
     on('previoustrack', () => msRefs.current.previous());
     on('nexttrack', () => msRefs.current.next());
     on('seekto', (d) => { if (typeof d?.seekTime === 'number') msRefs.current.seek(d.seekTime); });
-    on('seekbackward', (d) => msRefs.current.seek(Math.max(0, positionRef.current - (d?.seekOffset || 10))));
-    on('seekforward', (d) => msRefs.current.seek(positionRef.current + (d?.seekOffset || 10)));
-    return () => { for (const a of ['play', 'pause', 'previoustrack', 'nexttrack', 'seekto', 'seekbackward', 'seekforward']) on(a, null); };
+    // No seekbackward/seekforward: with those set, iOS replaces the previous /
+    // next buttons on the lock screen with 15-second skips and greys them out.
+    on('seekbackward', null); on('seekforward', null);
+    return () => { for (const a of ['play', 'pause', 'previoustrack', 'nexttrack', 'seekto']) on(a, null); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.Id, device?.kind, !!relayTarget, jf]);
   useEffect(() => {
