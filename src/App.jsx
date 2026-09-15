@@ -755,6 +755,14 @@ export default function App() {
         const s = start; if (!s) return;
         s.target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: s.x, clientY: s.y }));
         try { navigator.vibrate?.(10); } catch { /* not supported */ }
+        // The finger lifting still produces the browser's synthesized
+        // mousedown/click, which would close the sheet (outside click) or
+        // play the row. Swallow them until the touch ends.
+        const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+        for (const type of ['mousedown', 'mouseup', 'click']) document.addEventListener(type, swallow, true);
+        const release = () => { setTimeout(() => { for (const type of ['mousedown', 'mouseup', 'click']) document.removeEventListener(type, swallow, true); }, 400); window.removeEventListener('touchend', release); window.removeEventListener('touchcancel', release); };
+        window.addEventListener('touchend', release, { passive: true });
+        window.addEventListener('touchcancel', release, { passive: true });
         cancel();
       }, 450);
     };

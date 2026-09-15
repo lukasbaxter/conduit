@@ -22,6 +22,8 @@ function fit(x, y, w, h, preferLeft = false) {
   return { x: nx, y: ny };
 }
 
+const hoverable = () => typeof window === 'undefined' || !window.matchMedia || window.matchMedia('(hover: hover)').matches;
+
 function Panel({ x, y, items, onClose, depth = 0, anchorRight = false, onEnter, onLeave, header = null }) {
   const ref = useRef(null);
   const [pos, setPos] = useState({ x, y, ready: false });
@@ -82,7 +84,8 @@ function Panel({ x, y, items, onClose, depth = 0, anchorRight = false, onEnter, 
               key={it.key || it.label}
               className={`ctxitem ${it.danger ? 'danger' : ''} ${open === i ? 'open' : ''}`}
               disabled={it.disabled}
-              onMouseEnter={(e) => (it.sub ? openSub(i, e.currentTarget) : setOpen(null))}
+              // Hover opens submenus on a pointer; on touch, tapping the row does (a synthetic enter opened them at once).
+              onMouseEnter={(e) => { if (!hoverable()) return; if (it.sub) openSub(i, e.currentTarget); else setOpen(null); }}
               onClick={(e) => {
                 e.stopPropagation();
                 if (it.sub) { openSub(i, e.currentTarget); return; }
