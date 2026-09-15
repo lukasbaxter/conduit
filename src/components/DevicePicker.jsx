@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { LOCAL_DEVICE } from '../player/usePlayer.js';
-import { usePhone } from './Player.jsx';
+import { usePhone, slideOut } from './Player.jsx';
 
 // Filled paths (Material-style) rather than strokes: the Cast glyph in
 // particular is unreadable as an outline at 18px.
@@ -49,13 +49,15 @@ export default function DevicePicker({ devices, active, onSelect, showName = fal
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const phone = usePhone();
+  // Phone: the sheet slides down before it unmounts.
+  const close = () => slideOut(ref.current?.querySelector('.devicemenu'), () => setOpen(false));
 
   useEffect(() => {
     if (!open) return undefined;
     const onDocClick = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target)) close();
     };
-    const onEsc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    const onEsc = (e) => { if (e.key === 'Escape') close(); };
     document.addEventListener('mousedown', onDocClick);
     document.addEventListener('keydown', onEsc);
     return () => {
@@ -100,7 +102,7 @@ export default function DevicePicker({ devices, active, onSelect, showName = fal
     <div className="devicepicker" ref={ref}>
       <button
         className={`devicebtn ${active.kind !== 'local' ? 'casting' : ''} ${showName ? 'with-name' : ''}`}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => (open ? close() : setOpen(true))}
         title={`Playing on ${active.name}`}
       >
         <ConnectIcon />
@@ -125,7 +127,7 @@ export default function DevicePicker({ devices, active, onSelect, showName = fal
           </div>
           {others.length > 0 && <div className="dm-others">Select another device</div>}
           {others.map((d) => (
-            <button key={d.id} className="deviceitem" onClick={() => { onSelect(d); setOpen(false); }} role="menuitem">
+            <button key={d.id} className="deviceitem" onClick={() => { onSelect(d); close(); }} role="menuitem">
               <DeviceIcon kind={d.kind} phone size={24} />
               <span className="deviceitem-text">
                 <span className="deviceitem-name">{labelFor(d)}</span>

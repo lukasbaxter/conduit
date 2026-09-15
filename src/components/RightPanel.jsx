@@ -30,7 +30,12 @@ function QueueRow({ track, jf, active, onPlay, onOpenArtist, onOpenAlbum, menuIt
   const [menu, setMenu] = useState(null);
   const art = jf.imageUrl(track.AlbumId || track.Id, { maxHeight: 80 });
   const artists = track.ArtistItems?.length ? track.ArtistItems : (track.Artists || []).map((n) => ({ Name: n }));
-  const closeMenu = () => slideOut('.ctxmenu-fixed', () => setMenu(null));
+  // A long-press opens the sheet while the finger is still down; the release
+  // then synthesizes a mousedown that would count as an outside tap and close
+  // it at once, so closes in the first half second are ignored.
+  const openedAt = useRef(0);
+  const closeMenu = () => { if (Date.now() - openedAt.current < 500) return; slideOut('.ctxmenu-fixed', () => setMenu(null)); };
+  const openMenu = (at) => { openedAt.current = Date.now(); setMenu(at); };
   const header = { image: art, title: track.Name, sub: artists.map((a) => a.Name).join(', ') || track.AlbumArtist || '' };
   // Phone drag: the lifted row follows the finger, the rows it passes shift out of its way.
   const liftStyle = lift ? (lift.dragging ? { transform: `translateY(${lift.dy}px)` } : lift.shift ? { transform: `translateY(${lift.shift}px)` } : undefined) : undefined;
@@ -41,7 +46,7 @@ function QueueRow({ track, jf, active, onPlay, onOpenArtist, onOpenAlbum, menuIt
       style={liftStyle}
       draggable={draggable}
       onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
-      onContextMenu={menuItems ? (e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); } : undefined}
+      onContextMenu={menuItems ? (e) => { e.preventDefault(); openMenu({ x: e.clientX, y: e.clientY }); } : undefined}
       onDoubleClick={onPlay}
     >
       <button className="qrow-art" onClick={onPlay} title="Play">
@@ -54,7 +59,7 @@ function QueueRow({ track, jf, active, onPlay, onOpenArtist, onOpenAlbum, menuIt
       </span>
       {/* Phone rows open their sheet on a long-press (Spotify); the ⋯ is desktop only. */}
       {menuItems && !phone && (
-        <button className="qrow-more" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setMenu({ x: r.right, y: r.bottom + 4, fromButton: true }); }} title="More options">
+        <button className="qrow-more" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); openMenu({ x: r.right, y: r.bottom + 4, fromButton: true }); }} title="More options">
           <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M3 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm6.5 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM16 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" /></svg>
         </button>
       )}
@@ -245,20 +250,24 @@ function Queue({ player, jf, onOpenArtist, onOpenAlbum, onLike, onAddTo, playlis
 }
 
 // Phone lyrics never show empty lines (Spotify): blanks are dropped, and a
-// synced gap of more than 5s becomes a "♪" line so an instrumental break
-// still has something to follow.
+// synced gap becomes a "♪" line so an instrumental break still has something
+// to follow. A gap counts when it is over 5s AND well over the song's usual
+// line spacing (2.5x the median), so slow songs do not fill up with notes.
 const GAP = 5;
 function phoneLines(lines) {
   if (!Array.isArray(lines)) return lines;
   const kept = lines.filter((l) => l && String(l.text || '').trim());
   const synced = kept.some((l) => l.start != null);
   if (!synced) return kept;
+  const spacings = kept.slice(1).map((l, i) => l.start - kept[i].start).filter((d) => Number.isFinite(d) && d > 0).sort((a, b) => a - b);
+  const median = spacings.length ? spacings[Math.floor(spacings.length / 2)] : GAP;
+  const threshold = Math.max(GAP, 2.5 * median);
   const out = [];
-  if (kept.length && kept[0].start > GAP) out.push({ text: '♪', start: 0, gap: true });
+  if (kept.length && kept[0].start > threshold) out.push({ text: '♪', start: 0, gap: true });
   kept.forEach((l, i) => {
     out.push(l);
     const next = kept[i + 1];
-    if (next && l.start != null && next.start != null && next.start - l.start > GAP) out.push({ text: '♪', start: l.start + Math.min(4, (next.start - l.start) / 2), gap: true });
+    if (next && l.start != null && next.start != null && next.start - l.start > threshold) out.push({ text: '♪', start: l.start + Math.min(5, (next.start - l.start) / 2), gap: true });
   });
   return out;
 }
