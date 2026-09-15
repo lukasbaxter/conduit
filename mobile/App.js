@@ -29,7 +29,9 @@ export default function App() {
         // Audio keeps playing with the screen off; inline (no forced fullscreen video UI).
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
-        allowsBackForwardNavigationGestures
+        // The page runs its own edge-swipe-back (a navigation stack of its own);
+        // the WebView's history gesture would swallow it and go nowhere.
+        allowsBackForwardNavigationGestures={false}
         // The web app decides the layout; tell it it is inside the shell.
         applicationNameForUserAgent="ConduitMobile/0.1"
         // Full-bleed under the notch and home indicator; the page pads with env(safe-area-inset-*).
