@@ -1354,6 +1354,51 @@ export function usePlayer(jf) {
   // lyrics work on a mirroring client (where `current` is null) too.
   const nowPlayingId = relayTarget?.itemId || current?.Id || null;
 
+  // Media Session: the lock screen / Control Center / AirPods controls on the
+  // phone (installed web app) and the desktop's media keys. Metadata and
+  // artwork follow the track this device is playing; the handlers route through
+  // the same functions the buttons use. Position state is pushed on each
+  // position change so the lock-screen scrubber tracks the song.
+  const msRefs = useRef({}); msRefs.current = { toggle, next, previous, seek };
+  useEffect(() => {
+    const ms = typeof navigator !== 'undefined' && navigator.mediaSession;
+    if (!ms) return undefined;
+    const local = !relayTarget && device?.kind === 'local' && current;
+    if (!local) { try { ms.metadata = null; ms.playbackState = 'none'; } catch { /* unsupported */ } return undefined; }
+    const artId = current.AlbumId || current.Id;
+    const artistId = current.ArtistItems?.[0]?.Id || current.AlbumArtists?.[0]?.Id || null;
+    const artwork = [];
+    if (jf && artId) for (const px of [256, 512, 1024]) artwork.push({ src: jf.imageUrl(artId, { maxHeight: px }), sizes: `${px}x${px}`, type: 'image/jpeg' });
+    else if (jf && artistId) artwork.push({ src: jf.imageUrl(artistId, { maxHeight: 512 }), sizes: '512x512', type: 'image/jpeg' });
+    try {
+      ms.metadata = new window.MediaMetadata({
+        title: current.Name || 'Unknown title',
+        artist: current.Artists?.join(', ') || current.AlbumArtist || '',
+        album: current.Album || '',
+        artwork,
+      });
+    } catch { /* MediaMetadata unsupported */ }
+    const on = (action, fn) => { try { ms.setActionHandler(action, fn); } catch { /* action unsupported */ } };
+    on('play', () => msRefs.current.toggle());
+    on('pause', () => msRefs.current.toggle());
+    on('previoustrack', () => msRefs.current.previous());
+    on('nexttrack', () => msRefs.current.next());
+    on('seekto', (d) => { if (typeof d?.seekTime === 'number') msRefs.current.seek(d.seekTime); });
+    on('seekbackward', (d) => msRefs.current.seek(Math.max(0, positionRef.current - (d?.seekOffset || 10))));
+    on('seekforward', (d) => msRefs.current.seek(positionRef.current + (d?.seekOffset || 10)));
+    return () => { for (const a of ['play', 'pause', 'previoustrack', 'nexttrack', 'seekto', 'seekbackward', 'seekforward']) on(a, null); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.Id, device?.kind, !!relayTarget, jf]);
+  useEffect(() => {
+    const ms = typeof navigator !== 'undefined' && navigator.mediaSession;
+    if (!ms || relayTarget || device?.kind !== 'local' || !current) return;
+    try { ms.playbackState = playing ? 'playing' : 'paused'; } catch { /* unsupported */ }
+    if (duration > 0 && typeof ms.setPositionState === 'function') {
+      try { ms.setPositionState({ duration, playbackRate: 1, position: Math.min(Math.max(0, position || 0), duration) }); } catch { /* invalid state */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, Math.floor(position || 0), duration, current?.Id, device?.kind, !!relayTarget]);
+
   // Take over as the active player and resume a handed-off track locally at the
   // given position. Bypasses playQueue's active-player routing on purpose: when
   // a transfer arrives, THIS client is not yet the active player (the sender
