@@ -1392,6 +1392,8 @@ export function usePlayer(jf) {
   // Run a command another client routed to us.
   const executeCommand = useCallback(async (cmd) => {
     if (!cmd) return;
+    // Breadcrumb in the device trace: what another client asked of us.
+    window.conduit?.debug?.(`command ${cmd.action} tracks=${cmd.trackIds?.length ?? '-'} index=${cmd.index ?? '-'} pos=${cmd.position != null ? Math.round(cmd.position) : '-'} playing=${cmd.playing ?? '-'} device=${cmd.deviceId || '-'} current=${deviceRef.current?.name || '-'}`);
     if (cmd.action === 'transfer' && jf) {
       // Another client handed the active session to us. Claim immediately so we
       // stop routing controls away, then resume the track at its playhead.
@@ -1425,7 +1427,9 @@ export function usePlayer(jf) {
           const at = Math.max(0, tracks.findIndex((t) => t.Id === chosenId));
           setQueue(tracks); queueRef.current = tracks;
           setIndex(at); indexRef.current = at;
-        } catch (e) { setError(`Could not take over playback: ${e.message}`); setPlaying(false); }
+        } catch (e) { window.conduit?.debug?.(`transfer FAILED: ${e.message}`); setError(`Could not take over playback: ${e.message}`); setPlaying(false); }
+      } else {
+        window.conduit?.debug?.('transfer carried no tracks: nothing to start');
       }
     } else if (cmd.action === 'play' && jf && Array.isArray(cmd.trackIds) && cmd.trackIds.length) {
       // Start the chosen song the moment ITS record is here; the rest of the

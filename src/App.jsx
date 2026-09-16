@@ -399,6 +399,11 @@ export default function App() {
 
   // Relay: register this client, surface the user's other clients as players,
   // and execute commands routed to us. Audio never touches the relay.
+  // The relay lives for the whole login, so its callbacks must reach the
+  // CURRENT player functions, not the ones of the render that opened it
+  // (a hot reload of usePlayer left the desktop running the old command
+  // handler until a restart).
+  const playerRef = useRef(player); playerRef.current = player;
   useEffect(() => {
     if (!jf) return undefined;
     const relay = new Relay({
@@ -406,10 +411,10 @@ export default function App() {
       name: (typeof window !== 'undefined' && window.conduit?.deviceName) || (window.conduit ? 'Conduit Desktop' : 'This Browser'),
       kind: window.conduit ? 'desktop' : 'web',
       canPlay: true,
-      onRoster: (r) => player.applyRoster(r),
-      onCommand: (cmd) => player.executeCommand(cmd),
-      onQueue: (from, q) => player.applyRemoteQueue(from, q),
-      onSession: (s) => player.applySession(s),
+      onRoster: (r) => playerRef.current.applyRoster(r),
+      onCommand: (cmd) => playerRef.current.executeCommand(cmd),
+      onQueue: (from, q) => playerRef.current.applyRemoteQueue(from, q),
+      onSession: (s) => playerRef.current.applySession(s),
       onPrefs: (p) => {
         const patch = { ...p }; delete patch._libraryChanged;
         setPrefs((cur) => {
