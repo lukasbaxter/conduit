@@ -40,12 +40,12 @@ function startRecorder(shadow) {
   const frames = [];
   let havePrev = false;
   const timer = setInterval(() => {
-    if (sh.loading || sh.el.paused || !sh.el.src) { havePrev = false; return; }
+    if (sh.loading || sh.paused) { havePrev = false; return; }
     an.getByteFrequencyData(cur);
     if (havePrev) {
       let f = 0;
       for (let k = 1; k < top; k++) { const d = cur[k] - prev[k]; if (d > 0) f += d; }
-      frames.push({ t: sh.base + sh.el.currentTime, f });
+      frames.push({ t: sh.position, f });
     }
     prev.set(cur); havePrev = true;
   }, 10);

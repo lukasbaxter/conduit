@@ -6,6 +6,20 @@ import { useLiked } from '../api/likes.js';
 // True on the phone layout (the same breakpoint as app.css's phone block), so
 // components can gate phone-only markup without a prop threaded from App.
 const PHONE_MQ = '(max-width: 760px)';
+// Touch screens that are not phones (the iPad runs the desktop layout): no
+// hover to reveal the play button and no double-tap, so a tap on the row
+// plays there too.
+export function useTouch() {
+  const [touch, setTouch] = useState(() => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(pointer: coarse)');
+    const on = (e) => setTouch(e.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return touch;
+}
+
 export function usePhone() {
   const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(PHONE_MQ).matches);
   useEffect(() => {
@@ -154,6 +168,7 @@ export default function TrackRow({
   // {x, y} while the context menu is open (from the dots button or a right-click).
   const [menu, setMenu] = useState(null);
   const phone = usePhone();
+  const touch = useTouch();
   // From the like store, never from the row's UserData (which can be stale).
   const liked = useLiked(track.Id);
   const excluded = track.UserData?.Likes === false;
@@ -193,9 +208,10 @@ export default function TrackRow({
       onDoubleClick={onPlay}
       onContextMenu={openMenuAt}
       // Phone: the number / play button is hidden, so a tap on the row itself
-      // plays (Spotify). Buttons, links, the art and lyric snippets keep their
-      // own taps. Desktop stays double-click.
-      onClick={phone ? (e) => { if (e.target.closest?.('button, .rowlink, .trackrow-art, .lyric-snippet, .ctxmenu')) return; (active && onToggle ? onToggle : onPlay)?.(); } : undefined}
+      // plays (Spotify); the same on any touch screen (iPad), where there is
+      // no hover or double-click. Buttons, links, the art and lyric snippets
+      // keep their own taps. Mouse stays double-click.
+      onClick={phone || touch ? (e) => { if (e.target.closest?.('button, .rowlink, .trackrow-art, .lyric-snippet, .ctxmenu')) return; (active && onToggle ? onToggle : onPlay)?.(); } : undefined}
     >
       <button
         className="trackrow-n"

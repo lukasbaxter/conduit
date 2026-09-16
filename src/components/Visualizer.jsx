@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { paletteColors } from '../api/colors.js';
 import Calibrate from './Calibrate.jsx';
+import { createShadow } from '../api/shadowStream.js';
 
 // The visualizer is a graphic-EQ family (audioMotion-analyzer, the spectrum
 // engine Feishin ships). Settings come from the full-screen tab's ⋯ menu and
@@ -8,15 +9,16 @@ import Calibrate from './Calibrate.jsx';
 //
 // Audio source: the local <audio> element when this device plays. When the
 // sound is on a speaker or another client, a silent shadow copy of the same
-// stream is played in step with the session's playhead and analysed instead
-// (its graph has no destination, so nothing is heard twice). `offset` is the
-// speaker's measured output delay (seconds, from the calibration): the shadow
-// runs that far behind the reported playhead so the bars match the sound.
+// stream is decoded and played in step with the session's playhead and
+// analysed instead (src/api/shadowStream.js: buffer sources into a node with
+// no path to the speakers, so nothing is heard twice; a captured <audio> was
+// audible on the iPad). `offset` is the speaker's measured output delay
+// (seconds, from the calibration): the shadow runs that far behind the
+// reported playhead so the bars match the sound.
 // iOS only lets an AudioContext run when it was resumed inside a user
-// gesture, and a media element captured by a SUSPENDED context plays out
-// loud through the speaker instead of into the graph. So the shadow stream's
-// context is a shared one that the visualizer button unlocks on tap, and the
-// shadow element is never started unless that context is running.
+// gesture, so the shadow's context is a shared one that the visualizer
+// button unlocks on tap, and the shadow is never started unless that
+// context is running.
 let sharedCtx = null;
 export function unlockShadowAudio() {
   const Ctx = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
@@ -47,7 +49,7 @@ export default function Visualizer({ player, active, jf, settings, offset = 0, c
   const boxRef = useRef(null);
   const stageRef = useRef(null);
   const amRef = useRef(null);
-  const shadowRef = useRef(null); // { el, ctx, source, id }
+  const shadowRef = useRef(null); // createShadow() of the shared context
   const [state, setState] = useState('loading'); // loading | ready | error
   // Sound comes out of this client only when it is the active player on its
   // own local output. Mirroring another client (a browser playing while you
@@ -60,15 +62,12 @@ export default function Visualizer({ player, active, jf, settings, offset = 0, c
 
   const shadow = () => {
     if (shadowRef.current) return shadowRef.current;
-    const el = new Audio(); el.crossOrigin = 'anonymous'; el.preload = 'auto';
     const ctx = unlockShadowAudio();
-    const source = ctx.createMediaElementSource(el);
-    // base: the track time the current stream starts at; lead: how far ahead
-    // of the playhead to ask for, to cover the transcode's start-up (learned).
-    shadowRef.current = { el, ctx, source, id: null, base: 0, lead: 1.0, loading: false };
+    if (!ctx) return null;
+    shadowRef.current = createShadow(ctx);
     return shadowRef.current;
   };
-  useEffect(() => () => { const sh = shadowRef.current; if (sh) { sh.el.pause(); sh.el.src = ''; try { sh.source.disconnect(); } catch { /* not connected */ } shadowRef.current = null; } }, []);
+  useEffect(() => () => { shadowRef.current?.close(); shadowRef.current = null; }, []);
   // The session playhead as a live clock: the position the player last
   // reported plus the time since. The sync tick below reads THIS, never a
   // position captured when the effect ran.
@@ -80,46 +79,39 @@ export default function Visualizer({ player, active, jf, settings, offset = 0, c
   // the delay against this.
   const reported = (at = Date.now()) => { const c = clockRef.current; return c.pos + (c.playing ? (at - c.at) / 1000 : 0); };
   useEffect(() => {
-    if (!active || local) { const sh = shadowRef.current; if (sh) sh.el.pause(); return undefined; }
+    if (!active || local) { shadowRef.current?.stop(); return undefined; }
     const sh = shadow();
+    if (!sh) return undefined;
     // What is coming out of the speaker right now: reported minus its delay.
     const want = () => reported() - offsetRef.current;
     // Seeking the ORIGINAL file is not accurate on VBR rips, so every (re)sync
     // is a fresh transcode that ffmpeg starts exactly at `base`; from then on
-    // the element's clock is exact and small drift is taken out with
-    // playbackRate instead of another seek.
+    // the stream's clock is exact (frame-counted), and drift beyond what the
+    // reported playhead jitters by is another fresh transcode.
     const load = () => {
       const at = Math.max(0, want() + sh.lead);
-      sh.base = at; sh.id = trackId; sh.loading = true;
-      sh.el.src = jf.transcodeUrl(trackId, { codec: 'mp3', bitrate: 192000, startAt: at });
-      sh.el.playbackRate = 1;
-      if (clockRef.current.playing && sh.ctx.state === 'running') sh.el.play().catch(() => {});
+      sh.id = trackId;
+      sh.load(jf.transcodeUrl(trackId, { codec: 'mp3', bitrate: 192000, startAt: at }), at);
     };
-    const onPlaying = () => {
-      if (!sh.loading) return;
-      sh.loading = false;
+    sh.onPlaying(() => {
       // Behind at start-up (drift < 0) means ask further ahead next time.
-      const drift = (sh.base + sh.el.currentTime) - want();
+      const drift = sh.position - want();
       sh.lead = Math.min(3, Math.max(0.2, sh.lead - drift));
-    };
+    });
     const tick = () => {
       const c = clockRef.current;
-      if (!c.playing) { if (!sh.el.paused) sh.el.pause(); return; }
-      if (sh.id !== trackId || !sh.el.src) { load(); return; }
-      if (sh.ctx.state !== 'running') { sh.ctx.resume?.().catch(() => {}); return; } // never audible: wait for the unlock
-      if (sh.el.paused) sh.el.play().catch(() => {});
+      if (!c.playing) { if (!sh.paused) sh.stop(); return; }
+      if (sh.ctx.state !== 'running') { sh.ctx.resume?.().catch(() => {}); return; } // never started before the unlock
+      if (sh.id !== trackId || sh.paused) { load(); return; }
       if (sh.loading) return;
-      const drift = (sh.base + sh.el.currentTime) - want();
-      if (Math.abs(drift) > 2) { load(); return; }
-      // Ahead -> slow down, behind -> speed up; inaudible, it is silent anyway.
-      sh.el.playbackRate = Math.abs(drift) < 0.04 ? 1 : Math.min(1.25, Math.max(0.8, 1 - drift * 0.6));
+      const drift = sh.position - want();
+      if (Math.abs(drift) > 0.6) load();
     };
-    sh.el.addEventListener('playing', onPlaying);
     // A new offset is a jump, not drift: restart the stream at the new spot.
     if (sh.offset !== offsetRef.current) { sh.offset = offsetRef.current; sh.id = null; }
     tick();
     const t = setInterval(tick, 250);
-    return () => { clearInterval(t); sh.el.removeEventListener('playing', onPlaying); };
+    return () => { clearInterval(t); sh.onPlaying(null); };
   }, [active, local, trackId, player.playing, offset]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const graph = () => { const wa = local ? player.webAudio() : shadow(); wa?.ctx?.resume?.(); return wa; };
