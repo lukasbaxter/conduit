@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { keepAlive } from './keepalive.js';
 
 // The local device is always present and is not discovered over mDNS. Named
 // for the runtime: the desktop app IS the computer, the PWA is one web player
@@ -1354,52 +1355,6 @@ export function usePlayer(jf) {
   // lyrics work on a mirroring client (where `current` is null) too.
   const nowPlayingId = relayTarget?.itemId || current?.Id || null;
 
-  // Media Session: the lock screen / Control Center / AirPods controls on the
-  // phone (installed web app) and the desktop's media keys. Metadata and
-  // artwork follow the track this device is playing; the handlers route through
-  // the same functions the buttons use. Position state is pushed on each
-  // position change so the lock-screen scrubber tracks the song.
-  const msRefs = useRef({}); msRefs.current = { toggle, next, previous, seek };
-  useEffect(() => {
-    const ms = typeof navigator !== 'undefined' && navigator.mediaSession;
-    if (!ms) return undefined;
-    const local = !relayTarget && device?.kind === 'local' && current;
-    if (!local) { try { ms.metadata = null; ms.playbackState = 'none'; } catch { /* unsupported */ } return undefined; }
-    const artId = current.AlbumId || current.Id;
-    const artistId = current.ArtistItems?.[0]?.Id || current.AlbumArtists?.[0]?.Id || null;
-    const artwork = [];
-    if (jf && artId) for (const px of [256, 512, 1024]) artwork.push({ src: jf.imageUrl(artId, { maxHeight: px }), sizes: `${px}x${px}`, type: 'image/jpeg' });
-    else if (jf && artistId) artwork.push({ src: jf.imageUrl(artistId, { maxHeight: 512 }), sizes: '512x512', type: 'image/jpeg' });
-    try {
-      ms.metadata = new window.MediaMetadata({
-        title: current.Name || 'Unknown title',
-        artist: current.Artists?.join(', ') || current.AlbumArtist || '',
-        album: current.Album || '',
-        artwork,
-      });
-    } catch { /* MediaMetadata unsupported */ }
-    const on = (action, fn) => { try { ms.setActionHandler(action, fn); } catch { /* action unsupported */ } };
-    on('play', () => msRefs.current.toggle());
-    on('pause', () => msRefs.current.toggle());
-    on('previoustrack', () => msRefs.current.previous());
-    on('nexttrack', () => msRefs.current.next());
-    on('seekto', (d) => { if (typeof d?.seekTime === 'number') msRefs.current.seek(d.seekTime); });
-    // No seekbackward/seekforward: with those set, iOS replaces the previous /
-    // next buttons on the lock screen with 15-second skips and greys them out.
-    on('seekbackward', null); on('seekforward', null);
-    return () => { for (const a of ['play', 'pause', 'previoustrack', 'nexttrack', 'seekto']) on(a, null); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.Id, device?.kind, !!relayTarget, jf]);
-  useEffect(() => {
-    const ms = typeof navigator !== 'undefined' && navigator.mediaSession;
-    if (!ms || relayTarget || device?.kind !== 'local' || !current) return;
-    try { ms.playbackState = playing ? 'playing' : 'paused'; } catch { /* unsupported */ }
-    if (duration > 0 && typeof ms.setPositionState === 'function') {
-      try { ms.setPositionState({ duration, playbackRate: 1, position: Math.min(Math.max(0, position || 0), duration) }); } catch { /* invalid state */ }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, Math.floor(position || 0), duration, current?.Id, device?.kind, !!relayTarget]);
-
   // Take over as the active player and resume a handed-off track locally at the
   // given position. Bypasses playQueue's active-player routing on purpose: when
   // a transfer arrives, THIS client is not yet the active player (the sender
@@ -1593,6 +1548,58 @@ export function usePlayer(jf) {
   const shownVolume = relayTarget && typeof relayTarget.volume === 'number' ? relayTarget.volume : volume;
   const shownRepeat = relayTarget ? (relayTarget.repeat || 'off') : repeat;
   const shownShuffle = relayTarget ? (relayTarget.shuffle || 'off') : shuffle;
+
+  // Media Session: the lock screen / Control Center / AirPods controls on the
+  // phone (installed web app) and the desktop's media keys / Now Playing.
+  // Shown for whatever the SESSION is playing: this device's own track, or the
+  // one playing on another client or a speaker driven from here (then a silent
+  // keep-alive element stands in for the media the OS wants to see). The
+  // handlers route through the same functions the buttons use, which reach
+  // the active player. Position state is pushed on each position change so
+  // the lock-screen scrubber tracks the song.
+  const msLocal = !relayTarget && device?.kind === 'local' && !!current;
+  const msRemote = !msLocal && !!nowPlaying;
+  const msRefs = useRef({}); msRefs.current = { toggle, next, previous, seek };
+  useEffect(() => {
+    const ms = typeof navigator !== 'undefined' && navigator.mediaSession;
+    if (!ms) return undefined;
+    if (!msLocal && !msRemote) { try { ms.metadata = null; ms.playbackState = 'none'; } catch { /* unsupported */ } return undefined; }
+    const artwork = [];
+    if (jf && nowPlaying.artId) for (const px of [256, 512, 1024]) artwork.push({ src: jf.imageUrl(nowPlaying.artId, { maxHeight: px }), sizes: `${px}x${px}`, type: 'image/jpeg' });
+    else if (nowPlaying.artUrl) artwork.push({ src: nowPlaying.artUrl, sizes: '512x512', type: 'image/jpeg' });
+    else if (jf && nowPlaying.artistId) artwork.push({ src: jf.imageUrl(nowPlaying.artistId, { maxHeight: 512 }), sizes: '512x512', type: 'image/jpeg' });
+    try {
+      ms.metadata = new window.MediaMetadata({
+        title: nowPlaying.title || 'Unknown title',
+        artist: nowPlaying.artist || '',
+        album: relayTarget?.album || current?.Album || '',
+        artwork,
+      });
+    } catch { /* MediaMetadata unsupported */ }
+    const on = (action, fn) => { try { ms.setActionHandler(action, fn); } catch { /* action unsupported */ } };
+    on('play', () => msRefs.current.toggle());
+    on('pause', () => msRefs.current.toggle());
+    on('previoustrack', () => msRefs.current.previous());
+    on('nexttrack', () => msRefs.current.next());
+    on('seekto', (d) => { if (typeof d?.seekTime === 'number') msRefs.current.seek(d.seekTime); });
+    // No seekbackward/seekforward: with those set, iOS replaces the previous /
+    // next buttons on the lock screen with 15-second skips and greys them out.
+    on('seekbackward', null); on('seekforward', null);
+    return () => { for (const a of ['play', 'pause', 'previoustrack', 'nexttrack', 'seekto']) on(a, null); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nowPlaying?.itemId, nowPlaying?.title, nowPlaying?.artId, msLocal, msRemote, jf]);
+  useEffect(() => {
+    const ms = typeof navigator !== 'undefined' && navigator.mediaSession;
+    // The keep-alive only stands in while the sound is elsewhere; this
+    // device's own playback carries the session by itself.
+    keepAlive(msRemote && shownPlaying);
+    if (!ms || (!msLocal && !msRemote)) return;
+    try { ms.playbackState = shownPlaying ? 'playing' : 'paused'; } catch { /* unsupported */ }
+    if (shownDuration > 0 && typeof ms.setPositionState === 'function') {
+      try { ms.setPositionState({ duration: shownDuration, playbackRate: 1, position: Math.min(Math.max(0, shownPosition || 0), shownDuration) }); } catch { /* invalid state */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shownPlaying, Math.floor(shownPosition || 0), shownDuration, nowPlaying?.itemId, msLocal, msRemote]);
   // The session's queue: the active player's published one while mirroring.
   // Its index only counts when it points at the track that is actually
   // playing (the queue and now-playing arrive as separate messages).
