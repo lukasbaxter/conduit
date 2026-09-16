@@ -71,7 +71,11 @@ export function keepAlive(on, position = 0) {
       if (a.currentTime !== lastT) { if (lastT >= 0) moving = true; if (frozen && lastT >= 0) { frozen = false; note(`moving again at ${a.currentTime.toFixed(1)}`); } lastT = a.currentTime; lastAt = now; }
       else if (!frozen && lastAt && now - lastAt > 3000) { frozen = true; note(`frozen at ${a.currentTime.toFixed(1)}`); }
     }
-    if (moving && !frozen && Math.abs((a.currentTime || 0) - p) > 4) {
+    // In the background (lock screen) the relay's position reports arrive
+    // late and bunched, so the element's own clock is the better one there:
+    // only a track change (> 15 s apart) moves it; in the foreground 4 s.
+    const tolerance = typeof document !== 'undefined' && document.hidden ? 15 : 4;
+    if (moving && !frozen && Math.abs((a.currentTime || 0) - p) > tolerance) {
       note(`seek ${a.currentTime.toFixed(1)} -> ${p.toFixed(1)}`);
       try { a.currentTime = p; } catch { /* not seekable */ }
       lastT = -1; lastAt = 0;
