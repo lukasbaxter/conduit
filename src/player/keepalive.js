@@ -15,7 +15,7 @@
 // on the iPhone the clock froze at every seek target (mp3 and WAV alike), so
 // each re-sync was another snap to 0. Should the clock ever freeze again the
 // element is left alone after that and setPositionState carries the time.
-let el = null, unlocked = false, wanted = false, armed = false, pending = null, frozen = false, lastT = -1, lastAt = 0;
+let el = null, unlocked = false, wanted = false, armed = false, frozen = false, lastT = -1, lastAt = 0;
 const log = [];
 const note = (m) => { log.push(`${Math.round(performance.now() / 1000)}s${typeof document !== 'undefined' && document.hidden ? ' bg' : ''} ${m}`); if (log.length > 12) log.shift(); };
 
@@ -24,8 +24,12 @@ export const KEEPALIVE_SECONDS = 20 * 60;
 function element() {
   if (el) return el;
   el = new Audio(new URL('keepalive.wav', document.baseURI).href);
-  el.loop = true; el.preload = 'auto'; el.setAttribute('playsinline', '');
-  el.addEventListener('loadedmetadata', () => { note(`meta dur=${Math.round(el.duration)}`); if (pending != null) { const p = pending; pending = null; try { el.currentTime = p; } catch { /* not seekable */ } } });
+  el.preload = 'auto'; el.setAttribute('playsinline', '');
+  // No loop attribute and no seek before the first play: on the iPhone a
+  // seek applied at loadedmetadata left the clock frozen for good. The
+  // element starts at 0, and is moved only once it is seen advancing.
+  el.addEventListener('loadedmetadata', () => note(`meta dur=${Math.round(el.duration)}`));
+  el.addEventListener('ended', () => { if (wanted) { el.currentTime = 0; el.play().catch(() => {}); } });
   el.addEventListener('error', () => note(`error ${el.error?.code}`));
   el.addEventListener('playing', () => note(`playing t=${el.currentTime.toFixed(1)}`));
   el.addEventListener('pause', () => note('pause'));
@@ -58,15 +62,18 @@ export function keepAlive(on, position = 0) {
   if (wanted) {
     clearTimeout(pauseTimer); pauseTimer = null;
     const p = Math.max(0, (position || 0) % KEEPALIVE_SECONDS);
-    // A clock that has not moved in 3 s of "playing" is frozen: no more seeks.
+    // Seek only a clock that is seen moving (two different readings while
+    // playing); one that has not moved in 3 s of "playing" is frozen and is
+    // left alone until it moves again. setPositionState carries the time.
     const now = performance.now();
+    let moving = false;
     if (!a.paused && a.readyState >= 3) {
-      if (a.currentTime !== lastT) { if (frozen && lastT >= 0) { frozen = false; note(`moving again at ${a.currentTime.toFixed(1)}`); } lastT = a.currentTime; lastAt = now; }
+      if (a.currentTime !== lastT) { if (lastT >= 0) moving = true; if (frozen && lastT >= 0) { frozen = false; note(`moving again at ${a.currentTime.toFixed(1)}`); } lastT = a.currentTime; lastAt = now; }
       else if (!frozen && lastAt && now - lastAt > 3000) { frozen = true; note(`frozen at ${a.currentTime.toFixed(1)}`); }
     }
-    if (!frozen && Math.abs((a.currentTime || 0) - p) > 4) {
+    if (moving && !frozen && Math.abs((a.currentTime || 0) - p) > 4) {
       note(`seek ${a.currentTime.toFixed(1)} -> ${p.toFixed(1)}`);
-      if (a.readyState >= 1) { try { a.currentTime = p; } catch { pending = p; } } else pending = p;
+      try { a.currentTime = p; } catch { /* not seekable */ }
       lastT = -1; lastAt = 0;
     }
     if (a.paused) a.play().then(() => { unlocked = true; }).catch((e) => { note(`play ${e?.name}`); if (!unlocked) arm(); });
