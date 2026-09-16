@@ -1,8 +1,8 @@
 # Conduit — session handoff (2026-09-12)
 
-Pick-up notes for the next session. Open: the HTTPS/DNS fix (still blocking the
-phone PWA), the rest of the Liked Songs audit (#2.2-2.5), and a few library
-leftovers listed at the bottom.
+Pick-up notes for the next session. Open: the rest of the Liked Songs audit
+(#2.2-2.5) and a few library leftovers listed at the bottom. (HTTPS is DONE,
+see §1.)
 
 ## 2026-09-15 (11:00-) -- search everywhere + discovery queue
 - **Search everywhere** (Conduit): "Everywhere" chip on the search page -> relay `/gsearch?q=` -> Music Requests `/api/search` (Spotify albums/EPs/singles), each matched to a library album via Meili (exact title, or base title when unqualified) and to its request state. In-library rows open the album; the rest carry Request / Requested / Downloading / Added (same `requestRelease` as the artist page). Relay redeploy: `rsync relay/server.js server:/home/admin/services/conduit-relay/ && ssh server 'cd /home/admin/services/conduit-relay && sudo docker compose up -d --build'`.
@@ -181,7 +181,14 @@ Everything below is deployed (web :8748 / music.baxtergroup.io, relay redeployed
 
 ---
 
-## 1. OPEN — browser no longer served over HTTPS (decision needed)
+## 1. DONE (2026-09-11, re-verified 2026-09-16) — HTTPS on the origin
+
+Path B was taken: real Let's Encrypt cert on .85 (`music.conf` :443 vhost,
+`/etc/letsencrypt/renewal-hooks/deploy/music-nginx.sh` copies it into the nginx
+container + reloads; `certbot renew --dry-run` passes; expires 2026-12-11, timer
+renews at 30 days). Verified 2026-09-16: ssl_verify=0, full chain served, :80
+redirects, `wss://…/relay` upgrades (101), the iOS 18 installed PWA has been
+connecting to the relay in standalone mode. The diagnosis below is history.
 
 ### Diagnosis (confirmed)
 `music.baxtergroup.io` is **no longer proxied through Cloudflare** (grey cloud /
