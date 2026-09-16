@@ -80,8 +80,21 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
   const scrubHold = useRef(null);
   const onScrubStart = () => { clearTimeout(scrubHold.current); setScrub((s) => (s == null ? Math.min(player.position || 0, player.duration || 0) : s)); };
   const onScrubMove = (e) => setScrub(Number(e.target.value));
+  // Touch: the finger's own x drives the value. iOS's native range drag only
+  // sometimes follows a finger that started on the thumb (it lit up, the
+  // thumb stayed), so the position is taken from the touch itself and the
+  // seek uses the last touched value, never the input's possibly stale one.
+  const touchVal = useRef(null);
+  const valueAtTouch = (e) => {
+    const t = e.touches?.[0] || e.changedTouches?.[0]; if (!t) return null;
+    const r = e.currentTarget.getBoundingClientRect(); const max = player.duration || 0;
+    return r.width > 0 ? Math.max(0, Math.min(max, ((t.clientX - r.left) / r.width) * max)) : null;
+  };
+  const onScrubTouchStart = (e) => { onScrubStart(); const v = valueAtTouch(e); if (v != null) { touchVal.current = v; setScrub(v); } };
+  const onScrubTouchMove = (e) => { const v = valueAtTouch(e); if (v != null) { touchVal.current = v; setScrub(v); } };
   const onScrubEnd = (e) => {
-    const v = Number(e.target.value);
+    const v = touchVal.current ?? Number(e.target.value);
+    touchVal.current = null;
     setScrub(v); player.seek(v);
     clearTimeout(scrubHold.current);
     scrubHold.current = setTimeout(() => setScrub(null), player.mirroring ? 1500 : 250);
@@ -234,7 +247,7 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
         <div className="fs-seek">
           <span>{fmt(scrub ?? (position || 0))}</span>
           <input type="range" min="0" max={Math.max(1, duration || 0)} value={Math.min(scrub ?? (position || 0), duration || 0)}
-            onChange={onScrubMove} onInput={onScrubMove} onPointerDown={onScrubStart} onTouchStart={onScrubStart} onKeyDown={onScrubStart}
+            onChange={onScrubMove} onInput={onScrubMove} onPointerDown={onScrubStart} onTouchStart={onScrubTouchStart} onTouchMove={onScrubTouchMove} onKeyDown={onScrubStart}
             onPointerUp={onScrubEnd} onTouchEnd={onScrubEnd} onKeyUp={onScrubEnd}
             style={{ '--pct': `${duration ? ((scrub ?? position) / duration) * 100 : 0}%` }} {...seekHover} />
           <span>{phone ? `-${fmt(Math.max(0, (duration || 0) - (scrub ?? (position || 0))))}` : fmt(duration || 0)}</span>

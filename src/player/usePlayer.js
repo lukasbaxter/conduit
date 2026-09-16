@@ -1592,7 +1592,7 @@ export function usePlayer(jf) {
     const ms = typeof navigator !== 'undefined' && navigator.mediaSession;
     // The keep-alive only stands in while the sound is elsewhere; this
     // device's own playback carries the session by itself.
-    keepAlive(msRemote && shownPlaying);
+    keepAlive(msRemote && shownPlaying, shownPosition);
     if (!ms || (!msLocal && !msRemote)) return;
     try { ms.playbackState = shownPlaying ? 'playing' : 'paused'; } catch { /* unsupported */ }
     if (shownDuration > 0 && typeof ms.setPositionState === 'function') {

@@ -8,15 +8,22 @@
 // it can be started at any time.
 let el = null, unlocked = false, wanted = false, armed = false;
 
+// One hand-made MPEG-2 Layer III frame: 8 kbps mono at 16 kHz, no main data
+// (part2_3_length 0), so it decodes to exactly 576 zero samples = 36 ms.
+// Repeated for an hour that is 3.6 MB of file and a timeline the OS can seek
+// in: the lock screen takes its elapsed time from the element as well as
+// from setPositionState, so a 1-second loop showed the right time and then
+// snapped to 0 every second. The element is kept at the remote position.
+const FRAME = Uint8Array.from([0xFF, 0xF3, 0x18, 0xC4, ...new Array(32).fill(0)]);
+const FRAME_SECONDS = 576 / 16000;
+export const KEEPALIVE_SECONDS = 3600;
+
 function element() {
   if (el) return el;
-  // 1 s of 8 kHz 16-bit mono silence in a WAV container.
-  const n = 8000, data = new ArrayBuffer(44 + n * 2), v = new DataView(data);
-  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
-  str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
-  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true);
-  v.setUint32(28, 16000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, n * 2, true);
-  el = new Audio(URL.createObjectURL(new Blob([data], { type: 'audio/wav' })));
+  const frames = Math.round(KEEPALIVE_SECONDS / FRAME_SECONDS);
+  const data = new Uint8Array(frames * FRAME.length);
+  for (let i = 0; i < frames; i++) data.set(FRAME, i * FRAME.length);
+  el = new Audio(URL.createObjectURL(new Blob([data], { type: 'audio/mpeg' })));
   el.loop = true; el.preload = 'auto'; el.setAttribute('playsinline', '');
   if (typeof window !== 'undefined') window.__conduitKeepAlive = el; // probes
   return el;
@@ -33,11 +40,14 @@ function arm() {
   for (const t of ['pointerdown', 'touchend', 'keydown']) document.addEventListener(t, unlock, true);
 }
 
-// Keep the session alive (true) or let it go (false).
-export function keepAlive(on) {
+// Keep the session alive (true) or let it go (false), at the session's
+// position (seconds) so the element's own timeline agrees with the song.
+export function keepAlive(on, position = 0) {
   wanted = !!on;
   const a = element();
   if (wanted) {
+    const p = Math.max(0, Math.min(KEEPALIVE_SECONDS - 1, position || 0));
+    if (Math.abs((a.currentTime || 0) - p) > 1.5) { try { a.currentTime = p; } catch { /* not seekable yet */ } }
     if (a.paused) a.play().then(() => { unlocked = true; }).catch(() => { if (!unlocked) arm(); });
   } else if (!a.paused) a.pause();
 }
