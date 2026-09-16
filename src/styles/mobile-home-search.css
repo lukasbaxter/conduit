@@ -2,13 +2,11 @@
    over the @media (max-width: 760px) block there. Keep everything inside the
    same media query. Reference: Spotify iOS home (S01) and search. */
 @media (max-width: 760px) {
-  /* Installed web app: the page ground is the app colour, so no black band
-     can show under the tab bar (the body used to be #000), and the tab bar
-     paints a little further down than its own box in case the standalone
-     viewport leaves a strip below it. */
+  /* Installed web app: the page ground is the app colour (the body used to be
+     #000). The strip iOS leaves under a short standalone viewport is covered
+     by the --ios-shim rules in mobile-nowplaying.css, not painted over. */
   html, body, #root { background: #121212; }
   .app.mobile .tabbar { position: fixed; }
-  .app.mobile .tabbar::after { content: ''; position: absolute; top: 100%; left: 0; right: 0; height: 60px; background: #121212; pointer-events: none; }
   /* Phone: no text selection or long-press callouts on the chrome; typing
      fields keep normal selection. */
   .app.mobile, .app.mobile * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }

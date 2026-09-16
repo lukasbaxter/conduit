@@ -753,6 +753,35 @@ export default function App() {
     }
   };
 
+  // iOS 18 installed web app with a translucent status bar: the layout
+  // viewport is one status bar shorter than the screen (852 -> 793) but iOS
+  // still paints the page full screen, so anything fixed to `bottom: 0` stops
+  // a status-bar height above the edge and a bare strip shows below it. The
+  // gap is exposed as --ios-shim and the fixed bottom chrome (tab bar, mini
+  // player, sheets, now playing) extends that far past the viewport. It is
+  // only ever non-zero when the page really does sit under the status bar
+  // (safe-area-inset-top > 0): an opaque status bar shrinks the web view for
+  // real, and then the gap must stay at 0.
+  useEffect(() => {
+    const measure = () => {
+      let shim = 0;
+      try {
+        const standalone = window.navigator.standalone ?? window.matchMedia('(display-mode: standalone)').matches;
+        const gap = window.screen.height - window.innerHeight;
+        if (standalone && gap > 0 && gap <= 120) {
+          const probe = document.createElement('div'); probe.style.cssText = 'position:fixed;top:0;height:env(safe-area-inset-top);'; document.body.appendChild(probe);
+          const sat = parseFloat(getComputedStyle(probe).height) || 0; probe.remove();
+          if (sat > 0) shim = gap;
+        }
+      } catch { /* measurement only */ }
+      document.documentElement.style.setProperty('--ios-shim', `${shim}px`);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.visualViewport?.addEventListener('resize', measure);
+    return () => { window.removeEventListener('resize', measure); window.visualViewport?.removeEventListener('resize', measure); };
+  }, []);
+
   // Phone viewport diagnostics, logged by the relay (installed web app layout
   // issues cannot be reproduced in a simulator).
   useEffect(() => {
@@ -760,9 +789,10 @@ export default function App() {
     const report = () => {
       try {
         const tb = document.querySelector('.tabbar')?.getBoundingClientRect();
-        const probe = document.createElement('div'); probe.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom);'; document.body.appendChild(probe);
-        const sab = getComputedStyle(probe).height; probe.remove();
-        player.relay._send({ type: 'diag', data: { standalone: window.navigator.standalone ?? window.matchMedia('(display-mode: standalone)').matches, inner: [window.innerWidth, window.innerHeight], visual: [Math.round(window.visualViewport?.width || 0), Math.round(window.visualViewport?.height || 0), Math.round(window.visualViewport?.offsetTop || 0)], screen: [window.screen.width, window.screen.height], docH: document.documentElement.clientHeight, bodyH: document.body.getBoundingClientRect().height, sab, tabbar: tb ? [Math.round(tb.top), Math.round(tb.bottom), Math.round(tb.height)] : null, ua: navigator.userAgent.slice(0, 80) } });
+        const inset = (side) => { const probe = document.createElement('div'); probe.style.cssText = `position:fixed;${side}:0;height:env(safe-area-inset-${side});`; document.body.appendChild(probe); const v = getComputedStyle(probe).height; probe.remove(); return v; };
+        const sab = inset('bottom'); const sat = inset('top');
+        const shim = document.documentElement.style.getPropertyValue('--ios-shim') || '0px';
+        player.relay._send({ type: 'diag', data: { standalone: window.navigator.standalone ?? window.matchMedia('(display-mode: standalone)').matches, inner: [window.innerWidth, window.innerHeight], visual: [Math.round(window.visualViewport?.width || 0), Math.round(window.visualViewport?.height || 0), Math.round(window.visualViewport?.offsetTop || 0)], screen: [window.screen.width, window.screen.height], docH: document.documentElement.clientHeight, bodyH: document.body.getBoundingClientRect().height, sab, sat, shim, tabbar: tb ? [Math.round(tb.top), Math.round(tb.bottom), Math.round(tb.height)] : null, ua: navigator.userAgent.slice(0, 80) } });
       } catch { /* diagnostics only */ }
     };
     const t = setTimeout(report, 3000);
