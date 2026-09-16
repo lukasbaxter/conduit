@@ -630,7 +630,10 @@ export function usePlayer(jf) {
       // Nothing loaded on this device for the shown track (a queue restored
       // from the last run, or a device that was stopped): start it here at the
       // remembered playhead rather than resuming a stream that is not there.
-      if (!playing && current && loadedRef.current !== current.Id) {
+      // (A speaker we switched to but never loaded -- a transfer whose fetch
+      // failed -- counts too, whatever `playing` claims: resuming it would
+      // poke a Cast media session that does not exist.)
+      if (current && loadedRef.current !== current.Id && (!playing || dev.kind !== 'local')) {
         relayRef.current?.claim();
         await startOn(dev, current, positionRef.current);
         anchorAt(positionRef.current, true);
@@ -1404,10 +1407,25 @@ export function usePlayer(jf) {
         }
       }
       if (Array.isArray(cmd.trackIds) && cmd.trackIds.length) {
+        // Start the handed-over song from ITS record alone and fill the queue
+        // in behind it: fetching the whole queue first (50 tracks with
+        // MediaSources from a slow Jellyfin) failed or stalled, and the old
+        // silent catch left the speaker switched to but never loaded -- every
+        // control after that hit a Cast session that did not exist.
+        const fields = 'MediaSources,ArtistItems,AlbumArtists,UserData';
+        const idx = Math.min(cmd.index || 0, cmd.trackIds.length - 1);
+        const chosenId = cmd.trackIds[idx];
         try {
-          const tracks = await fetchByIds(jf, cmd.trackIds, 'MediaSources,ArtistItems,AlbumArtists,UserData');
-          if (tracks.length) startHereRef.current(tracks, Math.min(cmd.index || 0, tracks.length - 1), cmd.position || 0, cmd.playing !== false);
-        } catch { /* ignore */ }
+          const rest = cmd.trackIds.length > 1 ? fetchByIds(jf, cmd.trackIds, fields).catch(() => null) : null;
+          const [first] = await fetchByIds(jf, [chosenId], fields);
+          if (!first) throw new Error('track not found');
+          await startHereRef.current([first], 0, cmd.position || 0, cmd.playing !== false);
+          const tracks = rest ? await rest : null;
+          if (!tracks || !tracks.length || queueRef.current[indexRef.current]?.Id !== chosenId) return;
+          const at = Math.max(0, tracks.findIndex((t) => t.Id === chosenId));
+          setQueue(tracks); queueRef.current = tracks;
+          setIndex(at); indexRef.current = at;
+        } catch (e) { setError(`Could not take over playback: ${e.message}`); setPlaying(false); }
       }
     } else if (cmd.action === 'play' && jf && Array.isArray(cmd.trackIds) && cmd.trackIds.length) {
       // Start the chosen song the moment ITS record is here; the rest of the
