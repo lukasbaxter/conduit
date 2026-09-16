@@ -159,6 +159,7 @@ export function usePlayer(jf) {
   // position we are trying to carry across. Ignore poll results while this is
   // set, and the handoff keeps its timestamp.
   const transitionRef = useRef(false);
+  const notPlayingSinceRef = useRef(0); // first moment the speaker said not-playing while we believed it was
   // Counts consecutive polls that disagree with our interpolated clock. One
   // bad reading is a hiccup (a receiver reopening a stream reports secs=0 for a
   // beat); a few seconds of it means the device really did move and we should
@@ -1032,6 +1033,22 @@ export function usePlayer(jf) {
     const apply = (s, arrivedAt, exact) => {
       if (cancelled || !s || transitionRef.current) return;
       const a = anchorRef.current;
+      // A rebuffer (Cast BUFFERING, BluOS "connecting") while we believe we
+      // are playing is not a pause: the session used to flip to paused and
+      // back on every one, and every mirror's playhead jumped with it (the
+      // iPad "skipping around"). Hold playing through those, and through a
+      // single not-playing reading of any kind; only a device that has said
+      // not-playing for 1.5 s straight is really paused/stopped. The
+      // end-of-track check below keeps the raw reading.
+      const rawPlaying = !!s.playing;
+      if (a.playing && !rawPlaying) {
+        const transient = /BUFFERING|connecting/i.test(s.state || '');
+        if (transient) { s = { ...s, playing: true }; notPlayingSinceRef.current = 0; }
+        else {
+          if (!notPlayingSinceRef.current) notPlayingSinceRef.current = arrivedAt;
+          if (arrivedAt - notPlayingSinceRef.current < 1500) s = { ...s, playing: true, rawPosition: s.position || 0, position: a.pos + (arrivedAt - a.at) / 1000 };
+        }
+      } else notPlayingSinceRef.current = 0;
       const expected = a.playing ? a.pos + (Date.now() - a.at) / 1000 : a.pos;
       const reported = s.position || 0;
 
@@ -1045,9 +1062,10 @@ export function usePlayer(jf) {
       // that let a.playing stay true after the queue ended, so every later
       // poll re-fired "past the end" and stopped the device in a 2s loop.
       const dur = s.duration || durationRef.current;
+      const rawReported = rawPlaying ? reported : (s.rawPosition ?? reported);
       const atEnd = a.playing && dur > 0
-        && (reported >= dur - 1.5 || (reported === 0 && expected >= dur - 3));
-      if (!s.playing && atEnd) {
+        && (rawReported >= dur - 1.5 || (rawReported === 0 && expected >= dur - 3));
+      if (!rawPlaying && atEnd) {
         disagreeRef.current = 0;
         anchorRef.current = { pos: reported, at: Date.now(), playing: false };
         advanceRef.current(true);
