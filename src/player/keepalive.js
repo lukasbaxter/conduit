@@ -7,48 +7,35 @@
 // page unlocks this one (play, then pause unless it is wanted), after which
 // it can be started at any time.
 //
-// The media is an hour of hand-made silent MPEG-2 Layer III frames (8 kbps
-// mono at 16 kHz, no main data: exactly 576 zero samples each, 36 bytes,
-// 3.6 MB for the hour; CoreAudio and ffmpeg both decode it to zeros). An
-// hour, not a 1-second loop: the lock screen takes its elapsed time from the
-// element as well as from setPositionState, and a loop snapped it to 0 every
-// second. The element is kept at the session's position. Should the frames
-// ever be refused, a 1-second WAV loop takes over so the card still shows.
-let el = null, unlocked = false, wanted = false, armed = false, pending = null, fallback = false;
+// The media is 20 minutes of 8 kHz 8-bit mono PCM silence in a WAV (9.6 MB
+// as a Blob). Not a 1-second loop: the lock screen takes its elapsed time
+// from the element as well as from setPositionState, and a loop snapped it
+// to 0 every second. Not a compact hand-made mp3 either: on the iPhone that
+// one never advanced after a seek (currentTime frozen at the seek target),
+// so every re-sync was another snap to 0. PCM seeks by byte offset and just
+// plays. The element is kept at the session's position.
+let el = null, unlocked = false, wanted = false, armed = false, pending = null;
 const log = [];
 const note = (m) => { log.push(`${Math.round(performance.now() / 1000)}s ${m}`); if (log.length > 12) log.shift(); };
 
-const FRAME = Uint8Array.from([0xFF, 0xF3, 0x18, 0xC4, ...new Array(32).fill(0)]);
-const FRAME_SECONDS = 576 / 16000;
-export const KEEPALIVE_SECONDS = 3600;
+export const KEEPALIVE_SECONDS = 20 * 60;
 
-function mp3Url() {
-  const frames = Math.round(KEEPALIVE_SECONDS / FRAME_SECONDS);
-  const data = new Uint8Array(frames * FRAME.length);
-  for (let i = 0; i < frames; i++) data.set(FRAME, i * FRAME.length);
-  return URL.createObjectURL(new Blob([data], { type: 'audio/mpeg' }));
-}
 function wavUrl() {
-  // 1 s of 8 kHz 16-bit mono silence.
-  const n = 8000, data = new ArrayBuffer(44 + n * 2), v = new DataView(data);
+  const rate = 8000, n = KEEPALIVE_SECONDS * rate, data = new ArrayBuffer(44 + n), v = new DataView(data);
   const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
-  str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
-  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true);
-  v.setUint32(28, 16000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, n * 2, true);
+  str(0, 'RIFF'); v.setUint32(4, 36 + n, true); str(8, 'WAVE'); str(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true);
+  v.setUint32(28, rate, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); str(36, 'data'); v.setUint32(40, n, true);
+  new Uint8Array(data, 44).fill(128); // 8-bit PCM is unsigned: 128 is silence
   return URL.createObjectURL(new Blob([data], { type: 'audio/wav' }));
 }
 
 function element() {
   if (el) return el;
-  el = new Audio(mp3Url());
+  el = new Audio(wavUrl());
   el.loop = true; el.preload = 'auto'; el.setAttribute('playsinline', '');
   el.addEventListener('loadedmetadata', () => { note(`meta dur=${Math.round(el.duration)}`); if (pending != null) { const p = pending; pending = null; try { el.currentTime = p; } catch { /* not seekable */ } } });
-  el.addEventListener('error', () => {
-    note(`error ${el.error?.code}${fallback ? ' (wav)' : ''}`);
-    if (fallback) return;
-    fallback = true; el.src = wavUrl(); el.load();
-    if (wanted) el.play().catch(() => {});
-  });
+  el.addEventListener('error', () => note(`error ${el.error?.code}`));
   el.addEventListener('playing', () => note(`playing t=${el.currentTime.toFixed(1)}`));
   el.addEventListener('pause', () => note('pause'));
   if (typeof window !== 'undefined') { window.__conduitKeepAlive = el; window.__conduitKeepAliveState = state; } // diagnostics
@@ -79,8 +66,8 @@ export function keepAlive(on, position = 0) {
   const a = element();
   if (wanted) {
     clearTimeout(pauseTimer); pauseTimer = null;
-    const p = fallback ? 0 : Math.max(0, Math.min(KEEPALIVE_SECONDS - 1, position || 0));
-    if (!fallback && Math.abs((a.currentTime || 0) - p) > 4) {
+    const p = Math.max(0, (position || 0) % KEEPALIVE_SECONDS);
+    if (Math.abs((a.currentTime || 0) - p) > 4) {
       note(`seek ${a.currentTime.toFixed(1)} -> ${p.toFixed(1)}`);
       if (a.readyState >= 1) { try { a.currentTime = p; } catch { pending = p; } } else pending = p;
     }
@@ -92,5 +79,5 @@ export function keepAlive(on, position = 0) {
 
 export function state() {
   const a = el;
-  return { wanted, unlocked, armed, fallback, paused: a ? a.paused : null, t: a ? +a.currentTime.toFixed(1) : null, ready: a?.readyState ?? null, err: a?.error?.code ?? null, log: log.slice(-8) };
+  return { wanted, unlocked, armed, paused: a ? a.paused : null, t: a ? +a.currentTime.toFixed(1) : null, ready: a?.readyState ?? null, err: a?.error?.code ?? null, log: log.slice(-8) };
 }
