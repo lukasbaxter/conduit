@@ -7,32 +7,23 @@
 // page unlocks this one (play, then pause unless it is wanted), after which
 // it can be started at any time.
 //
-// The media is 20 minutes of 8 kHz 8-bit mono PCM silence in a WAV (9.6 MB
-// as a Blob). Not a 1-second loop: the lock screen takes its elapsed time
-// from the element as well as from setPositionState, and a loop snapped it
-// to 0 every second. Not a compact hand-made mp3 either: on the iPhone that
-// one never advanced after a seek (currentTime frozen at the seek target),
-// so every re-sync was another snap to 0. PCM seeks by byte offset and just
-// plays. The element is kept at the session's position.
-let el = null, unlocked = false, wanted = false, armed = false, pending = null;
+// The media is `keepalive.wav` next to the app (tools/vite-keepalive.js: 20
+// minutes of 8 kHz 8-bit mono PCM silence, generated at build), played from
+// its URL so the OS seeks it with range requests. Not a 1-second loop: the
+// lock screen takes its elapsed time from the element as well as from
+// setPositionState, and a loop snapped it to 0 every second. Not blob: media:
+// on the iPhone the clock froze at every seek target (mp3 and WAV alike), so
+// each re-sync was another snap to 0. Should the clock ever freeze again the
+// element is left alone after that and setPositionState carries the time.
+let el = null, unlocked = false, wanted = false, armed = false, pending = null, frozen = false, lastT = -1, lastAt = 0;
 const log = [];
 const note = (m) => { log.push(`${Math.round(performance.now() / 1000)}s ${m}`); if (log.length > 12) log.shift(); };
 
 export const KEEPALIVE_SECONDS = 20 * 60;
 
-function wavUrl() {
-  const rate = 8000, n = KEEPALIVE_SECONDS * rate, data = new ArrayBuffer(44 + n), v = new DataView(data);
-  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
-  str(0, 'RIFF'); v.setUint32(4, 36 + n, true); str(8, 'WAVE'); str(12, 'fmt ');
-  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true);
-  v.setUint32(28, rate, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); str(36, 'data'); v.setUint32(40, n, true);
-  new Uint8Array(data, 44).fill(128); // 8-bit PCM is unsigned: 128 is silence
-  return URL.createObjectURL(new Blob([data], { type: 'audio/wav' }));
-}
-
 function element() {
   if (el) return el;
-  el = new Audio(wavUrl());
+  el = new Audio(new URL('keepalive.wav', document.baseURI).href);
   el.loop = true; el.preload = 'auto'; el.setAttribute('playsinline', '');
   el.addEventListener('loadedmetadata', () => { note(`meta dur=${Math.round(el.duration)}`); if (pending != null) { const p = pending; pending = null; try { el.currentTime = p; } catch { /* not seekable */ } } });
   el.addEventListener('error', () => note(`error ${el.error?.code}`));
@@ -67,9 +58,16 @@ export function keepAlive(on, position = 0) {
   if (wanted) {
     clearTimeout(pauseTimer); pauseTimer = null;
     const p = Math.max(0, (position || 0) % KEEPALIVE_SECONDS);
-    if (Math.abs((a.currentTime || 0) - p) > 4) {
+    // A clock that has not moved in 3 s of "playing" is frozen: no more seeks.
+    const now = performance.now();
+    if (!a.paused && a.readyState >= 3) {
+      if (a.currentTime !== lastT) { lastT = a.currentTime; lastAt = now; }
+      else if (!frozen && lastAt && now - lastAt > 3000) { frozen = true; note(`frozen at ${a.currentTime.toFixed(1)}`); }
+    }
+    if (!frozen && Math.abs((a.currentTime || 0) - p) > 4) {
       note(`seek ${a.currentTime.toFixed(1)} -> ${p.toFixed(1)}`);
       if (a.readyState >= 1) { try { a.currentTime = p; } catch { pending = p; } } else pending = p;
+      lastT = -1; lastAt = 0;
     }
     if (a.paused) a.play().then(() => { unlocked = true; }).catch((e) => { note(`play ${e?.name}`); if (!unlocked) arm(); });
   } else if (!a.paused && !pauseTimer) {
@@ -79,5 +77,5 @@ export function keepAlive(on, position = 0) {
 
 export function state() {
   const a = el;
-  return { wanted, unlocked, armed, paused: a ? a.paused : null, t: a ? +a.currentTime.toFixed(1) : null, ready: a?.readyState ?? null, err: a?.error?.code ?? null, log: log.slice(-8) };
+  return { wanted, unlocked, armed, frozen, paused: a ? a.paused : null, t: a ? +a.currentTime.toFixed(1) : null, ready: a?.readyState ?? null, err: a?.error?.code ?? null, log: log.slice(-8) };
 }
