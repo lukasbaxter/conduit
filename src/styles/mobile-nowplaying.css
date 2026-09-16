@@ -267,9 +267,12 @@
      the containing block of every position:fixed layer (tab bar, mini
      player, sheets, now playing, drawer): they anchor to the real bottom edge
      and are painted as page content. Inner lists keep their overscroll to
-     themselves so the now 59px-scrollable page never moves (App.jsx also
-     pins it to 0). Without the class none of this applies. */
-  html.ios-shim { height: calc(100% + var(--ios-shim, 0px)); overscroll-behavior: none; }
+     themselves so the page, when it is taller than its viewport, never moves
+     (App.jsx also pins it to 0). The height is the screen's own pixel count,
+     not 100% + gap: WebKit may grow the viewport to the full screen once the
+     page is taller than the short one. Without the class none of this
+     applies. */
+  html.ios-shim { height: var(--ios-screen-h, 100%); overscroll-behavior: none; }
   html.ios-shim body { transform: translate(0); overscroll-behavior: none; }
   html.ios-shim body * { overscroll-behavior-y: contain; }
 }

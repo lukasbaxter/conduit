@@ -758,13 +758,25 @@ export default function App() {
   // web view is still full screen, so anything fixed to `bottom: 0` stops a
   // status-bar height above the edge and a bare strip shows below it. The gap
   // is exposed as --ios-shim + html.ios-shim and mobile-nowplaying.css turns
-  // the page screen-height with body as the containing block of the fixed
-  // chrome. Only ever non-zero when the page really does sit under the status
-  // bar (safe-area-inset-top > 0): an opaque status bar shrinks the web view
-  // for real, and then the gap must stay at 0. The page is then 59px taller
-  // than its viewport, so it is pinned at scroll 0.
+  // the page screen-height (--ios-screen-h, an absolute number: once the page
+  // is taller than the short viewport WebKit may grow the viewport to the
+  // full screen, and a height relative to that would overshoot) with body as
+  // the containing block of the fixed chrome. Only ever non-zero when the
+  // page really does sit under the status bar (safe-area-inset-top > 0): an
+  // opaque status bar shrinks the web view for real, and then the gap must
+  // stay at 0. The page may then be 59px taller than its viewport, so it is
+  // pinned at scroll 0.
+  //
+  // Latched: applying the fix changes innerHeight, which fires resize, and
+  // re-measuring on that took the fix away again (viewport 852 -> gap 0), which
+  // shrank the viewport back, which... the phone flickered. Once on, the fix
+  // stays until the width changes (rotation). iOS also fires resize with a
+  // 1x1 / 4x4 web view around app switching; those are ignored.
   useEffect(() => {
+    let latched = null;
     const measure = () => {
+      if (window.innerWidth < 200 || window.screen.height < 200) return;
+      if (latched && latched.shim > 0 && latched.w === window.innerWidth) return;
       let shim = 0;
       try {
         const standalone = window.navigator.standalone ?? window.matchMedia('(display-mode: standalone)').matches;
@@ -775,7 +787,9 @@ export default function App() {
           if (sat > 0) shim = gap;
         }
       } catch { /* measurement only */ }
+      latched = { w: window.innerWidth, shim };
       document.documentElement.style.setProperty('--ios-shim', `${shim}px`);
+      document.documentElement.style.setProperty('--ios-screen-h', `${window.screen.height}px`);
       document.documentElement.classList.toggle('ios-shim', shim > 0);
     };
     const pin = () => { if (window.scrollY !== 0 && document.documentElement.classList.contains('ios-shim')) window.scrollTo(0, 0); };
