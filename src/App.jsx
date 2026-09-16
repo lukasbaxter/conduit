@@ -754,14 +754,15 @@ export default function App() {
   };
 
   // iOS 18 installed web app with a translucent status bar: the layout
-  // viewport is one status bar shorter than the screen (852 -> 793) but iOS
-  // still paints the page full screen, so anything fixed to `bottom: 0` stops
-  // a status-bar height above the edge and a bare strip shows below it. The
-  // gap is exposed as --ios-shim and the fixed bottom chrome (tab bar, mini
-  // player, sheets, now playing) extends that far past the viewport. It is
-  // only ever non-zero when the page really does sit under the status bar
-  // (safe-area-inset-top > 0): an opaque status bar shrinks the web view for
-  // real, and then the gap must stay at 0.
+  // viewport is one status bar shorter than the screen (852 -> 793) while the
+  // web view is still full screen, so anything fixed to `bottom: 0` stops a
+  // status-bar height above the edge and a bare strip shows below it. The gap
+  // is exposed as --ios-shim + html.ios-shim and mobile-nowplaying.css turns
+  // the page screen-height with body as the containing block of the fixed
+  // chrome. Only ever non-zero when the page really does sit under the status
+  // bar (safe-area-inset-top > 0): an opaque status bar shrinks the web view
+  // for real, and then the gap must stay at 0. The page is then 59px taller
+  // than its viewport, so it is pinned at scroll 0.
   useEffect(() => {
     const measure = () => {
       let shim = 0;
@@ -775,11 +776,14 @@ export default function App() {
         }
       } catch { /* measurement only */ }
       document.documentElement.style.setProperty('--ios-shim', `${shim}px`);
+      document.documentElement.classList.toggle('ios-shim', shim > 0);
     };
+    const pin = () => { if (window.scrollY !== 0 && document.documentElement.classList.contains('ios-shim')) window.scrollTo(0, 0); };
     measure();
     window.addEventListener('resize', measure);
     window.visualViewport?.addEventListener('resize', measure);
-    return () => { window.removeEventListener('resize', measure); window.visualViewport?.removeEventListener('resize', measure); };
+    window.addEventListener('scroll', pin, { passive: true });
+    return () => { window.removeEventListener('resize', measure); window.visualViewport?.removeEventListener('resize', measure); window.removeEventListener('scroll', pin); };
   }, []);
 
   // Phone viewport diagnostics, logged by the relay (installed web app layout

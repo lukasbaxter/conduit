@@ -147,14 +147,14 @@
   /* The card and the tab bar float over the page: the list scrolls under them
      through a short transparent-to-page gradient instead of stopping dead at
      the card's top edge. The scroll containers pad their bottoms to match. */
-  .app.mobile .player { position: fixed; left: 0; right: 0; bottom: calc(49px + env(safe-area-inset-bottom) - var(--ios-shim, 0px)); z-index: 47; min-width: 0; padding: 24px 8px 0; background: linear-gradient(to bottom, transparent, rgba(18,18,18,.92) 24px, #121212); }
-  .app.mobile .tabbar { position: fixed; left: 0; right: 0; bottom: calc(-1 * var(--ios-shim, 0px)); z-index: 46; background: #121212; }
+  .app.mobile .player { position: fixed; left: 0; right: 0; bottom: calc(49px + env(safe-area-inset-bottom)); z-index: 47; min-width: 0; padding: 24px 8px 0; background: linear-gradient(to bottom, transparent, rgba(18,18,18,.92) 24px, #121212); }
+  .app.mobile .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 46; background: #121212; }
   /* The header row is sized by the header itself (its content plus the notch
      inset), never a fixed number: on the iPhone the fixed row was shorter than
      the real navbar, which then overlapped the Library chips. */
   .app.mobile:not(.mobile-detail) { grid-template-rows: auto minmax(0, 1fr); }
   .app.mobile.mobile-detail { grid-template-rows: minmax(0, 1fr); }
-  .app.mobile .content, .app.mobile .shell.show-lib .liblist { padding-bottom: calc(24px + 56px + 8px + 49px + env(safe-area-inset-bottom) - var(--ios-shim, 0px)); }
+  .app.mobile .content, .app.mobile .shell.show-lib .liblist { padding-bottom: calc(24px + 56px + 8px + 49px + env(safe-area-inset-bottom)); }
   .app.mobile .content { box-sizing: border-box; }
   .player-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0; height: 56px; box-sizing: border-box; background: color-mix(in srgb, var(--mini, #2a2a2a) 55%, #000); border-radius: 6px; padding: 0 8px; margin: 0 0 8px; position: relative; overflow: hidden; transition: background .3s; }
   .player-now { display: flex; align-items: center; min-width: 0; gap: 8px; }
@@ -258,10 +258,18 @@
   .deviceitem-dot { display: none; }
   .devicemenu-empty, .dm-note { color: #a7a7a7; font-size: 13px; line-height: 1.4; padding: 12px 0 0; margin: 0; }
 
-  /* Installed web app on iOS 18 (see the --ios-shim effect in App.jsx): every
-     full-height or bottom-anchored fixed layer reaches the real screen edge,
-     not the short layout viewport. 0px everywhere else, so nothing moves. */
-  .fs, .rightpanel, .ctxmenu-scrim, .modal-back, .newpl,
-  .avatarmenu:not(.appmenu), .avatarmenu:not(.appmenu)::before { bottom: calc(-1 * var(--ios-shim, 0px)); }
-  .ctxmenu-fixed, .devicemenu { bottom: calc(-1 * var(--ios-shim, 0px)) !important; }
+  /* iOS 18 installed web app (App.jsx measures --ios-shim and sets
+     html.ios-shim when the layout viewport is a status bar shorter than the
+     screen). WebKit treats the strip below that viewport like the area under
+     a Safari toolbar: page content is painted there, viewport-fixed layers
+     are clipped at its top edge (the tab bar icons were cut in half). So the
+     page is made screen-height and body gets a transform, which makes body
+     the containing block of every position:fixed layer (tab bar, mini
+     player, sheets, now playing, drawer): they anchor to the real bottom edge
+     and are painted as page content. Inner lists keep their overscroll to
+     themselves so the now 59px-scrollable page never moves (App.jsx also
+     pins it to 0). Without the class none of this applies. */
+  html.ios-shim { height: calc(100% + var(--ios-shim, 0px)); overscroll-behavior: none; }
+  html.ios-shim body { transform: translate(0); overscroll-behavior: none; }
+  html.ios-shim body * { overscroll-behavior-y: contain; }
 }
