@@ -17,7 +17,7 @@
 // element is left alone after that and setPositionState carries the time.
 let el = null, unlocked = false, wanted = false, armed = false, pending = null, frozen = false, lastT = -1, lastAt = 0;
 const log = [];
-const note = (m) => { log.push(`${Math.round(performance.now() / 1000)}s ${m}`); if (log.length > 12) log.shift(); };
+const note = (m) => { log.push(`${Math.round(performance.now() / 1000)}s${typeof document !== 'undefined' && document.hidden ? ' bg' : ''} ${m}`); if (log.length > 12) log.shift(); };
 
 export const KEEPALIVE_SECONDS = 20 * 60;
 
@@ -61,7 +61,7 @@ export function keepAlive(on, position = 0) {
     // A clock that has not moved in 3 s of "playing" is frozen: no more seeks.
     const now = performance.now();
     if (!a.paused && a.readyState >= 3) {
-      if (a.currentTime !== lastT) { lastT = a.currentTime; lastAt = now; }
+      if (a.currentTime !== lastT) { if (frozen && lastT >= 0) { frozen = false; note(`moving again at ${a.currentTime.toFixed(1)}`); } lastT = a.currentTime; lastAt = now; }
       else if (!frozen && lastAt && now - lastAt > 3000) { frozen = true; note(`frozen at ${a.currentTime.toFixed(1)}`); }
     }
     if (!frozen && Math.abs((a.currentTime || 0) - p) > 4) {
