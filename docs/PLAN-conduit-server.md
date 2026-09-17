@@ -30,7 +30,9 @@ relay already is most of the server. Finish it.**
 
 ## The product
 
-One image `conduit-server`. One compose file:
+One image `conduit-server`. One compose file. The music folder is read
+straight off disk by our own scanner and streamed straight off disk by our
+own server; nothing else sits between the files and the app.
 
 ```yaml
 services:
@@ -42,7 +44,10 @@ services:
       - ./data:/data                  # database, artwork cache, transcode cache
     environment:
       PUBLIC_URL: https://music.example.com   # what phones and speakers reach
-      # everything else is optional (see Explo below)
+      # optional: Soulseek + Explo (leave unset = hidden)
+      # SLSK_USER: ...
+      # SLSK_PASS: ...
+      # EXPLO_SPOTIFY_ID / EXPLO_SPOTIFY_SECRET / EXPLO_LISTENBRAINZ_TOKEN
 ```
 
 First launch opens a setup page: create the admin account, pick the music
@@ -100,9 +105,20 @@ Decisions, with the reason each way:
    Subsonic API compatibility so third-party apps work too.
 8. **The session model stays** (single active player, mirroring, transfer,
    speakers through the desktop). It is the relay code, moved in.
-9. **Explo = optional module in the same image**, on by env vars:
-   `EXPLO_SPOTIFY_*` (playlist import), `EXPLO_LISTENBRAINZ` (recs),
-   `EXPLO_SLSKD_URL` (requests → downloads). Off = the UI hides it.
+9. **Explo and Soulseek live in the same image.** Lukas's rule: one
+   container, set env vars, done. The image ships the `slskd` binary
+   (self-contained .NET build) and the server supervises it as a child
+   process when `SLSK_USER`/`SLSK_PASS` are set; its web UI is proxied at
+   `/slskd` for the curious, but the app never needs it: the server drives
+   slskd's own API (search, enqueue, transfers) to do what Music Requests +
+   `sldl` do today (whole-release requests, artist/album matching, the
+   "index.sldl" and cover-art gotchas already learned). Downloads land in a
+   staging dir inside `/data`, get tagged/checked (the retag + LrcLib +
+   cover rules), then move into `/music/<Artist>/<Album>/` and the scanner
+   picks them up. Explo's other sources are env vars too: `EXPLO_SPOTIFY_*`
+   (playlist import), `EXPLO_LISTENBRAINZ` (recs), Deezer (no key). Nothing
+   set = the Explo tab is hidden and slskd never starts. `/music` must be
+   writable for this; read-only otherwise.
 
 ## Migration for us (no big bang)
 
@@ -160,8 +176,10 @@ possible, what is a client task.
    client for non-Safari; kill the nginx `/universal` shaping.
 4. **Accounts + session relay** moved in; importer from Jellyfin; the
    phone/desktop/web switch over; Jellyfin becomes video-only.
-5. **Packaging**: Dockerfile, compose, setup page, GHCR publish in the
-   release workflow, README for homelab users; Explo module behind env.
+5. **Packaging**: Dockerfile (Node + ffmpeg + slskd binary), compose,
+   setup page, GHCR publish in the release workflow, README for homelab
+   users; Explo + Soulseek behind env. Health: one `/healthz` that also
+   reports slskd's state.
 6. Perf pass from the table (pagination/virtualisation, Lighthouse,
    re-render profile, bundle audit).
 
