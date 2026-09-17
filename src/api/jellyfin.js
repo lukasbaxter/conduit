@@ -191,13 +191,29 @@ export class Jellyfin {
   // for a smaller transcode. Speakers always get the original (the transcoded
   // stream is unseekable on BluOS, see streamUrl).
   quality = 'original';
-  // A transcode is produced as it plays (no Content-Length, no byte ranges),
-  // so it cannot be seeked by the element: the player asks for a new stream
-  // that starts at `startAt` instead and keeps that as the stream's base.
-  transcoded() { return !!{ high: 320000, normal: 160000, low: 96000 }[this.quality]; }
+  // How the local element gets a transcode:
+  //  'file'    original file, byte ranges, seeks natively;
+  //  'hls'     Safari/iOS: Jellyfin's HLS (3-second AAC segments fetched as
+  //            needed, seeks natively). iOS would not play the chunked
+  //            transcode at all on cellular;
+  //  'chunked' everything else: one progressive MP3 with no Content-Length and
+  //            no byte ranges, so the player seeks by asking for a new stream
+  //            that starts at `startAt` and keeps that as the stream's base.
+  streamMode() {
+    if (!{ high: 320000, normal: 160000, low: 96000 }[this.quality]) return 'file';
+    const hls = typeof document !== 'undefined' && !!document.createElement('audio').canPlayType('application/vnd.apple.mpegurl');
+    return hls ? 'hls' : 'chunked';
+  }
+  transcoded() { return this.streamMode() === 'chunked'; }
   playbackUrl(itemId, { startAt = 0 } = {}) {
     const q = { high: 320000, normal: 160000, low: 96000 }[this.quality];
-    return q ? this.transcodeUrl(itemId, { codec: 'mp3', bitrate: q, startAt }) : this.streamUrl(itemId);
+    const mode = this.streamMode();
+    if (mode === 'file') return this.streamUrl(itemId);
+    if (mode === 'hls') {
+      const p = new URLSearchParams({ audioCodec: 'aac', audioBitRate: String(q), segmentContainer: 'ts', api_key: this.token });
+      return `${this.baseUrl}/Audio/${itemId}/main.m3u8?${p}`;
+    }
+    return this.transcodeUrl(itemId, { codec: 'mp3', bitrate: q, startAt });
   }
 
   async me() {
