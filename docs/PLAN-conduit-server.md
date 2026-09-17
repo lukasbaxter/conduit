@@ -72,11 +72,12 @@ slskd, rsync, a USB stick); the server only reads it.
 
 Decisions, with the reason each way:
 
-1. **Keep Jellyfin's item ids** (`MD5(UTF-16LE("MediaBrowser.Controller.Entities.Audio.Audio" + path))`,
-   the formula the relay already uses for playlists and lyrics). Every
-   existing like, play, playlist row and lyric key carries over with no
-   remap, and the client's `Id` fields keep working. Albums/artists get the
-   same treatment (Jellyfin hashes those from type + name/path too; verify).
+1. **Own ids, Jellyfin's as aliases.** Tracks get a content-derived id
+   (see "If we were starting over"); an alias table maps every Jellyfin id
+   (`MD5(UTF-16LE("MediaBrowser.Controller.Entities.Audio.Audio" + path))`,
+   the formula the relay already uses) to it, so every existing like, play,
+   playlist row and lyric key carries over and old client caches still
+   resolve. The API accepts either id.
 2. **Own scanner, not Jellyfin's.** `music-metadata` for tags (fast, every
    format), folder `cover.jpg`/embedded art, `.lrc` sidecars, multi-artist
    splitting with the delimiter + whitelist rules from `tools/library-hygiene`
@@ -198,6 +199,62 @@ N missing lyrics). New files go through it minutes after they land;
 the whole library is worked through once at first scan (27k tracks at
 MusicBrainz's 1 req/s = a few hours of AcoustID/MB lookups, spread
 across the first night). Fingerprinting itself is local and fast.
+
+## If we were starting over (what this month taught)
+
+Things that cost real days, and the shape that avoids them:
+
+1. **Ids that survive renames.** Jellyfin's path-hash id broke the moment
+   the retag pass renamed files (2,956 orphaned lyric files). The server's
+   track id is its own (content-derived: audio fingerprint hash, falling
+   back to a random id kept in a path map), with an alias table holding the
+   Jellyfin id for the migration. Paths are data, not identity.
+2. **One backend, one token.** The client talks to Jellyfin *and* the relay
+   with different auth and two caches; likes lived in three places and
+   clobbered each other. One API, one device token per client (named,
+   revocable from a page; the stray "Web Player (1)" tab should have been a
+   click to kick), one cache layer.
+3. **The server owns the session.** Today each client computes the mirrored
+   position from the active player's report + its own clock, so device
+   clock skew, late relay messages and a Cast rebuffer all became visible
+   jumps. The server keeps the session state (track, position anchored to
+   *server* time, playing, device, queue) and clients send intents
+   (play/seek/transfer) and render the state; time is synced to the
+   server's clock once per connection.
+4. **Speakers are driven by the server, not the Mac.** The server already
+   sits on the LAN; Cast and BluOS control move into it, so a phone can
+   send music to the Node with no desktop running. The desktop keeps only
+   its own local output. (Also the reason the discovery/Local-Network/
+   exit-node problems existed at all.)
+5. **A state machine for playback.** Most bugs were state combinations:
+   "device switched but nothing loaded", "playing but element paused",
+   "transfer half done". Explicit states (idle / loading / playing /
+   paused / transferring / mirroring) with allowed transitions, in a
+   module a fifth the size of today's `usePlayer.js`.
+6. **HLS from day one, no chunked transcodes.** Ranges for originals, HLS
+   for everything else, one seek model (server-side offset). Yesterday's
+   iOS-won't-play, nginx rate shaping and restart-at-offset code all go.
+7. **Hygiene is a server job, not crons.** Retag, cover, lyric and rename
+   passes were Python scripts with JSON state in a home dir; they become
+   queued, resumable, logged jobs with an admin page, and the search index
+   is updated by the scanner instead of a 10-minute full resync.
+8. **Client caches with a version, in IndexedDB.** localStorage silently
+   dropped the 1,400-row liked cache at the 5 MB limit; lists are cached in
+   IndexedDB keyed by the server's library version and only refetched when
+   it changes.
+9. **Telemetry built in.** The phone diag to the relay and the desktop
+   trace file found every hard bug this week, but were bolted on mid-fire.
+   The server keeps a per-request timing log and a client diag endpoint;
+   the admin page shows slow endpoints.
+10. **A fixture library and CI from the start.** Probes were one-offs run
+    against production (one of them, run as Lukas, took over his session).
+    A 30-track fixture folder, a seeded server in CI, and the release
+    workflow tested on every PR (it took five runs to ship 0.1.0).
+11. **No hand-edited proxy config.** Six special nginx locations grew in one
+    night (art cache, rate shaping, gzip, keep-alive). The server sets its
+    own cache headers and compression; a reverse proxy in front is generic.
+12. **Ship the visualizer's speaker-sync last.** Calibration, shadow
+    streams and Milkdrop consumed days before the basics were fast.
 
 ## Migration for us (no big bang)
 
