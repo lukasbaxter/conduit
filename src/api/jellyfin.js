@@ -139,6 +139,10 @@ export class Jellyfin {
   }
 
   static async login(baseUrl, username, password) {
+    // The public host serves Jellyfin under /jf; typing just the host on the
+    // desktop login posted to the static site (405) and read as a bad password.
+    baseUrl = baseUrl.trim().replace(/\/+$/, '');
+    if (/^https?:\/\/music\.baxtergroup\.io$/i.test(baseUrl)) baseUrl += '/jf';
     const client = new Jellyfin({ baseUrl });
     const data = await client._fetch('/Users/AuthenticateByName', {
       method: 'POST',
