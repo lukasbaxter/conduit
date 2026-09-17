@@ -14,7 +14,7 @@ const HOST = process.env.CONDUIT_HOST || '192.168.1.85';
 const APP = `http://${HOST}:8748`;
 const JELLYFIN = `http://${HOST}:2101`;
 const USER = 'conduittest'; // dedicated test account: never the real session
-const PASS = 'Conduit-Test-9921';
+const PASS = process.env.CONDUIT_TEST_PASS || '';
 
 const log = (...a) => console.log('  ', ...a);
 let failures = 0;

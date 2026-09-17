@@ -5,7 +5,7 @@ import puppeteer from 'puppeteer';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log('  ', ...a); let failures = 0; const assert = (c, m) => { if (c) log('PASS', m); else { failures++; log('FAIL', m); } };
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--mute-audio'] });
-const open = async () => { const ctx = await browser.createBrowserContext(); const p = await ctx.newPage(); await p.setViewport({ width: 1300, height: 900 }); await p.goto(`${process.env.APP || `http://${process.env.CONDUIT_HOST || '192.168.1.85'}:8748`}/?debug=1`, { waitUntil: 'networkidle2' }); const i = await p.$$('.login input'); await i[0].type('conduittest'); await i[1].type('Conduit-Test-9921'); await p.click('.login .primary'); await p.waitForFunction('!!window.__player && !!window.__jf', { timeout: 15000 }); await sleep(3000); return p; };
+const open = async () => { const ctx = await browser.createBrowserContext(); const p = await ctx.newPage(); await p.setViewport({ width: 1300, height: 900 }); await p.goto(`${process.env.APP || `http://${process.env.CONDUIT_HOST || '192.168.1.85'}:8748`}/?debug=1`, { waitUntil: 'networkidle2' }); const i = await p.$$('.login input'); await i[0].type('conduittest'); await i[1].type(process.env.CONDUIT_TEST_PASS || ''); await p.click('.login .primary'); await p.waitForFunction('!!window.__player && !!window.__jf', { timeout: 15000 }); await sleep(3000); return p; };
 const A = await open(), B = await open();
 const ids = await A.evaluate(async () => { const r = await window.__jf.search('daft punk'); const t = r.tracks.slice(0, 3); for (const x of t) await window.__jf.setFavorite(x.Id, false); return t.map((x) => x.Id); });
 await sleep(500);

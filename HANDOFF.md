@@ -219,7 +219,7 @@ connecting to the relay in standalone mode. The diagnosis below is history.
 `music.baxtergroup.io` is **no longer proxied through Cloudflare** (grey cloud /
 DNS-only). It resolves straight to the home origin on every resolver:
 
-- `music.baxtergroup.io` → `205.250.241.235` (Telus origin) on 1.1.1.1, 8.8.8.8, LAN
+- `music.baxtergroup.io` → the home WAN address (Telus origin) on 1.1.1.1, 8.8.8.8, LAN
 - `jellyfin.baxtergroup.io` → `172.67.x / 104.21.x` (Cloudflare) — still orange, so its HTTPS is valid
 
 Because it's grey, `:443` hits the origin directly, and the origin only has a
@@ -330,7 +330,7 @@ mapping the code when we stopped.
   mirroring a web player had a broken image).
 - Browser local device is "This Web Player" (was "This Computer").
 - `_lsPrefix` getter fix (first-session caches were written under the wrong key).
-- ALL TESTS NOW USE THE `conduittest` JELLYFIN USER (pw Conduit-Test-9921). A
+- ALL TESTS NOW USE THE `conduittest` JELLYFIN USER (pw <in ~/.conduit-test.env on the Mac: CONDUIT_TEST_PASS>). A
   run as lukasbaxter hijacked the live web player. Do not switch back.
 
 ## Shipped earlier this session (done, deployed, tested)

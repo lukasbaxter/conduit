@@ -2,7 +2,7 @@
 import puppeteer from 'puppeteer';
 const HOST = process.env.CONDUIT_HOST || '192.168.1.85';
 const APP = `http://${HOST}:8748`;
-const USER = 'conduittest', PASS = 'Conduit-Test-9921';
+const USER = 'conduittest', PASS = process.env.CONDUIT_TEST_PASS || '';
 const log = (...a) => console.log('  ', ...a);
 let failures = 0;
 const assert = (c, m) => { if (c) log('PASS', m); else { failures++; log('FAIL', m); } };

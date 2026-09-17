@@ -9,7 +9,7 @@ const HOST = process.env.CONDUIT_HOST || '192.168.1.85';
 const APP = `http://${HOST}:8748`;
 const JELLYFIN = `http://${HOST}:2101`;
 const USER = 'conduittest'; // dedicated test account: never the real session
-const PASS = 'Conduit-Test-9921';
+const PASS = process.env.CONDUIT_TEST_PASS || '';
 const X = { id: '48202c7882093a3cb6637bd61ac61bd4', title: 'Feeling Like I' };
 
 const log = (...a) => console.log('  ', ...a);
