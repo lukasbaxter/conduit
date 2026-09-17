@@ -211,6 +211,8 @@ export default function TrackRow({
       // plays (Spotify); the same on any touch screen (iPad), where there is
       // no hover or double-click. Buttons, links, the art and lyric snippets
       // keep their own taps. Mouse stays double-click.
+      // Touch: warm the stream while the finger is still down (HLS only, no-op elsewhere).
+      onTouchStart={phone || touch ? () => jf?.prewarm?.(track.Id) : undefined}
       onClick={phone || touch ? (e) => { if (e.target.closest?.('button, .rowlink, .trackrow-art, .lyric-snippet, .ctxmenu')) return; (active && onToggle ? onToggle : onPlay)?.(); } : undefined}
     >
       <button

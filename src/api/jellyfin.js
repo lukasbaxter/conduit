@@ -205,6 +205,16 @@ export class Jellyfin {
     return hls ? 'hls' : 'chunked';
   }
   transcoded() { return this.streamMode() === 'chunked'; }
+  // HLS only: asking for the playlist makes Jellyfin start the transcode, so
+  // by the time the element asks, the playlist and first segments are warm
+  // (~0.6 s of server work otherwise paid at the tap or the track change).
+  _warm = new Map();
+  prewarm(itemId) {
+    if (!itemId || this.streamMode() !== 'hls') return;
+    const at = this._warm.get(itemId); if (at && Date.now() - at < 60000) return;
+    this._warm.set(itemId, Date.now());
+    fetch(this.playbackUrl(itemId), { headers: { Authorization: authHeader(this.token) } }).then((r) => r.text()).catch(() => {});
+  }
   playbackUrl(itemId, { startAt = 0 } = {}) {
     const q = { high: 320000, normal: 160000, low: 96000 }[this.quality];
     const mode = this.streamMode();

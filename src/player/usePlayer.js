@@ -1205,6 +1205,15 @@ export function usePlayer(jf) {
     return () => { cancelled = true; if (timer) clearInterval(timer); };
   }, [device, next, remote, startOn]);
 
+  // The next song's stream is warmed 20 s before this one ends (HLS only, see
+  // jf.prewarm), so the track change does not wait on Jellyfin starting it.
+  useEffect(() => {
+    if (device.kind !== 'local' || !playing || !jf || !duration || position < duration - 20) return;
+    const next = queueRef.current[indexRef.current + 1] || (repeatRef.current === 'all' ? queueRef.current[0] : null);
+    if (next) jf.prewarm?.(next.Id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [device.kind, playing, Math.floor(position), duration, jf]);
+
   // Interpolate the remote clock between polls so the seek bar moves smoothly.
   useEffect(() => {
     if (device.kind === 'local' || !playing) return undefined;
