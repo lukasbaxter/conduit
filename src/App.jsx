@@ -9,7 +9,7 @@ import RightPanel from './components/RightPanel.jsx';
 import FullScreen from './components/FullScreen.jsx';
 import { downloadTrack } from './api/download.js';
 import { applyTheme, DEFAULT_THEME } from './api/prefs.js';
-import { search as relaySearch, popular as relayPopular, likes as relayLikes, playlistTracks as relayPlaylist } from './api/search.js';
+import { search as relaySearch, popular as relayPopular, likes as relayLikes, playlistTracks as relayPlaylist, likedFast } from './api/search.js';
 import { likesLoad, likesSet, likesSnapshot, likedIds, likesReady, isLiked, useLikesVersion } from './api/likes.js';
 import { offsetsMerge } from './api/offsets.js';
 
@@ -645,8 +645,18 @@ export default function App() {
     setView('home');
     const ids = likedIds();
     setDetail({ item, tracks: likedRows(ids), kind: 'Playlist', loading: ids.some((id) => !likedCacheRef.current.has(id)) });
-    const missing = ids.filter((id) => !likedCacheRef.current.has(id));
+    let missing = ids.filter((id) => !likedCacheRef.current.has(id));
     try {
+      // One relay call fills nearly everything (the index has every track);
+      // Jellyfin is asked by id only for what the index lacks.
+      if (missing.length) {
+        try {
+          const fast = await likedFast(jf);
+          for (const r of fast?.items || []) if (!likedCacheRef.current.has(r.Id)) likedCacheRef.current.set(r.Id, r);
+          setDetail((d) => (d && d.item?.Id === LIKED_ID ? { ...d, tracks: likedRows(likedIds()) } : d));
+          missing = likedIds().filter((id) => !likedCacheRef.current.has(id));
+        } catch { /* relay down: the chunked path below still works */ }
+      }
       for (let i = 0; i < missing.length; i += 150) {
         const rows = await jf.itemsByIds(missing.slice(i, i + 150));
         for (const r of rows) likedCacheRef.current.set(r.Id, r);

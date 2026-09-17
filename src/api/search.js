@@ -85,6 +85,8 @@ export const popular = (jf, artistId, name) => relayGet(jf, '/popular', { artist
 export const radar = (jf) => relayGet(jf, '/radar', {}, 120000);
 // Lyrics from the relay's RAM copy of every sidecar (relay/lyrics.js); the
 // same shape Jellyfin's endpoint returns. 404 = none there.
+// Liked Songs rows in one call from the relay (likes table joined to the index).
+export const likedFast = (jf) => relayGet(jf, '/liked', {}, 15000);
 export const lyricsFast = (jf, itemId) => relayGet(jf, '/lyrics', { id: itemId }, 4000);
 // When each track was liked (relay store). `seed` = old prefs timestamps, sent once.
 export async function likes(jf, seed = null) {

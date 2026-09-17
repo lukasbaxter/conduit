@@ -687,6 +687,29 @@ function jellyfinId(type, filePath) {
   const h = crypto.createHash('md5').update(Buffer.from(type + filePath, 'utf16le')).digest();
   return Buffer.concat([h.subarray(0, 4).reverse(), h.subarray(4, 6).reverse(), h.subarray(6, 8).reverse(), h.subarray(8)]).toString('hex');
 }
+// Jellyfin-shaped track rows for ids, from the search index (one Meili call
+// per 500 ids, a few ms each) instead of Jellyfin's /Items?Ids= (1.2-1.7 s per
+// 150 rows tonight).
+async function rowsByIds(who, ids) {
+  const docs = new Map();
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = ids.slice(i, i + 500);
+    const res = await meiliOne('tracks', { q: '', limit: chunk.length, filter: `id IN [${chunk.map((x) => JSON.stringify(x)).join(',')}]`, attributesToRetrieve: ['id', 'name', 'artists', 'artistIds', 'album', 'albumId', 'albumArtist', 'year', 'durationTicks', 'liked'] });
+    for (const d of res.hits || []) docs.set(d.id, d);
+  }
+  return ids.map((id) => docs.get(id)).filter(Boolean).map((d) => ({
+    Id: d.id, PlaylistItemId: d.id, Name: d.name, Type: 'Audio', Artists: d.artists || [], AlbumArtist: d.albumArtist || '',
+    ArtistItems: (d.artists || []).map((n, i) => ({ Name: n, Id: (d.artistIds || [])[i] })).filter((a) => a.Id),
+    Album: d.album || '', AlbumId: d.albumId || null, ProductionYear: d.year || null, RunTimeTicks: d.durationTicks || 0,
+    UserData: { IsFavorite: Array.isArray(d.liked) && d.liked.includes(who.id) },
+  }));
+}
+// Liked Songs in one call: the likes table (newest first) joined to the index.
+async function likedFast(who) {
+  const ids = store.likesAll(who.id).sort((a, b) => b.at - a.at).map((r) => r.item_id);
+  const items = await rowsByIds(who, ids);
+  return { items, total: ids.length, missing: ids.length - items.length };
+}
 async function playlistFast(who, token, playlistId) {
   if (!/^[0-9a-f]{32}$/.test(playlistId)) throw new Error('bad id');
   const r = await fetch(`${JELLYFIN}/Items/${playlistId}?userId=${who.id}&Fields=Path`, { headers: { Authorization: `MediaBrowser Token="${token}"` }, signal: AbortSignal.timeout(5000) });
@@ -724,7 +747,8 @@ const reconciledAt = new Map(); // uid -> ms
 // the relay existed) is added with a sensible date; a favourite Jellyfin no
 // longer has, for a like we know we had written, was unliked elsewhere.
 async function reconcileLikes(uid, token) {
-  if (Date.now() - (reconciledAt.get(uid) || 0) < 30 * 1000) return;
+  // Jellyfin's IsFavorite query took ~20 s for a 1,400-favourite account tonight; once every 10 min is plenty.
+  if (Date.now() - (reconciledAt.get(uid) || 0) < 10 * 60 * 1000) return;
   reconciledAt.set(uid, Date.now());
   const q = new URLSearchParams({ IncludeItemTypes: 'Audio', Recursive: 'true', Filters: 'IsFavorite', Fields: 'DateCreated', Limit: '20000', userId: uid, SortBy: 'DateCreated', SortOrder: 'Descending' });
   const r = await fetch(`${JELLYFIN}/Items?${q}`, { headers: { Authorization: `MediaBrowser Token="${token}"` }, signal: AbortSignal.timeout(30000) });
@@ -799,7 +823,7 @@ const server = http.createServer(async (req, res) => {
     }
     return;
   }
-  if (path === '/discography' || path === '/radar' || path === '/request' || path === '/similar' || path === '/popular' || path === '/history' || path === '/likes' || path === '/playlist' || path === '/gsearch') {
+  if (path === '/discography' || path === '/radar' || path === '/request' || path === '/similar' || path === '/popular' || path === '/history' || path === '/likes' || path === '/liked' || path === '/playlist' || path === '/gsearch') {
     const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, X-Emby-Token, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }
     try {
@@ -819,6 +843,7 @@ const server = http.createServer(async (req, res) => {
         out = { at: Object.fromEntries(store.likesAll(who.id).map((r) => [r.item_id, r.at])) };
       }
       else if (path === '/playlist') out = await playlistFast(who, token, url.searchParams.get('id') || '');
+      else if (path === '/liked') out = await likedFast(who);
       else if (path === '/discography') out = await discography(url.searchParams.get('artistId') || '', url.searchParams.get('name') || '');
       else if (path === '/gsearch') out = await globalSearch((url.searchParams.get('q') || '').slice(0, 200));
       else if (path === '/radar') out = { releases: await releaseRadar() };
