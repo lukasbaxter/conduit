@@ -147,8 +147,20 @@ export default function App() {
     return () => mq.removeEventListener('change', h);
   }, []);
   const [mobileLib, setMobileLib] = useState(false);
-  const openFullScreen = () => setFullScreen(true);
-  const closeFullScreen = () => setFullScreen(false);
+  // The now-playing view is its own step in the browser history: Android's
+  // back button (and the phone's edge swipe) closes it and lands on the page
+  // it was opened from, instead of walking that page's stack while the
+  // player stays open (which read as "back goes to Home every time").
+  const fullScreenRef = useRef(false);
+  const openFullScreen = () => {
+    setFullScreen(true); fullScreenRef.current = true;
+    try { window.history.pushState({ conduit: histRef.current.idx, np: true }, ''); } catch { /* sandboxed */ }
+  };
+  const closeFullScreen = () => {
+    setFullScreen(false); fullScreenRef.current = false;
+    // Closed from the UI: drop the history step so Back does not reopen it.
+    try { if (window.history.state?.np) window.history.back(); } catch { /* ignore */ }
+  };
   // Account settings: theme + playback quality. Loaded from Jellyfin, applied
   // to the CSS variables, kept in sync across clients over the relay.
   const [prefs, setPrefs] = useState({ theme: DEFAULT_THEME, quality: 'original' });
@@ -249,6 +261,9 @@ export default function App() {
     try { window.history.replaceState({ conduit: 0 }, ''); } catch { /* ignore */ }
     const onPop = (ev) => {
       const h = histRef.current;
+      // Leaving the now-playing step closes the player and nothing else.
+      if (fullScreenRef.current && !ev.state?.np) { setFullScreen(false); fullScreenRef.current = false; }
+      if (ev.state?.np && !fullScreenRef.current) { setFullScreen(true); fullScreenRef.current = true; }
       const to = ev.state && typeof ev.state.conduit === 'number' ? ev.state.conduit : 0;
       if (to === h.idx || to < 0 || to >= h.stack.length) return;
       h.idx = to; applyEntry(h.stack[to]); setHistTick((t) => t + 1);

@@ -64,6 +64,22 @@ const HeartPath = ({ on }) => (on
  * Spotify's full-screen player: blurred cover behind, tabs up top (Album /
  * Visualizer / Lyrics), the track and transport along the bottom.
  */
+// Show `lo` at once, `hi` as soon as it has loaded; `hi` alone when there is
+// no `lo`. A new `hi` (next track) starts over from its `lo`.
+function useProgressiveSrc(lo, hi) {
+  const [src, setSrc] = useState(hi);
+  useEffect(() => {
+    if (!hi || !lo) { setSrc(hi); return undefined; }
+    let alive = true;
+    setSrc(lo);
+    const img = new Image();
+    img.onload = () => { if (alive) setSrc(hi); };
+    img.src = hi;
+    return () => { alive = false; };
+  }, [lo, hi]);
+  return src;
+}
+
 export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAlbum, onLike, onAddTo, onNewPlaylist, playlists = [], prefs, onUpdatePrefs, onPanel, devices = [], sessionDevice = null }) {
   // Phone: the mini bar always opens on the album view (Spotify); lyrics and
   // the visualizer are a tap away. Desktop remembers the last tab.
@@ -135,7 +151,12 @@ export default function FullScreen({ player, jf, onClose, onOpenArtist, onOpenAl
   ];
   const { nowPlaying, playing, position, duration, shuffle, repeat, volume } = player;
   const liked = useLiked(nowPlaying?.itemId);
-  const art = nowPlaying?.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: 1000 }) : nowPlaying?.artUrl || null;
+  // The big cover paints from the 320px copy the lists already fetched (it is
+  // in the cache), while the full-size one (640 on the phone: 3x of the 24pt
+  // gutter width, 1000 on the desktop) loads behind it and swaps in.
+  const artHi = nowPlaying?.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: phone ? 640 : 1000 }) : nowPlaying?.artUrl || null;
+  const artLo = nowPlaying?.artId ? jf.imageUrl(nowPlaying.artId, { maxHeight: 320 }) : null;
+  const art = useProgressiveSrc(artLo, artHi);
   // The row-menu shape of the playing track (onLike / onAddTo want a track
   // object with an Id).
   const asTrack = nowPlaying?.itemId ? { Id: nowPlaying.itemId, Name: nowPlaying.title, Artists: [nowPlaying.artist], AlbumId: nowPlaying.albumId, _partial: true } : null;
