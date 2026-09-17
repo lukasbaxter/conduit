@@ -5,7 +5,7 @@
 // LAN URLs carrying their own api_key -- a relative path or a localhost address
 // works in the app window and fails silently on the speaker.
 
-import { lyricsFast } from './search.js';
+import { lyricsFast, libraryFast, homeFast } from './search.js';
 
 const CLIENT = 'Conduit';
 const VERSION = '0.1.0';
@@ -247,7 +247,14 @@ export class Jellyfin {
 
   // --- library ------------------------------------------------------------
 
-  async albums({ limit = 500, startIndex = 0, search = null } = {}) {
+  // Album and artist lists come from the relay's index (Jellyfin took 5-12 s
+  // for the albums alone tonight); Jellyfin is the fallback.
+  _library() { if (!this._libraryP) this._libraryP = this._cachedFor('library', 10 * 60 * 1000, () => libraryFast(this)).finally(() => { this._libraryP = null; }); return this._libraryP; }
+  async albums(opts = {}) {
+    if (!opts.search) { try { const l = await this._library(); if (l?.albums?.length) return { items: l.albums.slice(opts.startIndex || 0, (opts.startIndex || 0) + (opts.limit || l.albums.length)), total: l.albums.length }; } catch { /* relay down */ } }
+    return this._albumsJf(opts);
+  }
+  async _albumsJf({ limit = 500, startIndex = 0, search = null } = {}) {
     const q = new URLSearchParams({
       IncludeItemTypes: 'MusicAlbum',
       Recursive: 'true',
@@ -264,7 +271,11 @@ export class Jellyfin {
     return { items: data.Items || [], total: data.TotalRecordCount ?? 0 };
   }
 
-  async artists({ limit = 500, startIndex = 0, search = null } = {}) {
+  async artists(opts = {}) {
+    if (!opts.search) { try { const l = await this._library(); if (l?.artists?.length) return { items: l.artists.slice(opts.startIndex || 0, (opts.startIndex || 0) + (opts.limit || l.artists.length)), total: l.artists.length }; } catch { /* relay down */ } }
+    return this._artistsJf(opts);
+  }
+  async _artistsJf({ limit = 500, startIndex = 0, search = null } = {}) {
     const q = new URLSearchParams({
       SortBy: 'SortName',
       SortOrder: 'Ascending',
@@ -280,7 +291,13 @@ export class Jellyfin {
 
   // Albums this user has played most recently -- feeds the home shortcuts and
   // the "Recently played" shelf, both of which Spotify drives from history.
-  recentlyPlayedAlbums(opts = {}) { return this._cachedFor(`recentAlbums:${opts.limit || 8}`, 5 * 60 * 1000, () => this._recentlyPlayedAlbums(opts)); }
+  _home() { return this._cachedFor('home', 3 * 60 * 1000, () => homeFast(this)); }
+  recentlyPlayedAlbums(opts = {}) {
+    return this._cachedFor(`recentAlbums:${opts.limit || 8}`, 5 * 60 * 1000, async () => {
+      try { const h = await this._home(); if (h?.recentAlbums?.length) return { items: h.recentAlbums.slice(0, opts.limit || 8) }; } catch { /* relay down */ }
+      return this._recentlyPlayedAlbums(opts);
+    });
+  }
   async _recentlyPlayedAlbums({ limit = 8 } = {}) {
     const q = new URLSearchParams({
       IncludeItemTypes: 'Audio',
@@ -320,7 +337,12 @@ export class Jellyfin {
   }
 
   // Most-played tracks (Spotify's "Top tracks this month" on the profile page).
-  topTracks(opts = {}) { return this._cachedFor(`topTracks:${opts.limit || 50}`, 5 * 60 * 1000, () => this._topTracks(opts)); }
+  topTracks(opts = {}) {
+    return this._cachedFor(`topTracks:${opts.limit || 50}`, 5 * 60 * 1000, async () => {
+      try { const h = await this._home(); if (h?.topTracks?.length) return h.topTracks.slice(0, opts.limit || 50); } catch { /* relay down */ }
+      return this._topTracks(opts);
+    });
+  }
   async _topTracks({ limit = 50 } = {}) {
     const q = new URLSearchParams({
       IncludeItemTypes: 'Audio', Recursive: 'true', Filters: 'IsPlayed', SortBy: 'PlayCount,DatePlayed', SortOrder: 'Descending',
