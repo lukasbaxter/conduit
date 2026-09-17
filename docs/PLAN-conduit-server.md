@@ -221,11 +221,20 @@ Things that cost real days, and the shape that avoids them:
    *server* time, playing, device, queue) and clients send intents
    (play/seek/transfer) and render the state; time is synced to the
    server's clock once per connection.
-4. **Speakers are driven by the server, not the Mac.** The server already
-   sits on the LAN; Cast and BluOS control move into it, so a phone can
-   send music to the Node with no desktop running. The desktop keeps only
-   its own local output. (Also the reason the discovery/Local-Network/
-   exit-node problems existed at all.)
+4. **The server owns the session; any client can be the hands.** (Lukas's
+   call, 2026-09-17.) At home the server itself discovers and drives the
+   LAN speakers, so a phone can send music to the Node with no desktop
+   running. Away from home (a friend's BluOS speaker), the client that is
+   on that LAN (desktop app or phone shell) discovers and drives it, and
+   reports what it is doing to the server like any other player: the
+   speaker is just that client's output. **Offline**: a client that cannot
+   reach the server keeps playing whatever audio it has (its own queue,
+   cached tracks, a speaker it is already driving) and keeps acting on its
+   own; every action (play, pause, seek, next, transfer, like) is an event
+   stamped with the client's server-synced clock. When the two talk again
+   the newest event wins and becomes the session; the server rebroadcasts
+   it and the client that lost falls in line. That timestamped event log is
+   also the telemetry (see 9).
 5. **A state machine for playback.** Most bugs were state combinations:
    "device switched but nothing loaded", "playing but element paused",
    "transfer half done". Explicit states (idle / loading / playing /
@@ -234,10 +243,15 @@ Things that cost real days, and the shape that avoids them:
 6. **HLS from day one, no chunked transcodes.** Ranges for originals, HLS
    for everything else, one seek model (server-side offset). Yesterday's
    iOS-won't-play, nginx rate shaping and restart-at-offset code all go.
-7. **Hygiene is a server job, not crons.** Retag, cover, lyric and rename
-   passes were Python scripts with JSON state in a home dir; they become
-   queued, resumable, logged jobs with an admin page, and the search index
-   is updated by the scanner instead of a 10-minute full resync.
+7. **Hygiene is a server job, not crons, behind an admin page.** Retag,
+   cover, lyric and rename passes were Python scripts with JSON state in a
+   home dir; they become queued, resumable, logged jobs, and the search
+   index is updated by the scanner instead of a 10-minute full resync.
+   **Roles**: `admin` and `user`. The first admin comes from env
+   (`ADMIN_USER`/`ADMIN_PASS`, default `admin`/`admin`, the setup page
+   forces a change on first login); admins promote or demote other users,
+   invite by link, see the jobs, the identity/lyrics queues, slow endpoints
+   and connected devices. Users see their own library, likes, devices.
 8. **Client caches with a version, in IndexedDB.** localStorage silently
    dropped the 1,400-row liked cache at the 5 MB limit; lists are cached in
    IndexedDB keyed by the server's library version and only refetched when
@@ -248,8 +262,14 @@ Things that cost real days, and the shape that avoids them:
    the admin page shows slow endpoints.
 10. **A fixture library and CI from the start.** Probes were one-offs run
     against production (one of them, run as Lukas, took over his session).
-    A 30-track fixture folder, a seeded server in CI, and the release
-    workflow tested on every PR (it took five runs to ship 0.1.0).
+    "Fixture library" = a tiny fake music folder checked into the repo
+    (30 short generated/royalty-free tracks with real tags, a couple of
+    folder covers, `.lrc` sidecars, one deliberately mistagged file, one
+    instrumental) so the automated tests on GitHub Actions can start a
+    server against it and exercise scan, search, streaming, lyrics,
+    identity and the session model on every push, without touching the
+    real library or any real account. The release workflow builds on
+    every PR too (it took five runs to ship 0.1.0).
 11. **No hand-edited proxy config.** Six special nginx locations grew in one
     night (art cache, rate shaping, gzip, keep-alive). The server sets its
     own cache headers and compression; a reverse proxy in front is generic.
@@ -299,6 +319,15 @@ possible, what is a client task.
 | Defer non-critical scripts | audiomotion/Calibrate already dynamic |
 | Unused dependencies | castv2/bonjour only in Electron; audit the web bundle |
 | DB connection pooling | n/a (SQLite, single process, WAL) |
+
+## Decisions taken (2026-09-17, Lukas)
+- Server-owned session with offline autonomy and timestamped-event
+  reconciliation (item 4 above): yes.
+- Own ids + Jellyfin aliases (3), one backend/one token/IndexedDB caches
+  (4), playback state machine (5), HLS only (6): yes.
+- Admin page + roles with env-seeded first admin (7): yes.
+- Client diagnostics + server request timing (9): yes.
+- Fixture library in CI (10): yes.
 
 ## Order of work
 
