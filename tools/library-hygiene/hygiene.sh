@@ -3,6 +3,8 @@
 # Install: crontab -e ->  30 4 * * * /home/lukas/conduit-hygiene/hygiene.sh >> /home/lukas/conduit-hygiene/hygiene.log 2>&1
 set -u
 cd "$(dirname "$0")"
+# One run at a time: the nightly cron and the on-arrival trigger from Music Requests share this.
+exec 9>/tmp/conduit-hygiene.lock; flock -n 9 || { echo "hygiene already running"; exit 0; }
 echo "=== $(date -Is) hygiene start"
 # Rip leftovers: Jellyfin imports every .m3u as a "playlist" the user sees.
 find /mnt/wd_nvme1/music -type f \( -iname "*.m3u" -o -iname "*.m3u8" -o -iname "*.sfv" -o -iname "*.url" -o -iname "*.torrent" \) -delete
@@ -59,6 +61,13 @@ PY
   python3 merge_split_albums.py --restore "$SNAP"
 fi
 python3 cleanup_artists.py --apply
-python3 artist_images.py oracle.json --apply
-python3 albums.py && python3 album_covers.py albums_noimg.json --apply
+# Artwork now comes from Jellyfin's own providers (TheAudioDB / Fanart / Cover
+# Art Archive via MusicBrainz ids) -- the Deezer/Lidarr fetchers below are
+# retired (2026-09-14). fix_covers.py only squares off bad cover FILES.
+python3 artist_images.py oracle.json --apply   # Deezer -> Lidarr -> own album cover; the Jellyfin providers need MusicBrainz ids most rips lack
+python3 albums.py && python3 album_covers.py albums_noimg.json --apply  # embedded-first safety net for new arrivals
+python3 fix_flac_pictures.py --apply   # Chrome refuses FLACs with a malformed PICTURE block
+python3 fix_covers.py --apply
+# Covers may have changed above: drop nginx's artwork cache (music.baxtergroup.io, 00-jfimg-cache.conf)
+sudo docker exec nginx sh -c 'rm -rf /var/cache/nginx/jfimg/*' 2>/dev/null || true
 echo "=== $(date -Is) hygiene done"
