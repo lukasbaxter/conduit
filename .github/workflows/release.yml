@@ -12,6 +12,7 @@ permissions:
 jobs:
   desktop:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
@@ -26,7 +27,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
-      - run: npm run ${{ matrix.script }}
+      # --publish never: electron-builder otherwise tries to upload to GitHub itself on a tag.
+      - run: npm run ${{ matrix.script }} -- --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - uses: actions/upload-artifact@v4
