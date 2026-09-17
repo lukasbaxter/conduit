@@ -825,6 +825,29 @@ export default function App() {
     return () => { window.removeEventListener('resize', measure); window.visualViewport?.removeEventListener('resize', measure); window.removeEventListener('scroll', pin); };
   }, []);
 
+  // Native shell bridge (mobile/App.js, react-native-webview). The page tells
+  // the shell whether the sound is on THIS phone or elsewhere and the current
+  // session volume; the shell turns hardware volume presses into steps here
+  // while the sound is elsewhere (the phone's own buttons already control its
+  // own output natively). setVolume routes to the active device.
+  const remoteSession = !!player.mirroring || (player.device?.kind && player.device.kind !== 'local');
+  useEffect(() => {
+    const rn = window.ReactNativeWebView;
+    if (!rn) return undefined;
+    try { rn.postMessage(JSON.stringify({ type: 'session', remote: remoteSession, volume: Math.round(player.volume ?? 0), device: player.nowPlaying?.device?.name || null })); } catch { /* shell gone */ }
+    return undefined;
+  }, [remoteSession, Math.round(player.volume ?? 0), player.nowPlaying?.device?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!window.ReactNativeWebView) return undefined;
+    const onStep = (e) => {
+      const step = Number(e.detail?.step) || 0; if (!step) return;
+      const next = Math.max(0, Math.min(100, Math.round(player.volume ?? 0) + step * 5));
+      player.setVolume(next);
+    };
+    window.addEventListener('conduit:volumestep', onStep);
+    return () => window.removeEventListener('conduit:volumestep', onStep);
+  }, [player.volume, player.setVolume]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Phone viewport diagnostics, logged by the relay (installed web app layout
   // issues cannot be reproduced in a simulator).
   useEffect(() => {

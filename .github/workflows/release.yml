@@ -1,0 +1,100 @@
+# Tag v* -> build the desktop apps and the Android APK, attach them to a
+# GitHub Release. macOS and Windows builds are unsigned (no developer
+# accounts): macOS users right-click > Open once, Windows users click through
+# SmartScreen. The APK is signed with the project's own keystore (secrets).
+name: release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  desktop:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            script: dist:mac
+            glob: 'release/*.dmg'
+          - os: windows-latest
+            script: dist:win
+            glob: 'release/*.exe'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run ${{ matrix.script }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: ${{ matrix.glob }}
+          if-no-files-found: error
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+        working-directory: mobile
+      - run: npx expo prebuild --platform android --no-install
+        working-directory: mobile
+        env: { CI: '1' }
+      - name: Signing config
+        working-directory: mobile/android
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          echo "$KS_B64" | base64 -d > app/conduit-release.jks
+          cat >> gradle.properties <<EOP
+          CONDUIT_STORE_FILE=conduit-release.jks
+          CONDUIT_STORE_PASSWORD=$KS_PASS
+          CONDUIT_KEY_ALIAS=conduit
+          CONDUIT_KEY_PASSWORD=$KS_PASS
+          EOP
+          # Point the release build at our keystore (Expo's template signs release with the debug key).
+          python3 - <<'PY'
+          import re
+          p = 'app/build.gradle'; s = open(p).read()
+          s = s.replace("""    signingConfigs {
+              debug {""", """    signingConfigs {
+              release {
+                  storeFile file(CONDUIT_STORE_FILE)
+                  storePassword CONDUIT_STORE_PASSWORD
+                  keyAlias CONDUIT_KEY_ALIAS
+                  keyPassword CONDUIT_KEY_PASSWORD
+              }
+              debug {""", 1)
+          s = re.sub(r"(release \{[^}]*?)signingConfig signingConfigs\.debug", r"\1signingConfig signingConfigs.release", s, count=1, flags=re.S)
+          open(p, 'w').write(s)
+          PY
+          grep -n "signingConfigs.release" app/build.gradle
+      - run: ./gradlew assembleRelease --no-daemon
+        working-directory: mobile/android
+      - run: cp mobile/android/app/build/outputs/apk/release/app-release.apk Conduit-${GITHUB_REF_NAME#v}.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: Conduit-*.apk
+          if-no-files-found: error
+  publish:
+    needs: [desktop, android]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - run: ls -la out
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          generate_release_notes: true

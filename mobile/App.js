@@ -1,18 +1,68 @@
 // Conduit on the phone: the web build (music.baxtergroup.io) inside a native
-// WebView, so Expo Go runs it without a store build. The web app's mobile
-// layout (bottom tabs, compact player) does the rest; this shell only
-// supplies media playback permissions and a retry screen; it draws full-bleed
-// and the page itself pads for the notch / home indicator (viewport-fit=cover).
-import { useRef, useState } from 'react';
+// WebView. The web app's mobile layout (bottom tabs, compact player) does the
+// rest; this shell supplies media playback permissions, a retry screen, and
+// the one thing a web page cannot have: the hardware volume buttons. While
+// the sound is on another device (the page says so over the bridge) a press
+// becomes a volume step for that device and the phone's own level is put
+// back, so it never drifts; while the phone itself plays, the buttons do
+// what they always do. It draws full-bleed and the page pads for the notch /
+// home indicator (viewport-fit=cover).
+import { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { VolumeManager } from 'react-native-volume-manager';
 
 const URL = process.env.EXPO_PUBLIC_CONDUIT_URL || 'https://music.baxtergroup.io/';
 
 export default function App() {
   const web = useRef(null);
   const [error, setError] = useState(null);
+  // What the page last told us: is the sound elsewhere?
+  const remote = useRef(false);
+  // The phone's own level while the sound is elsewhere; presses are measured
+  // against it and it is restored after each one.
+  const base = useRef(null);
+  const restoring = useRef(0);
+
+  useEffect(() => {
+    let sub = null;
+    (async () => {
+      try { const v = await VolumeManager.getVolume(); base.current = typeof v === 'number' ? v : v?.volume ?? null; } catch { /* no audio yet */ }
+      sub = VolumeManager.addVolumeListener((ev) => {
+        const vol = typeof ev === 'number' ? ev : ev?.volume;
+        if (typeof vol !== 'number') return;
+        if (Date.now() < restoring.current) { base.current = vol; return; } // our own restore echoing back
+        if (!remote.current || base.current == null) { base.current = vol; return; }
+        const step = vol > base.current + 0.001 ? 1 : vol < base.current - 0.001 ? -1 : 0;
+        if (!step) return;
+        web.current?.injectJavaScript(`window.dispatchEvent(new CustomEvent('conduit:volumestep', { detail: { step: ${step} } })); true;`);
+        // Put the phone's own level back, quietly, so the next press measures from the same place.
+        restoring.current = Date.now() + 700;
+        VolumeManager.setVolume(base.current, { showUI: false }).catch(() => {});
+      });
+    })();
+    return () => { try { sub?.remove(); } catch { /* gone */ } };
+  }, []);
+
+  const onMessage = (e) => {
+    let msg = null;
+    try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
+    if (msg?.type === 'session') {
+      const was = remote.current; remote.current = !!msg.remote;
+      if (remote.current && !was) {
+        // A press at the top or bottom of the range produces no change to
+        // measure, so park the phone's own level away from the ends.
+        VolumeManager.getVolume().then((v) => {
+          let b = typeof v === 'number' ? v : v?.volume;
+          if (typeof b !== 'number') return;
+          if (b > 0.95 || b < 0.05) { b = b > 0.95 ? 0.8 : 0.2; restoring.current = Date.now() + 700; VolumeManager.setVolume(b, { showUI: false }).catch(() => {}); }
+          base.current = b;
+        }).catch(() => {});
+      }
+    }
+  };
+
   return (
     <View style={styles.root}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
@@ -26,6 +76,7 @@ export default function App() {
         ref={web}
         source={{ uri: URL }}
         style={styles.web}
+        onMessage={onMessage}
         // Audio keeps playing with the screen off; inline (no forced fullscreen video UI).
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
