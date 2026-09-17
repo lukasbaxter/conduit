@@ -24,7 +24,9 @@ export const KEEPALIVE_SECONDS = 20 * 60;
 function element() {
   if (el) return el;
   el = new Audio(new URL('keepalive.wav', document.baseURI).href);
-  el.preload = 'auto'; el.setAttribute('playsinline', '');
+  // preload none: with 'auto' every page load pulled the whole 9.6 MB file
+  // (measured on a 5 Mbps link); it is only fetched once it has to play.
+  el.preload = 'none'; el.setAttribute('playsinline', '');
   // No loop attribute and no seek before the first play: on the iPhone a
   // seek applied at loadedmetadata left the clock frozen for good. The
   // element starts at 0, and is moved only once it is seen advancing.

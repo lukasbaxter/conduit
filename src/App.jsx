@@ -387,10 +387,15 @@ export default function App() {
   // playlists are what "Your Library" shows.
   useEffect(() => {
     if (!jf) return;
-    jf.albums({ limit: 500 }).then((a) => { setAlbums(a.items); jf._persist('albums', a.items); })
+    // The album and artist lists cost Jellyfin 7 s and 2.4 s of a saturated
+    // core tonight, per app launch, per device. The persisted copies are used
+    // for 6 h; a library change (relay ping) or a stale copy refetches.
+    const fresh = (key) => { const at = Number(jf.persisted(`${key}At`) || 0); return Date.now() - at < 6 * 3600 * 1000 && Array.isArray(jf.persisted(key)); };
+    if (fresh('albums')) setLibLoading(false);
+    else jf.albums({ limit: 500 }).then((a) => { setAlbums(a.items); jf._persist('albums', a.items); jf._persist('albumsAt', Date.now()); })
       .catch((e) => { if (String(e).includes('401')) { clearSession(); setJf(null); } })
       .finally(() => setLibLoading(false));
-    jf.artists({ limit: 500 }).then((r) => { setArtists(r.items); jf._persist('artists', r.items); }).catch(() => {});
+    if (!fresh('artists')) jf.artists({ limit: 500 }).then((r) => { setArtists(r.items); jf._persist('artists', r.items); jf._persist('artistsAt', Date.now()); }).catch(() => {});
     jf.playlists().then((p) => { setPlaylists(p.items); jf._persist('playlists', p.items); }).catch(() => {});
     jf.favoriteAlbums().then((a) => { setSavedAlbums(a.items); jf._persist('savedAlbums', a.items); }).catch(() => {});
   }, [jf]);
@@ -443,7 +448,7 @@ export default function App() {
           applyTheme(next.theme); jf.quality = deviceQuality(next); jf._persist('prefs', next);
           return next;
         });
-        if (p._libraryChanged && p._libraryChanged !== relayLibraryPing.current) { relayLibraryPing.current = p._libraryChanged; refreshPlaylists(); }
+        if (p._libraryChanged && p._libraryChanged !== relayLibraryPing.current) { relayLibraryPing.current = p._libraryChanged; refreshPlaylists(); jf._persist('albumsAt', 0); jf._persist('artistsAt', 0); }
       },
       // Another client liked / unliked: keep the timestamp map and the hearts in step.
       onLike: ({ itemId, liked, at }) => { likesSet(itemId, liked, at); },

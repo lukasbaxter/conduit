@@ -88,6 +88,13 @@ export class Jellyfin {
     if (this._cache.has(key)) return Promise.resolve(this._cache.get(key));
     return fn().then((v) => { this._cache.set(key, v); return v; });
   }
+  // Same, but only for `ms`: the play-history queries cost Jellyfin 1.5-3 s
+  // each tonight and Home + every album page asked for them again.
+  _cachedFor(key, ms, fn) {
+    const hit = this._cache.get(key);
+    if (hit && hit._at && Date.now() - hit._at < ms) return Promise.resolve(hit.v);
+    return fn().then((v) => { this._cache.set(key, { _at: Date.now(), v }); return v; });
+  }
 
   _evict(prefix) {
     for (const k of [...this._cache.keys()]) if (k.startsWith(prefix)) this._cache.delete(k);
@@ -242,7 +249,8 @@ export class Jellyfin {
       Recursive: 'true',
       SortBy: 'SortName',
       SortOrder: 'Ascending',
-      Fields: 'PrimaryImageAspectRatio,ProductionYear,ChildCount',
+      // No ChildCount: it nearly doubled the query (12.5 s vs 7 s for 500 albums); the album page counts its own tracks.
+      Fields: 'PrimaryImageAspectRatio,ProductionYear',
       Limit: String(limit),
       StartIndex: String(startIndex),
       userId: this.userId,
@@ -268,7 +276,8 @@ export class Jellyfin {
 
   // Albums this user has played most recently -- feeds the home shortcuts and
   // the "Recently played" shelf, both of which Spotify drives from history.
-  async recentlyPlayedAlbums({ limit = 8 } = {}) {
+  recentlyPlayedAlbums(opts = {}) { return this._cachedFor(`recentAlbums:${opts.limit || 8}`, 5 * 60 * 1000, () => this._recentlyPlayedAlbums(opts)); }
+  async _recentlyPlayedAlbums({ limit = 8 } = {}) {
     const q = new URLSearchParams({
       IncludeItemTypes: 'Audio',
       Recursive: 'true',
@@ -307,7 +316,8 @@ export class Jellyfin {
   }
 
   // Most-played tracks (Spotify's "Top tracks this month" on the profile page).
-  async topTracks({ limit = 50 } = {}) {
+  topTracks(opts = {}) { return this._cachedFor(`topTracks:${opts.limit || 50}`, 5 * 60 * 1000, () => this._topTracks(opts)); }
+  async _topTracks({ limit = 50 } = {}) {
     const q = new URLSearchParams({
       IncludeItemTypes: 'Audio', Recursive: 'true', Filters: 'IsPlayed', SortBy: 'PlayCount,DatePlayed', SortOrder: 'Descending',
       Fields: 'ParentId,ArtistItems,AlbumArtists,UserData', Limit: String(limit), userId: this.userId,
@@ -695,9 +705,13 @@ export class Jellyfin {
     return null;
   }
 
-  imageUrl(itemId, { maxHeight = 480, tag = null } = {}) {
+  // JPEG quality: Jellyfin's default is 90, which made an album page 7 MB of
+  // covers on the phone (measured: 90 images at 5 Mbps). 72 on a phone, 82
+  // elsewhere; both are cached by nginx per (size, quality).
+  imageQuality = typeof window !== 'undefined' && window.matchMedia?.('(max-width: 760px)').matches ? 72 : 82;
+  imageUrl(itemId, { maxHeight = 480, tag = null, quality = null } = {}) {
     if (!itemId) return null;
-    const q = new URLSearchParams({ maxHeight: String(maxHeight), api_key: this.token });
+    const q = new URLSearchParams({ maxHeight: String(maxHeight), quality: String(quality ?? this.imageQuality), api_key: this.token });
     if (tag) q.set('tag', tag);
     if (this._bust?.[itemId]) q.set('v', String(this._bust[itemId]));
     return `${this.baseUrl}/Items/${itemId}/Images/Primary?${q}`;
