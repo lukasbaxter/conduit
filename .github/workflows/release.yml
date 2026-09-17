@@ -56,27 +56,20 @@ jobs:
         working-directory: mobile/android
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
-          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
         run: |
           echo "$KS_B64" | base64 -d > app/conduit-release.jks
-          cat >> gradle.properties <<EOP
-          CONDUIT_STORE_FILE=conduit-release.jks
-          CONDUIT_STORE_PASSWORD=$KS_PASS
-          CONDUIT_KEY_ALIAS=conduit
-          CONDUIT_KEY_PASSWORD=$KS_PASS
-          EOP
           # Point the release build at our keystore (Expo's template signs
           # release with the debug key). Re-opening the android {} block is
-          # additive in the Android Gradle DSL, so no text surgery on the template.
+          # additive in the Android Gradle DSL; values come from the environment.
           cat >> app/build.gradle <<'EOG'
 
           android {
               signingConfigs {
                   release {
-                      storeFile file(CONDUIT_STORE_FILE)
-                      storePassword CONDUIT_STORE_PASSWORD
-                      keyAlias CONDUIT_KEY_ALIAS
-                      keyPassword CONDUIT_KEY_PASSWORD
+                      storeFile file("conduit-release.jks")
+                      storePassword System.getenv("CONDUIT_KS_PASS")
+                      keyAlias "conduit"
+                      keyPassword System.getenv("CONDUIT_KS_PASS")
                   }
               }
               buildTypes {
@@ -88,6 +81,8 @@ jobs:
           EOG
       - run: ./gradlew assembleRelease --no-daemon
         working-directory: mobile/android
+        env:
+          CONDUIT_KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
       - run: cp mobile/android/app/build/outputs/apk/release/app-release.apk Conduit-${GITHUB_REF_NAME#v}.apk
       - uses: actions/upload-artifact@v4
         with:
