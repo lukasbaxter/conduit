@@ -120,6 +120,85 @@ Decisions, with the reason each way:
    set = the Explo tab is hidden and slskd never starts. `/music` must be
    writable for this; read-only otherwise.
 
+## Identity, metadata, lyrics: the enrichment pipeline
+
+Rule from Lukas: **every song has lyrics, and we know how sure we are that
+a file is the song we think it is.** Tags lie (the wrong edit, a mislabeled
+rip, a live version filed as the studio one; 2,393 mistimed lyric files
+came from exactly that). So identity comes from the audio, not the tags.
+
+### Stage 1: fingerprint (what IS this file)
+- Chromaprint (`fpcalc`, shipped in the image) fingerprints every file at
+  scan; the fingerprint is stored with the track.
+- AcoustID lookup (free API key, set once by the admin: `ACOUSTID_KEY`)
+  returns MusicBrainz recordings with scores. Tags are matched against
+  those candidates: recording title/artist similarity, duration delta.
+- No AcoustID hit: search MusicBrainz by tags (title, artist, duration),
+  take the candidates, and **compare the actual audio** to them: fetch a
+  30 s preview for each candidate (Deezer, no key; iTunes as a second
+  source), fingerprint it, and match it against the file's fingerprint at
+  any offset (Chromaprint sub-fingerprint matching). The candidate whose
+  preview lines up is the song; none lining up means "unknown recording".
+
+### Stage 2: the certainty scale
+Every track carries `identity` = a score 0-1 and a state:
+
+| state | means | how |
+|---|---|---|
+| verified | audio matches a known recording | AcoustID ≥ 0.90 or preview match, duration within 2 s |
+| likely | tags match a recording, audio not checked yet | MB search agrees on title+artist, duration within 3 s |
+| uncertain | candidates disagree or nothing matches well | anything else; queued for review |
+| mismatch | audio says a different recording than the tags | AcoustID/preview picks recording X, tags say Y |
+
+The score feeds everything downstream: metadata is only written to the
+file (or shown as canonical) from `verified`/`likely`; a `mismatch`
+proposes the corrected tags and, above 0.95, applies them (the old tags
+are kept in the DB so it can be undone). An admin page lists `uncertain`
+and `mismatch` with the candidates side by side and a "play the preview /
+play the file" button; a decision there is remembered per file hash.
+
+### Stage 3: metadata and images, ours
+- Canonical metadata from MusicBrainz for the identified recording/release
+  (artist credits with join phrases, release date, disc/track numbers,
+  MBIDs stored). Genres from MB tags + Last.fm/Deezer as fallback.
+- Cover art: folder `cover.jpg` if it is the right release (same MBID or
+  same track list), else Cover Art Archive by release MBID, else Deezer/
+  iTunes by the identified release; the chosen file is written to the album
+  folder as `cover.jpg` and pre-rendered. Artist portraits: fanart.tv/
+  Deezer/TheAudioDB, stored in `/data/art/artists/`.
+- Nothing is fetched twice: every external answer is cached in SQLite with
+  its date, rate limits are respected per source (MusicBrainz 1 req/s), and
+  the whole pass is resumable.
+
+### Stage 4: lyrics for every song
+Order, per verified/likely track:
+1. `.lrc` sidecar that fits (its timestamps end inside the track's
+   duration and, when synced lyrics exist online, agree with them within
+   0.6 s; the `lyrics_check.py` rule).
+2. LrcLib `/api/get` by artist + title + album + **duration** (the one
+   answer that is timed for this recording), synced preferred.
+3. LrcLib `/api/search` candidates, filtered by duration within 3 s, then
+   by the identified recording's alternate titles (MB aliases: "(Remaster)"
+   etc.).
+4. Plain (unsynced) lyrics from the same sources if nothing synced exists.
+5. Genius/Musixmatch are not scraped (terms); an admin can paste lyrics.
+6. Tracks the MB recording marks instrumental (or whose preview/fingerprint
+   matches an instrumental) are stored as **instrumental**, which counts as
+   resolved and shows "Instrumental" instead of "no lyrics".
+
+Anything left is `lyrics: missing` in a visible queue with a retry
+schedule (daily for a week, then weekly); the library page shows the
+number, the goal being zero. The MB MBID is the key for retries so a
+future LrcLib upload is found without a rescan.
+
+### Where it runs
+All of it is a background job in the server (a queue table, one worker,
+resumable, visible on the admin page: N verified, N likely, N uncertain,
+N missing lyrics). New files go through it minutes after they land;
+the whole library is worked through once at first scan (27k tracks at
+MusicBrainz's 1 req/s = a few hours of AcoustID/MB lookups, spread
+across the first night). Fingerprinting itself is local and fast.
+
 ## Migration for us (no big bang)
 
 The client already goes through `src/api/jellyfin.js` + `src/api/search.js`.
@@ -167,7 +246,8 @@ possible, what is a client task.
 ## Order of work
 
 1. **Server skeleton** in `server/`: SQLite schema, scanner (tags, covers,
-   lyrics), id formula, static originals with Range, artwork sizes.
+   lyrics), id formula, static originals with Range, artwork sizes,
+   Chromaprint fingerprints stored at scan.
    Point the web build's `/jf` at it read-only alongside Jellyfin; compare
    lists and ids against Jellyfin's for our library (a script).
 2. **Search + Home + Library + Liked + playlists** on the server (port the
@@ -180,7 +260,10 @@ possible, what is a client task.
    setup page, GHCR publish in the release workflow, README for homelab
    users; Explo + Soulseek behind env. Health: one `/healthz` that also
    reports slskd's state.
-6. Perf pass from the table (pagination/virtualisation, Lighthouse,
+6. **Enrichment pipeline**: AcoustID/MB identity + certainty states,
+   preview-fingerprint comparison, metadata/cover/portrait fetch, lyrics
+   cascade, admin review page, the missing-lyrics queue.
+7. Perf pass from the table (pagination/virtualisation, Lighthouse,
    re-render profile, bundle audit).
 
 Open questions for Lukas: ship Subsonic compatibility (other apps, more
