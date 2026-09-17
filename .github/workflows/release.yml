@@ -65,23 +65,27 @@ jobs:
           CONDUIT_KEY_ALIAS=conduit
           CONDUIT_KEY_PASSWORD=$KS_PASS
           EOP
-          # Point the release build at our keystore (Expo's template signs release with the debug key).
-          python3 - <<'PY'
-          import re
-          p = 'app/build.gradle'; s = open(p).read()
-          s = s.replace("""    signingConfigs {
-              debug {""", """    signingConfigs {
-              release {
-                  storeFile file(CONDUIT_STORE_FILE)
-                  storePassword CONDUIT_STORE_PASSWORD
-                  keyAlias CONDUIT_KEY_ALIAS
-                  keyPassword CONDUIT_KEY_PASSWORD
+          # Point the release build at our keystore (Expo's template signs
+          # release with the debug key). Re-opening the android {} block is
+          # additive in the Android Gradle DSL, so no text surgery on the template.
+          cat >> app/build.gradle <<'EOG'
+
+          android {
+              signingConfigs {
+                  release {
+                      storeFile file(CONDUIT_STORE_FILE)
+                      storePassword CONDUIT_STORE_PASSWORD
+                      keyAlias CONDUIT_KEY_ALIAS
+                      keyPassword CONDUIT_KEY_PASSWORD
+                  }
               }
-              debug {""", 1)
-          s = re.sub(r"(release \{[^}]*?)signingConfig signingConfigs\.debug", r"\1signingConfig signingConfigs.release", s, count=1, flags=re.S)
-          open(p, 'w').write(s)
-          PY
-          grep -n "signingConfigs.release" app/build.gradle
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          EOG
       - run: ./gradlew assembleRelease --no-daemon
         working-directory: mobile/android
       - run: cp mobile/android/app/build/outputs/apk/release/app-release.apk Conduit-${GITHUB_REF_NAME#v}.apk
