@@ -68,6 +68,13 @@ python3 artist_images.py oracle.json --apply   # Deezer -> Lidarr -> own album c
 python3 albums.py && python3 album_covers.py albums_noimg.json --apply  # embedded-first safety net for new arrivals
 python3 fix_flac_pictures.py --apply   # Chrome refuses FLACs with a malformed PICTURE block
 python3 fix_covers.py --apply
+# Lyrics: sidecars orphaned by renames back beside their file, sidecars that
+# fit another edit of the song re-fetched from LrcLib by duration (cached, so
+# only new tracks cost a request), Jellyfin told, the relay's RAM copy reloaded.
+python3 lyrics_orphans.py | head -3
+python3 lyrics_check.py | head -3
+for f in $(ls -t lyrics_changed-*.json 2>/dev/null | head -2); do [ -n "$(find "$f" -mmin -120)" ] && python3 refresh_lyrics.py "$f"; done
+curl -s -X POST http://127.0.0.1:8788/lyrics/reload; echo
 # Covers may have changed above: drop nginx's artwork cache (music.baxtergroup.io, 00-jfimg-cache.conf)
 sudo docker exec nginx sh -c 'rm -rf /var/cache/nginx/jfimg/*' 2>/dev/null || true
 echo "=== $(date -Is) hygiene done"

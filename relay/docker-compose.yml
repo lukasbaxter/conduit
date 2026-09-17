@@ -11,8 +11,26 @@ services:
       - SESSIONS_FILE=/data/sessions.json
       - MEILI_URL=http://meilisearch:7700
       - MEILI_KEY=${MEILI_KEY}
+      - REDIS_URL=redis://conduit-redis:6379
+      - LYRICS_ROOT=/music
+      - LYRICS_JF_ROOT=/music
+      - LYRICS_JF_META=/jfmeta
     volumes:
       - ./data:/data
+      - /home/admin/services/jellyfin/config/data/playlists:/jfdata/playlists:ro
+      - /mnt/wd_nvme1/music:/music:ro
+      - /home/admin/services/jellyfin/config/metadata/library:/jfmeta:ro
+    depends_on:
+      - conduit-redis
+    networks:
+      - docker_internal
+  # Lyrics for the whole library in RAM (relay/lyrics.js). No persistence on
+  # purpose: the relay refills it from the .lrc sidecars in seconds.
+  conduit-redis:
+    image: redis:7-alpine
+    container_name: conduit-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "1gb", "--maxmemory-policy", "noeviction"]
     networks:
       - docker_internal
 networks:

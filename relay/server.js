@@ -19,6 +19,7 @@
 // friend's TV only on her LAN.
 
 import fs from 'fs';
+import * as lyrics from './lyrics.js';
 import crypto from 'crypto';
 import http from 'http';
 import { WebSocketServer } from 'ws';
@@ -764,11 +765,40 @@ async function requestAlbum(albumId) {
 try { migrateJson(store, DATA_DIR, listenKey); } catch (e) { console.error('migration', e.message); }
 for (const [uid, sess] of store.sessionsAll()) lastSession.set(uid, sess);
 
+// The music library as mounted in this container, and the same directory
+// as Jellyfin sees it (its item ids hash that path).
+const LYRICS_ROOT = process.env.LYRICS_ROOT || '/music';
+const LYRICS_JF_ROOT = process.env.LYRICS_JF_ROOT || '/music';
+const LYRICS_JF_META = process.env.LYRICS_JF_META || null; // Jellyfin's metadata/library folder, when mounted
+
 const server = http.createServer(async (req, res) => {
   // Health check for Docker.
   if (req.url === '/healthz') { res.writeHead(200); res.end('ok'); return; }
   const url = new URL(req.url, 'http://x');
   const path = url.pathname.replace(/^\/relay/, '');
+  // Lyrics from RAM (relay/lyrics.js). Same shape as Jellyfin's endpoint.
+  if (path === '/lyrics' || path === '/lyrics/reload') {
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, X-Emby-Token, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
+    if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }
+    try {
+      if (path === '/lyrics/reload') {
+        if (req.method !== 'POST') { res.writeHead(405, cors); res.end(); return; }
+        const out = await lyrics.loadAll({ root: LYRICS_ROOT, jfRoot: LYRICS_JF_ROOT, jellyfinId, metaRoot: LYRICS_JF_META });
+        res.writeHead(200, { ...cors, 'Content-Type': 'application/json' }); res.end(JSON.stringify(out)); return;
+      }
+      const token = tokenOf(req);
+      const who = token ? await whoIs(token) : null;
+      if (!who) { res.writeHead(401, cors); res.end('{"error":"unauthorized"}'); return; }
+      const id = url.searchParams.get('id') || '';
+      const found = await lyrics.get(id);
+      if (!found) { res.writeHead(404, { ...cors, 'Content-Type': 'application/json' }); res.end('{"Lyrics":[]}'); return; }
+      res.writeHead(200, { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=3600' });
+      res.end(JSON.stringify({ Lyrics: found }));
+    } catch (e) {
+      res.writeHead(503, { ...cors, 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: String(e.message || e) }));
+    }
+    return;
+  }
   if (path === '/discography' || path === '/radar' || path === '/request' || path === '/similar' || path === '/popular' || path === '/history' || path === '/likes' || path === '/playlist' || path === '/gsearch') {
     const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, X-Emby-Token, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }
@@ -1084,3 +1114,12 @@ setInterval(() => {
 }, 30000);
 
 server.listen(PORT, () => console.log(`conduit-relay on :${PORT}, jellyfin=${JELLYFIN}`));
+// Lyrics into RAM: (re)load at start whenever Redis is empty or the last load
+// is older than a day; never blocks the server coming up.
+(async () => {
+  try {
+    const st = await lyrics.stats();
+    if (!st || Date.now() - st.at > 24 * 3600 * 1000) await lyrics.loadAll({ root: LYRICS_ROOT, jfRoot: LYRICS_JF_ROOT, jellyfinId, metaRoot: LYRICS_JF_META });
+    else console.log(`lyrics: ${st.count} in redis (loaded ${Math.round((Date.now() - st.at) / 60000)} min ago)`);
+  } catch (e) { console.error('lyrics load', e.message); }
+})();

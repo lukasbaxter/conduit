@@ -83,6 +83,9 @@ export const similar = (jf, artistId, name) => relayGet(jf, '/similar', { artist
 // The artist's tracks in popularity order (Deezer top-100 matched to the library), as ids.
 export const popular = (jf, artistId, name) => relayGet(jf, '/popular', { artistId, name }, 15000);
 export const radar = (jf) => relayGet(jf, '/radar', {}, 120000);
+// Lyrics from the relay's RAM copy of every sidecar (relay/lyrics.js); the
+// same shape Jellyfin's endpoint returns. 404 = none there.
+export const lyricsFast = (jf, itemId) => relayGet(jf, '/lyrics', { id: itemId }, 4000);
 // When each track was liked (relay store). `seed` = old prefs timestamps, sent once.
 export async function likes(jf, seed = null) {
   const res = await fetch(`${relayBase()}/likes`, seed

@@ -5,6 +5,8 @@
 // LAN URLs carrying their own api_key -- a relative path or a localhost address
 // works in the app window and fails silently on the speaker.
 
+import { lyricsFast } from './search.js';
+
 const CLIENT = 'Conduit';
 const VERSION = '0.1.0';
 
@@ -394,16 +396,22 @@ export class Jellyfin {
    * Returns [{start: seconds|null, text}] -- start is null for unsynced lyrics.
    */
   async lyrics(itemId) {
+    const shape = (data) => (data?.Lyrics || []).map((l) => ({
+      start: l.Start != null ? l.Start / 10_000_000 : null,
+      text: l.Text || '',
+    }));
+    // The relay holds every sidecar in RAM and answers in a few ms; Jellyfin
+    // is the fallback (a track whose lyrics arrived since the last load).
+    try {
+      const fast = await lyricsFast(this, itemId);
+      if (fast?.Lyrics?.length) return shape(fast);
+    } catch { /* relay down or 404: ask Jellyfin */ }
     const q = new URLSearchParams({ api_key: this.token });
     const res = await fetch(`${this.baseUrl}/Audio/${itemId}/Lyrics?${q}`, {
       headers: { Authorization: authHeader(this.token) },
     });
     if (!res.ok) return [];
-    const data = await res.json();
-    return (data?.Lyrics || []).map((l) => ({
-      start: l.Start != null ? l.Start / 10_000_000 : null,
-      text: l.Text || '',
-    }));
+    return shape(await res.json());
   }
 
   // Fetch a single item (album, artist, track) by id.
