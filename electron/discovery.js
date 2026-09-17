@@ -30,9 +30,24 @@ class Discovery {
     this.browsers = [];
   }
 
+  // The LAN's own IPv4 (not Tailscale's 100.64/10, not link-local): the mDNS
+  // socket is pinned to it, because with a Tailscale exit node on, macOS
+  // routes multicast into the tunnel and nothing on the LAN ever answers.
+  _lanAddress() {
+    for (const list of Object.values(os.networkInterfaces())) {
+      for (const a of list || []) {
+        if ((a.family !== 'IPv4' && a.family !== 4) || a.internal) continue;
+        if (a.address.startsWith('169.254.') || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a.address)) continue;
+        if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(a.address)) return a.address;
+      }
+    }
+    return undefined;
+  }
+
   start() {
     if (this.bonjour) return;
-    this.bonjour = new Bonjour();
+    const iface = this._lanAddress();
+    this.bonjour = new Bonjour(iface ? { interface: iface } : undefined);
     const cast = this.bonjour.find({ type: CAST_TYPE }, (s) => this._add(this._fromCast(s)));
     const blu = this.bonjour.find({ type: BLUOS_TYPE }, (s) => this._add(this._fromBluOS(s)));
     this.browsers = [cast, blu];

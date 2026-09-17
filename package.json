@@ -1,6 +1,6 @@
 {
   "name": "conduit",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Jellyfin music client with whole-house device routing (Chromecast + BluOS)",
   "main": "electron/main.js",
   "author": "Lukas Baxter",
