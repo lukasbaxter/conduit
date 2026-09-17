@@ -9,6 +9,14 @@ device-handoff concept at all, Feishin has zero casting code, and Bluesound
 deliberately supports neither Chromecast nor UPnP/DLNA, so it needs its own
 transport.
 
+## Install
+
+Releases: https://github.com/lukasbaxter/conduit/releases (macOS dmg, Windows installer/portable exe, Android apk).
+
+The builds are not signed with a developer certificate. On macOS, drag Conduit.app to Applications and
+run `xattr -cr /Applications/Conduit.app` once (or right-click > Open); on Windows click through SmartScreen;
+on Android allow installs from your browser. The phone app is also just https://music.baxtergroup.io added to the home screen.
+
 ## Status
 
 Working: discovery, both transports, local playback, library browse, search,
