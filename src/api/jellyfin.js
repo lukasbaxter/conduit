@@ -189,9 +189,13 @@ export class Jellyfin {
   // for a smaller transcode. Speakers always get the original (the transcoded
   // stream is unseekable on BluOS, see streamUrl).
   quality = 'original';
-  playbackUrl(itemId) {
+  // A transcode is produced as it plays (no Content-Length, no byte ranges),
+  // so it cannot be seeked by the element: the player asks for a new stream
+  // that starts at `startAt` instead and keeps that as the stream's base.
+  transcoded() { return !!{ high: 320000, normal: 160000, low: 96000 }[this.quality]; }
+  playbackUrl(itemId, { startAt = 0 } = {}) {
     const q = { high: 320000, normal: 160000, low: 96000 }[this.quality];
-    return q ? this.transcodeUrl(itemId, { codec: 'mp3', bitrate: q }) : this.streamUrl(itemId);
+    return q ? this.transcodeUrl(itemId, { codec: 'mp3', bitrate: q, startAt }) : this.streamUrl(itemId);
   }
 
   async me() {

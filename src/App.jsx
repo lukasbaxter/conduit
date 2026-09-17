@@ -140,6 +140,7 @@ export default function App() {
   // Phone layout (<= 760px): no sidebar; bottom tabs Home / Search / Library,
   // where Library shows the sidebar's list as a page until the next navigation.
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches);
+  const isMobileRef = useRef(isMobile); isMobileRef.current = isMobile;
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 760px)');
     const h = () => setIsMobile(mq.matches);
@@ -164,6 +165,10 @@ export default function App() {
   // Account settings: theme + playback quality. Loaded from Jellyfin, applied
   // to the CSS variables, kept in sync across clients over the relay.
   const [prefs, setPrefs] = useState({ theme: DEFAULT_THEME, quality: 'original' });
+  // What THIS device streams at: the phone has its own setting (default 320
+  // kbps MP3: a third of the data of the FLACs, starts faster on cellular),
+  // everything else uses the account's quality.
+  const deviceQuality = (p) => (isMobileRef.current ? (p.phoneQuality || 'high') : (p.quality || 'original'));
   const [avatarV, setAvatarV] = useState(0);
   const [nameDraft, setNameDraft] = useState('');
 
@@ -342,10 +347,10 @@ export default function App() {
     setAvatarOk(true);
     // Paint the last known theme instantly, then the account's saved one.
     const cached = jf.persisted('prefs');
-    if (cached) { setPrefs((p) => ({ ...p, ...cached })); applyTheme(cached.theme); jf.quality = cached.quality || 'original'; }
+    if (cached) { setPrefs((p) => ({ ...p, ...cached })); applyTheme(cached.theme); jf.quality = deviceQuality(cached); }
     jf.getPrefs().then((p) => {
       const next = { ...p, theme: { ...DEFAULT_THEME, ...(p.theme || {}) }, quality: p.quality || 'original' };
-      setPrefs(next); applyTheme(next.theme); jf.quality = next.quality; jf._persist('prefs', next);
+      setPrefs(next); applyTheme(next.theme); jf.quality = deviceQuality(next); jf._persist('prefs', next);
     }).catch(() => {});
   }, [jf]);
 
@@ -365,7 +370,7 @@ export default function App() {
     // Only the PATCH travels (to Jellyfin and over the relay); every client
     // merges it. Broadcasting whole prefs objects let a stale client overwrite
     // what another had just saved.
-    setPrefs((cur) => { const next = { ...cur, ...patch }; applyTheme(next.theme); jf.quality = next.quality; jf._persist('prefs', next); return next; });
+    setPrefs((cur) => { const next = { ...cur, ...patch }; applyTheme(next.theme); jf.quality = deviceQuality(next); jf._persist('prefs', next); return next; });
     player.relay?.sendPrefs?.(patch);
     try { await jf.setPrefs(patch); } catch (e) { notify(`Could not save settings: ${e.message}`); }
   };
@@ -435,7 +440,7 @@ export default function App() {
         setPrefs((cur) => {
           const next = { ...cur, ...patch };
           if (patch.theme) next.theme = { ...DEFAULT_THEME, ...patch.theme };
-          applyTheme(next.theme); jf.quality = next.quality || 'original'; jf._persist('prefs', next);
+          applyTheme(next.theme); jf.quality = deviceQuality(next); jf._persist('prefs', next);
           return next;
         });
         if (p._libraryChanged && p._libraryChanged !== relayLibraryPing.current) { relayLibraryPing.current = p._libraryChanged; refreshPlaylists(); }

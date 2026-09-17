@@ -607,6 +607,7 @@ export default function Library({
       const theme = { ...DEFAULT_THEME, ...(prefs?.theme || {}) };
       const setColor = (k, v) => onUpdatePrefs({ theme: { ...theme, [k]: v } });
       const quality = QUALITIES.find((q) => q.id === (prefs?.quality || 'original')) || QUALITIES[0];
+      const phoneQuality = QUALITIES.find((q) => q.id === (prefs?.phoneQuality || 'high')) || QUALITIES[1];
       const preset = THEME_PRESETS.find((p) => themeEquals(p.theme, theme));
       const cur = prefs?.listenbrainz || {};
       const Chev = () => <svg className="setrow-chev" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M6 3.5 10.5 8 6 12.5 5 11.5 8.5 8 5 4.5z" /></svg>;
@@ -649,8 +650,12 @@ export default function Library({
             </button>
 
             <h2>Playback</h2>
+            <button className="setrow" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setSettingsMenu({ x: r.left, y: r.bottom, kind: 'phoneQuality' }); }}>
+              <span className="setrow-text"><b>Streaming quality on phones</b><small>{phoneQuality.label}</small></span>
+              <Chev />
+            </button>
             <button className="setrow" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setSettingsMenu({ x: r.left, y: r.bottom, kind: 'quality' }); }}>
-              <span className="setrow-text"><b>Streaming quality</b><small>{quality.label}</small></span>
+              <span className="setrow-text"><b>Streaming quality elsewhere</b><small>{quality.label}</small></span>
               <Chev />
             </button>
 
@@ -679,8 +684,10 @@ export default function Library({
 
             {settingsMenu && (
               <ContextMenu x={settingsMenu.x} y={settingsMenu.y} onClose={() => setSettingsMenu(null)}
-                header={settingsMenu.kind === 'quality' ? { icon: MI.play, title: 'Streaming quality', sub: 'Applies from the next track. Speakers always get the original file.' } : { icon: MI.photo, title: 'Theme', sub: 'Applied to every Conduit you have open, instantly.' }}
-                items={settingsMenu.kind === 'quality'
+                header={settingsMenu.kind === 'phoneQuality' ? { icon: MI.play, title: 'Streaming quality on phones', sub: 'Applies from the next track on every phone signed in as you.' } : settingsMenu.kind === 'quality' ? { icon: MI.play, title: 'Streaming quality elsewhere', sub: 'Desktop and tablet. Applies from the next track. Speakers always get the original file.' } : { icon: MI.photo, title: 'Theme', sub: 'Applied to every Conduit you have open, instantly.' }}
+                items={settingsMenu.kind === 'phoneQuality'
+                  ? QUALITIES.map((q) => ({ key: q.id, label: q.label, icon: q.id === phoneQuality.id ? MI.check : null, onClick: () => onUpdatePrefs({ phoneQuality: q.id }) }))
+                  : settingsMenu.kind === 'quality'
                   ? QUALITIES.map((q) => ({ key: q.id, label: q.label, icon: q.id === quality.id ? MI.check : null, onClick: () => onUpdatePrefs({ quality: q.id }) }))
                   : THEME_PRESETS.map((p) => ({ key: p.name, label: p.name, icon: preset?.name === p.name ? MI.check : <span className="theme-dot" style={{ background: p.theme.accent }} />, onClick: () => onUpdatePrefs({ theme: p.theme }) }))} />
             )}

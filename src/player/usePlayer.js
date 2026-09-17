@@ -115,6 +115,7 @@ export function usePlayer(jf) {
   const adoptedRef = useRef(false);
 
   const audioRef = useRef(null);
+  const localBaseRef = useRef(0); // track time at which the local element's stream starts (transcodes only)
   if (!audioRef.current && typeof Audio !== 'undefined') {
     audioRef.current = new Audio();
     // The visualizer taps this element through a MediaElementSource, which is
@@ -316,9 +317,13 @@ export function usePlayer(jf) {
       if (dev.kind === 'local') {
         const el = audioRef.current;
         webAudioRef.current?.ctx.resume?.().catch(() => {});
-        el.src = jf.playbackUrl(track.Id);
+        // A transcode starts at the wanted moment on the server; the element's
+        // clock then runs from 0 and localBaseRef holds the offset.
+        const transcoded = jf.transcoded?.();
+        localBaseRef.current = transcoded ? Math.max(0, seekSeconds) : 0;
+        el.src = jf.playbackUrl(track.Id, { startAt: transcoded ? seekSeconds : 0 });
         el.volume = volume / 100;
-        if (seekSeconds > 0) {
+        if (seekSeconds > 0 && !transcoded) {
           // The seek has to land BEFORE play(), otherwise playback audibly
           // starts at zero and only then jumps, which reads as a reset. Jellyfin
           // serves the static stream with Accept-Ranges, so the element really
@@ -674,6 +679,13 @@ export function usePlayer(jf) {
       anchorAt(seconds, true);
 
       if (dev.kind === 'local') {
+        if (jf?.transcoded?.()) {
+          // Cannot seek a transcode: restart it at the new spot (startOn sets
+          // the base), keeping play/pause as it was.
+          const el = audioRef.current; const wasPlaying = !el.paused;
+          try { await startOn(dev, track, seconds); if (!wasPlaying) el.pause(); } catch (e) { setError(e.message); }
+          return;
+        }
         audioRef.current.currentTime = seconds;
         return;
       }
@@ -998,14 +1010,17 @@ export function usePlayer(jf) {
       // During a handoff the element briefly reports 0 before the seek lands.
       // Writing that through would wipe the position we are carrying over.
       if (transitionRef.current) return;
-      setPosition(el.currentTime);
-      anchorRef.current = { pos: el.currentTime, at: Date.now(), playing: !el.paused };
+      const pos = localBaseRef.current + el.currentTime;
+      setPosition(pos);
+      anchorRef.current = { pos, at: Date.now(), playing: !el.paused };
     };
     const onEnded = () => {
       if (deviceRef.current.kind === 'local') advanceRef.current(true);
     };
     const onDuration = () => {
-      if (deviceRef.current.kind === 'local' && Number.isFinite(el.duration)) {
+      // A transcode's element duration is the REMAINDER from its start (or
+      // unknown); the track's own length from Jellyfin stays authoritative.
+      if (deviceRef.current.kind === 'local' && Number.isFinite(el.duration) && !localBaseRef.current && !jf?.transcoded?.()) {
         setDuration(el.duration);
       }
     };
